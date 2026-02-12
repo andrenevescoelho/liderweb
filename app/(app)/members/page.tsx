@@ -52,6 +52,10 @@ export default function MembersPage() {
   const [inviteSuccess, setInviteSuccess] = useState<{ link: string } | null>(null);
   const [inviteError, setInviteError] = useState("");
 
+  // Pending invites state
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [pendingInvitesLoading, setPendingInvitesLoading] = useState(false);
+
   const fetchMembers = async () => {
     try {
       let url = "/api/members?";
@@ -67,9 +71,31 @@ export default function MembersPage() {
     }
   };
 
+  const fetchPendingInvites = async () => {
+    if (!canEdit) return;
+    setPendingInvitesLoading(true);
+    try {
+      const res = await fetch("/api/invites/pending");
+      const data = await res.json();
+      // API pode retornar {error} ou array
+      setPendingInvites(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setPendingInvites([]);
+    } finally {
+      setPendingInvitesLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchMembers();
+    fetchPendingInvites();
   }, [filterInstrument, filterVoice]);
+
+  // Recarrega convites quando sessão/permissões estiverem prontas
+  useEffect(() => {
+    fetchPendingInvites();
+  }, [sessionUser?.id, userRole]);
 
   const filtered = members?.filter?.((m) =>
     m?.name?.toLowerCase?.()?.includes?.(search?.toLowerCase?.() ?? '')
@@ -135,6 +161,26 @@ export default function MembersPage() {
     }
   };
 
+  const handleCancelInvite = async (inviteId: string) => {
+    if (!confirm("Cancelar este convite?")) return;
+    try {
+      const res = await fetch("/api/invites/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data?.error || "Erro ao cancelar convite");
+        return;
+      }
+      fetchPendingInvites();
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao cancelar convite");
+    }
+  };
+
   const copyInviteLink = () => {
     if (inviteSuccess?.link) {
       const fullLink = window.location.origin + inviteSuccess.link;
@@ -194,6 +240,61 @@ export default function MembersPage() {
           className="w-40"
         />
       </div>
+
+      {canEdit && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Convites pendentes
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Convites enviados e ainda não utilizados
+                </p>
+              </div>
+              {pendingInvitesLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+              ) : (
+                <Badge variant="info">{pendingInvites?.length ?? 0}</Badge>
+              )}
+            </div>
+
+            {(pendingInvites?.length ?? 0) === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Nenhum convite pendente.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {pendingInvites.map((inv: any) => (
+                  <div
+                    key={inv?.id ?? ''}
+                    className="flex items-center justify-between gap-3 rounded-lg border p-3 dark:border-gray-700"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-white truncate">
+                        {inv?.email ?? ''}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Expira em: {inv?.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('pt-BR') : '-'}
+                        {inv?.group?.name ? ` · Grupo: ${inv.group.name}` : ''}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCancelInvite(inv?.id ?? '')}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2 text-red-500" />
+                      Cancelar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
