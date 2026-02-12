@@ -13,16 +13,16 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXTAUTH_URL || "http://localhost:3000"),
-  title: "Worship Manager - Gestão de Ministério de Louvor",
-  description: "Sistema completo para gestão de ministério de louvor: escalas, repertórios, membros e músicas.",
+  title: "Líder Web - Gestão de Ministério de Louvor",
+  description: "Sistema completo para gestão de ministério de louvor: escalas, repertórios, membros e músicas. By Multitrack Gospel.",
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-    apple: "/favicon.svg",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
   openGraph: {
-    title: "Worship Manager",
+    title: "Líder Web - By Multitrack Gospel",
     description: "Gestão de Ministério de Louvor",
     images: ["/og-image.png"],
   },

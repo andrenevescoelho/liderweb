@@ -61,7 +61,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
-    if (userRole === "ADMIN") {
+    if (userRole === "ADMIN" || userRole === "LEADER") {
       fetchSubscription();
     }
   }, [userRole]);
@@ -115,10 +115,32 @@ export default function DashboardPage() {
             Olá, {userName?.split?.(' ')?.[0] ?? 'Usuário'}!
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Bem-vindo ao Worship Manager
+            Bem-vindo ao Líder Web
           </p>
         </div>
       </div>
+
+      {/* Banner de assinatura para LEADER */}
+      {userRole === "LEADER" && subscription?.hasSubscription && (
+        <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+          <div className="flex items-center gap-3">
+            <CreditCard className="w-5 h-5 text-purple-600" />
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600 dark:text-gray-400">Plano:</span>
+              <Badge variant={subscription.subscription?.status === "ACTIVE" ? "success" : subscription.subscription?.status === "TRIALING" ? "info" : "warning"}>
+                {subscription.subscription?.planName}
+              </Badge>
+              <span className="text-gray-400 dark:text-gray-500">•</span>
+              <span className="text-gray-600 dark:text-gray-400">
+                Licenças: <span className="font-medium text-gray-900 dark:text-white">{subscription.subscription?.userCount}</span>
+                {subscription.subscription?.userLimit > 0 && (
+                  <span className="text-gray-500"> / {subscription.subscription?.userLimit}</span>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {userRole === "SUPERADMIN" && (
         <>
@@ -242,62 +264,83 @@ export default function DashboardPage() {
       )}
 
       {/* Seção de Assinatura para Admin */}
-      {userRole === "ADMIN" && subscription && (
-        <Card className={`border-2 ${
-          subscription.isActive 
-            ? "border-green-500 bg-green-50 dark:bg-green-900/20" 
-            : subscription.hasSubscription 
-              ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
-              : "border-gray-300 bg-gray-50 dark:bg-gray-900/20"
-        }`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Crown className={`w-5 h-5 ${
-                subscription.isActive ? "text-green-600" : "text-yellow-600"
-              }`} />
-              Assinatura do Grupo
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {subscription.hasSubscription ? (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Plano Atual</p>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">
-                      {subscription.subscription?.planName}
-                    </p>
-                  </div>
+      {(userRole === "ADMIN" || userRole === "LEADER") && subscription && (
+        <Card className={`border ${subscription.isActive ? "border-green-500/40" : subscription.hasSubscription ? "border-yellow-500/40" : "border-gray-300/40"}`}>
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CreditCard className="w-4 h-4" />
+                Assinatura
+                {subscription.subscription?.status && (
                   <Badge
                     variant={
                       subscription.subscription?.status === "ACTIVE" ? "success" :
                       subscription.subscription?.status === "TRIALING" ? "info" :
-                      subscription.subscription?.status === "PAST_DUE" ? "warning" : "danger"
+                      subscription.subscription?.status === "CANCELED" ? "destructive" : "secondary"
                     }
-                    className="text-sm px-3 py-1"
+                    className="ml-2"
                   >
-                    {subscription.subscription?.status === "ACTIVE" ? "Ativo" :
-                     subscription.subscription?.status === "TRIALING" ? "Período de Teste" :
-                     subscription.subscription?.status === "PAST_DUE" ? "Pagamento Pendente" :
-                     subscription.subscription?.status === "CANCELED" ? "Cancelado" : subscription.subscription?.status}
+                    {subscription.subscription?.status === "ACTIVE" ? "Ativa" :
+                     subscription.subscription?.status === "TRIALING" ? "Teste" :
+                     subscription.subscription?.status === "CANCELED" ? "Cancelada" :
+                     subscription.subscription?.status}
                   </Badge>
-                </div>
+                )}
+              </CardTitle>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-3 rounded-lg bg-white dark:bg-gray-800">
-                    <p className="text-sm text-gray-500">Usuários</p>
-                    <p className="text-lg font-semibold">
-                      {subscription.subscription?.userCount} / {subscription.subscription?.userLimit === 0 ? "∞" : subscription.subscription?.userLimit}
-                    </p>
-                    {subscription.subscription?.userLimit > 0 && (
-                      <div className="mt-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full ${
-                            (subscription.subscription?.userCount / subscription.subscription?.userLimit) > 0.8 
-                              ? "bg-red-500" 
-                              : "bg-green-500"
-                          }`}
-                          style={{ width: `${Math.min((subscription.subscription?.userCount / subscription.subscription?.userLimit) * 100, 100)}%` }}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleManageSubscription}
+                disabled={portalLoading}
+              >
+                {portalLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Abrindo...
+                  </>
+                ) : (
+                  <>
+                    Gerenciar
+                    <ExternalLink className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-0 pb-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
+              <span>
+                Plano:{" "}
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {subscription.subscription?.planName ?? "Sem plano"}
+                </span>
+              </span>
+
+              {subscription.hasSubscription && (
+                <>
+                  <span>
+                    Usuários:{" "}
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {subscription.subscription?.usersUsed}/{subscription.subscription?.usersLimit}
+                    </span>
+                  </span>
+
+                  {subscription.subscription?.nextBillingDate && (
+                    <span>
+                      Próxima cobrança:{" "}
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {format(new Date(subscription.subscription?.nextBillingDate), "dd/MM/yyyy", { locale: ptBR })}
+                      </span>
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}%` }}
                         />
                       </div>
                     )}
