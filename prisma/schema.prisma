@@ -1,0 +1,202 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/worship_manager/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  LEADER
+  MEMBER
+}
+
+enum VoiceType {
+  SOPRANO
+  ALTO
+  TENOR
+  LEAD
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  UNPAID
+  INACTIVE
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  logo        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  songs       Song[]
+  setlists    Setlist[]
+  schedules   Schedule[]
+  subscription Subscription?
+  inviteTokens InviteToken[]
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(cuid())
+  name          String
+  stripePriceId String   @unique
+  price         Float
+  userLimit     Int      // Limite de usuários (0 = ilimitado)
+  features      String[] @default([])
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  groupId              String             @unique
+  group                Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  status               SubscriptionStatus @default(INACTIVE)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  trialEndsAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          Role      @default(MEMBER)
+  groupId       String?
+  group         Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  profile       MemberProfile?
+  scheduleRoles ScheduleRole[]
+}
+
+model MemberProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instruments     String[] @default([])
+  voiceType       VoiceType?
+  vocalRange      String?
+  comfortableKeys String[] @default([])
+  availability    String[] @default([])
+  phone           String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Song {
+  id            String   @id @default(cuid())
+  title         String
+  artist        String?
+  bpm           Int?
+  originalKey   String
+  timeSignature String   @default("4/4")
+  tags          String[] @default([])
+  lyrics        String?  @db.Text
+  chordPro      String?  @db.Text
+  audioUrl      String?
+  youtubeUrl    String?
+  groupId       String?
+  group         Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  setlistItems  SetlistItem[]
+  attachments   Attachment[]
+}
+
+model Attachment {
+  id              String   @id @default(cuid())
+  songId          String
+  song            Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  fileName        String
+  fileType        String
+  cloudStoragePath String
+  isPublic        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+}
+
+model Setlist {
+  id        String   @id @default(cuid())
+  name      String
+  date      DateTime
+  groupId   String?
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     SetlistItem[]
+  schedules Schedule[]
+}
+
+model SetlistItem {
+  id          String  @id @default(cuid())
+  setlistId   String
+  setlist     Setlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
+  songId      String
+  song        Song    @relation(fields: [songId], references: [id], onDelete: Cascade)
+  order       Int
+  selectedKey String
+}
+
+model Schedule {
+  id        String   @id @default(cuid())
+  date      DateTime
+  setlistId String?
+  setlist   Setlist? @relation(fields: [setlistId], references: [id], onDelete: SetNull)
+  groupId   String?
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  roles     ScheduleRole[]
+}
+
+model ScheduleRole {
+  id         String       @id @default(cuid())
+  scheduleId String
+  schedule   Schedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  role       String
+  memberId   String?
+  member     User?        @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  status     InviteStatus @default(PENDING)
+}
+
+// Token de convite para membros
+model InviteToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  invitedBy String   // ID do usuário que convidou
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}

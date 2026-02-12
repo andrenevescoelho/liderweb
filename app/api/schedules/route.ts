@@ -1,0 +1,123 @@
+export const dynamic = "force-dynamic";
+
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { prisma } from "@/lib/db";
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const user = session.user as any;
+    const searchParams = req?.nextUrl?.searchParams;
+    const month = searchParams?.get?.("month");
+    const year = searchParams?.get?.("year");
+
+    const where: any = {};
+
+    // SuperAdmin vê todos, outros veem apenas do seu grupo
+    if (user.role !== "SUPERADMIN") {
+      if (!user.groupId) {
+        return NextResponse.json([]);
+      }
+      where.groupId = user.groupId;
+    }
+
+    if (month && year) {
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(month), 0);
+      where.date = {
+        gte: startDate,
+        lte: endDate,
+      };
+    }
+
+    const schedules = await prisma.schedule.findMany({
+      where,
+      include: {
+        setlist: {
+          include: {
+            items: {
+              include: { song: true },
+              orderBy: { order: "asc" },
+            },
+          },
+        },
+        roles: {
+          include: {
+            member: {
+              include: { profile: true },
+            },
+          },
+        },
+      },
+      orderBy: { date: "asc" },
+    });
+
+    return NextResponse.json(schedules ?? []);
+  } catch (error) {
+    console.error("Get schedules error:", error);
+    return NextResponse.json({ error: "Erro ao buscar escalas" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    const userRole = user?.role;
+
+    if (!session || (userRole !== "SUPERADMIN" && userRole !== "ADMIN" && userRole !== "LEADER")) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    if (userRole !== "SUPERADMIN" && !user.groupId) {
+      return NextResponse.json({ error: "Usuário não pertence a nenhum grupo" }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const { date, setlistId, roles } = body ?? {};
+
+    if (!date) {
+      return NextResponse.json({ error: "Data é obrigatória" }, { status: 400 });
+    }
+
+    // Criar data ao meio-dia para evitar problemas de timezone
+    const [year, month, day] = date.split("-").map(Number);
+    const scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
+
+    const schedule = await prisma.schedule.create({
+      data: {
+        date: scheduleDate,
+        setlistId: setlistId ?? null,
+        groupId: user.groupId ?? null,
+        roles: {
+          create: (roles ?? [])?.map?.((r: any) => ({
+            role: r?.role,
+            memberId: r?.memberId ?? null,
+            status: r?.status ?? "PENDING",
+          })),
+        },
+      },
+      include: {
+        setlist: true,
+        roles: {
+          include: {
+            member: {
+              include: { profile: true },
+            },
+          },
+        },
+      },
+    });
+
+    return NextResponse.json(schedule);
+  } catch (error) {
+    console.error("Create schedule error:", error);
+    return NextResponse.json({ error: "Erro ao criar escala" }, { status: 500 });
+  }
+}
