@@ -351,14 +351,9 @@ function ScheduleModal({
   const [roles, setRoles] = useState<any[]>([]);
   const [setlists, setSetlists] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
+  const [addRole, setAddRole] = useState("");
+  const [customRole, setCustomRole] = useState("");
   const \[saving, setSaving\] = useState\(false\);
-  const [newMemberOpen, setNewMemberOpen] = useState(false);
-  const [newMemberRoleIdx, setNewMemberRoleIdx] = useState<number | null>(null);
-  const [newMemberName, setNewMemberName] = useState("");
-  const [newMemberEmail, setNewMemberEmail] = useState("");
-  const [newMemberPassword, setNewMemberPassword] = useState("");
-  const [creatingMember, setCreatingMember] = useState(false);
-  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -408,74 +403,37 @@ function ScheduleModal({
     }
     setRoles(newRoles);
   };
-  const refreshMembers = async () => {
-    try {
-      const res = await fetch("/api/members");
-      const data = await res.json();
-      setMembers(data ?? []);
-    } catch (e) {
-      console.error(e);
-    }
+
+  const removeRole = (idx: number) => {
+    const newRoles = [...(roles ?? [])];
+    newRoles.splice(idx, 1);
+    setRoles(newRoles);
   };
 
-  const generatePassword = () => {
-    // 12 chars: letters+numbers
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-    let pwd = "";
-    for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
-    return pwd;
-  };
+  const addRoleToList = () => {
+    const roleName = addRole === "__custom__" ? customRole.trim() : addRole;
+    if (!roleName) return;
 
-  const openNewMember = (roleIdx: number) => {
-    setNewMemberRoleIdx(roleIdx);
-    setNewMemberName("");
-    setNewMemberEmail("");
-    setNewMemberPassword("");
-    setCreatedPassword(null);
-    setNewMemberOpen(true);
-  };
-
-  const handleCreateMember = async () => {
-    if (!newMemberName?.trim() || !newMemberEmail?.trim()) {
-      alert("Informe nome e e-mail do novo membro.");
+    const exists = (roles ?? []).some(
+      (r) => (r?.role ?? "").toLowerCase() === roleName.toLowerCase()
+    );
+    if (exists) {
+      alert("Esse papel já existe na escala.");
       return;
     }
-    setCreatingMember(true);
-    try {
-      const passwordToUse = newMemberPassword?.trim() || generatePassword();
-      const res = await fetch("/api/members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newMemberName.trim(),
-          email: newMemberEmail.trim(),
-          password: passwordToUse,
-          active: true,
-          // Para SUPERADMIN, tente amarrar no mesmo grupo do contexto
-          groupId: (schedule?.groupId ?? (session?.user as any)?.groupId ?? null),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        alert(data?.error ?? "Erro ao criar membro");
-        return;
-      }
-
-      setCreatedPassword(passwordToUse);
-      await refreshMembers();
-
-      // Selecionar automaticamente o novo membro no papel que disparou a criação
-      if (newMemberRoleIdx !== null) {
-        updateRole(newMemberRoleIdx, data?.id ?? "");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao criar membro");
-    } finally {
-      setCreatingMember(false);
-    }
+    setRoles([
+      ...(roles ?? []),
+      {
+        role: roleName,
+        memberId: "",
+        status: "PENDING",
+      },
+    ]);
+    setAddRole("");
+    setCustomRole("");
   };
+
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -549,91 +507,76 @@ function ScheduleModal({
                 <Select
                   value={role?.memberId ?? ''}
                   onChange={(e) => {
-                    const v = e?.target?.value ?? '';
-                    if (v === '__new__') {
-                      openNewMember(idx);
-                      return;
-                    }
+                    const v = e?.target?.value ?? "";
                     updateRole(idx, v);
                   }}
                   options={[
-                    { value: "", label: "Não atribuído" },
-                    ...(currentRole === "SUPERADMIN" || currentRole === "ADMIN" ? [{ value: "__new__", label: "+ Novo membro" }] : []),
+                    { value: "", label: "Não atribuído" }
                     ...(members
                       ?.filter?.((m) => m?.profile?.active)
                       ?.map?.((m) => ({ value: m?.id ?? '', label: m?.name ?? '' })) ?? []),
                   ]}
                   className="flex-1"
                 />
+                <button
+                  type="button"
+                  className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-800"
+                  title="Remover papel"
+                  onClick={() => removeRole(idx)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>
-        </div>
 
-
-        {newMemberOpen && (
-          <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900 dark:text-white">Novo membro</h3>
-              <button
-                type="button"
-                className="text-sm opacity-70 hover:opacity-100"
-                onClick={() => setNewMemberOpen(false)}
-              >
-                Fechar
-              </button>
+          <div className="mt-3 rounded-lg border p-3 bg-white dark:bg-gray-950">
+            <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Adicionar novo papel
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Input
-                label="Nome"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e?.target?.value ?? "")}
-                required
+            <div className="flex flex-col gap-2">
+              <Select
+                value={addRole}
+                onChange={(e) => setAddRole(e?.target?.value ?? "")}
+                options={[
+                  { value: "", label: "Selecione um papel" },
+                  ...(SCHEDULE_ROLES
+                    ?.filter?.(
+                      (r) =>
+                        !(roles ?? [])?.some?.(
+                          (x) => (x?.role ?? "").toLowerCase() === String(r).toLowerCase()
+                        )
+                    )
+                    ?.map?.((r) => ({ value: r, label: r })) ?? []),
+                  { value: "__custom__", label: "Outro (digitar)" },
+                ]}
               />
-              <Input
-                label="E-mail"
-                type="email"
-                value={newMemberEmail}
-                onChange={(e) => setNewMemberEmail(e?.target?.value ?? "")}
-                required
-              />
-              <Input
-                label="Senha (opcional — se vazio, será gerada)"
-                type="text"
-                value={newMemberPassword}
-                onChange={(e) => setNewMemberPassword(e?.target?.value ?? "")}
-              />
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" onClick={handleCreateMember} disabled={creatingMember}>
-                {creatingMember ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar e selecionar"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setNewMemberOpen(false);
-                  setCreatedPassword(null);
-                }}
-              >
-                Cancelar
-              </Button>
-
-              {createdPassword && (
-                <span className="text-sm opacity-80">
-                  Senha criada: <span className="font-mono">{createdPassword}</span>
-                </span>
+              {addRole === "__custom__" && (
+                <Input
+                  placeholder="Digite o nome do novo papel (ex: Backing Vocal, Violão 2...)"
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e?.target?.value ?? "")}
+                />
               )}
-            </div>
 
-            <p className="text-xs opacity-70">
-              Obs: a API de criação de membros permite apenas <b>ADMIN</b> e <b>SUPERADMIN</b>. Se você estiver como
-              LEADER, o item “Novo membro” não aparece.
-            </p>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addRoleToList}
+                  disabled={!addRole || (addRole === "__custom__" && !customRole.trim())}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar papel
+                </Button>
+              </div>
+            </div>
           </div>
-        )}
+
+        </div
+
 
         <div className="flex gap-2 pt-4">
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
