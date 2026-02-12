@@ -351,7 +351,7 @@ function ScheduleModal({
   const [roles, setRoles] = useState<any[]>([]);
   const [setlists, setSetlists] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
-  const \[saving, setSaving\] = useState\(false\);
+  const [saving, setSaving] = useState(false);
   const [newMemberOpen, setNewMemberOpen] = useState(false);
   const [newMemberRoleIdx, setNewMemberRoleIdx] = useState<number | null>(null);
   const [newMemberName, setNewMemberName] = useState("");
