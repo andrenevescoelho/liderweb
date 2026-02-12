@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { data: session } = useSession() || {};
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -67,17 +69,10 @@ export default function DashboardPage() {
   const handleManageSubscription = async () => {
     setPortalLoading(true);
     try {
-      const res = await fetch("/api/subscription/portal", { method: "POST" });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert(data.error || "Erro ao acessar portal");
-      }
-    } catch (e) {
-      alert("Erro ao acessar portal de assinatura");
+      router.push("/meu-plano");
     } finally {
-      setPortalLoading(false);
+      // mantém o loading por alguns ms só para feedback
+      setTimeout(() => setPortalLoading(false), 300);
     }
   };
 
