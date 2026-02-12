@@ -343,12 +343,22 @@ function ScheduleModal({
   schedule: any;
   onSave: () => void;
 }) {
+  const { data: session } = useSession() || {};
+  const currentRole = (session?.user as any)?.role ?? "MEMBER";
+
   const [date, setDate] = useState("");
   const [setlistId, setSetlistId] = useState("");
   const [roles, setRoles] = useState<any[]>([]);
   const [setlists, setSetlists] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
+  const \[saving, setSaving\] = useState\(false\);
+  const [newMemberOpen, setNewMemberOpen] = useState(false);
+  const [newMemberRoleIdx, setNewMemberRoleIdx] = useState<number | null>(null);
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberPassword, setNewMemberPassword] = useState("");
+  const [creatingMember, setCreatingMember] = useState(false);
+  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -398,6 +408,75 @@ function ScheduleModal({
     }
     setRoles(newRoles);
   };
+  const refreshMembers = async () => {
+    try {
+      const res = await fetch("/api/members");
+      const data = await res.json();
+      setMembers(data ?? []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const generatePassword = () => {
+    // 12 chars: letters+numbers
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    let pwd = "";
+    for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+    return pwd;
+  };
+
+  const openNewMember = (roleIdx: number) => {
+    setNewMemberRoleIdx(roleIdx);
+    setNewMemberName("");
+    setNewMemberEmail("");
+    setNewMemberPassword("");
+    setCreatedPassword(null);
+    setNewMemberOpen(true);
+  };
+
+  const handleCreateMember = async () => {
+    if (!newMemberName?.trim() || !newMemberEmail?.trim()) {
+      alert("Informe nome e e-mail do novo membro.");
+      return;
+    }
+    setCreatingMember(true);
+    try {
+      const passwordToUse = newMemberPassword?.trim() || generatePassword();
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newMemberName.trim(),
+          email: newMemberEmail.trim(),
+          password: passwordToUse,
+          active: true,
+          // Para SUPERADMIN, tente amarrar no mesmo grupo do contexto
+          groupId: (schedule?.groupId ?? (session?.user as any)?.groupId ?? null),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        alert(data?.error ?? "Erro ao criar membro");
+        return;
+      }
+
+      setCreatedPassword(passwordToUse);
+      await refreshMembers();
+
+      // Selecionar automaticamente o novo membro no papel que disparou a criação
+      if (newMemberRoleIdx !== null) {
+        updateRole(newMemberRoleIdx, data?.id ?? "");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao criar membro");
+    } finally {
+      setCreatingMember(false);
+    }
+  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e?.preventDefault?.();
@@ -469,9 +548,17 @@ function ScheduleModal({
                 </span>
                 <Select
                   value={role?.memberId ?? ''}
-                  onChange={(e) => updateRole(idx, e?.target?.value ?? '')}
+                  onChange={(e) => {
+                    const v = e?.target?.value ?? '';
+                    if (v === '__new__') {
+                      openNewMember(idx);
+                      return;
+                    }
+                    updateRole(idx, v);
+                  }}
                   options={[
                     { value: "", label: "Não atribuído" },
+                    ...(currentRole === "SUPERADMIN" || currentRole === "ADMIN" ? [{ value: "__new__", label: "+ Novo membro" }] : []),
                     ...(members
                       ?.filter?.((m) => m?.profile?.active)
                       ?.map?.((m) => ({ value: m?.id ?? '', label: m?.name ?? '' })) ?? []),
@@ -482,6 +569,71 @@ function ScheduleModal({
             ))}
           </div>
         </div>
+
+
+        {newMemberOpen && (
+          <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900 dark:text-white">Novo membro</h3>
+              <button
+                type="button"
+                className="text-sm opacity-70 hover:opacity-100"
+                onClick={() => setNewMemberOpen(false)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                label="Nome"
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e?.target?.value ?? "")}
+                required
+              />
+              <Input
+                label="E-mail"
+                type="email"
+                value={newMemberEmail}
+                onChange={(e) => setNewMemberEmail(e?.target?.value ?? "")}
+                required
+              />
+              <Input
+                label="Senha (opcional — se vazio, será gerada)"
+                type="text"
+                value={newMemberPassword}
+                onChange={(e) => setNewMemberPassword(e?.target?.value ?? "")}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" onClick={handleCreateMember} disabled={creatingMember}>
+                {creatingMember ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar e selecionar"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setNewMemberOpen(false);
+                  setCreatedPassword(null);
+                }}
+              >
+                Cancelar
+              </Button>
+
+              {createdPassword && (
+                <span className="text-sm opacity-80">
+                  Senha criada: <span className="font-mono">{createdPassword}</span>
+                </span>
+              )}
+            </div>
+
+            <p className="text-xs opacity-70">
+              Obs: a API de criação de membros permite apenas <b>ADMIN</b> e <b>SUPERADMIN</b>. Se você estiver como
+              LEADER, o item “Novo membro” não aparece.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-2 pt-4">
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
