@@ -353,7 +353,7 @@ function ScheduleModal({
   const [members, setMembers] = useState<any[]>([]);
   const [addRole, setAddRole] = useState("");
   const [customRole, setCustomRole] = useState("");
-  const \[saving, setSaving\] = useState\(false\);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -511,7 +511,7 @@ function ScheduleModal({
                     updateRole(idx, v);
                   }}
                   options={[
-                    { value: "", label: "Não atribuído" }
+                    { value: "", label: "Não atribuído" },
                     ...(members
                       ?.filter?.((m) => m?.profile?.active)
                       ?.map?.((m) => ({ value: m?.id ?? '', label: m?.name ?? '' })) ?? []),
@@ -575,7 +575,7 @@ function ScheduleModal({
             </div>
           </div>
 
-        </div
+        </div>
 
 
         <div className="flex gap-2 pt-4">
