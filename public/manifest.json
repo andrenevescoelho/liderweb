@@ -1,7 +1,7 @@
 {
-  "name": "Worship Manager",
-  "short_name": "Worship",
-  "description": "Gestão de Ministério de Louvor",
+  "name": "Líder Web - By Multitrack Gospel",
+  "short_name": "Líder Web",
+  "description": "Gestão de Ministério de Louvor - By Multitrack Gospel",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#111827",
@@ -9,9 +9,9 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

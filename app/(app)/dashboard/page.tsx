@@ -61,7 +61,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
-    if (userRole === "ADMIN") {
+    if (userRole === "ADMIN" || userRole === "LEADER") {
       fetchSubscription();
     }
   }, [userRole]);
@@ -115,10 +115,32 @@ export default function DashboardPage() {
             Olá, {userName?.split?.(' ')?.[0] ?? 'Usuário'}!
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Bem-vindo ao Worship Manager
+            Bem-vindo ao Líder Web
           </p>
         </div>
       </div>
+
+      {/* Banner de assinatura para LEADER */}
+      {userRole === "LEADER" && subscription?.hasSubscription && (
+        <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+          <div className="flex items-center gap-3">
+            <CreditCard className="w-5 h-5 text-purple-600" />
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-600 dark:text-gray-400">Plano:</span>
+              <Badge variant={subscription.subscription?.status === "ACTIVE" ? "success" : subscription.subscription?.status === "TRIALING" ? "info" : "warning"}>
+                {subscription.subscription?.planName}
+              </Badge>
+              <span className="text-gray-400 dark:text-gray-500">•</span>
+              <span className="text-gray-600 dark:text-gray-400">
+                Licenças: <span className="font-medium text-gray-900 dark:text-white">{subscription.subscription?.userCount}</span>
+                {subscription.subscription?.userLimit > 0 && (
+                  <span className="text-gray-500"> / {subscription.subscription?.userLimit}</span>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {userRole === "SUPERADMIN" && (
         <>

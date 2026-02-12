@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   Music,
   Users,
@@ -50,8 +51,17 @@ export function Navbar() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <Music className="w-8 h-8 text-purple-600" />
-              <span className="font-bold text-xl hidden sm:block dark:text-white">Worship Manager</span>
+              <Image 
+                src="/logo.png" 
+                alt="Líder Web" 
+                width={40} 
+                height={40} 
+                className="w-10 h-10"
+              />
+              <div className="hidden sm:flex flex-col">
+                <span className="font-bold text-lg leading-tight dark:text-white">Líder Web</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">By Multitrack Gospel</span>
+              </div>
             </Link>
 
             <div className="hidden md:flex items-center gap-1">
