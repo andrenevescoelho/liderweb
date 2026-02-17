@@ -120,28 +120,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Banner de assinatura para LEADER */}
-      {userRole === "LEADER" && subscription?.hasSubscription && (
-        <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-          <div className="flex items-center gap-3">
-            <CreditCard className="w-5 h-5 text-purple-600" />
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Plano:</span>
-              <Badge variant={subscription.subscription?.status === "ACTIVE" ? "success" : subscription.subscription?.status === "TRIALING" ? "info" : "warning"}>
-                {subscription.subscription?.planName}
-              </Badge>
-              <span className="text-gray-400 dark:text-gray-500">•</span>
-              <span className="text-gray-600 dark:text-gray-400">
-                Licenças: <span className="font-medium text-gray-900 dark:text-white">{subscription.subscription?.userCount}</span>
-                {subscription.subscription?.userLimit > 0 && (
-                  <span className="text-gray-500"> / {subscription.subscription?.userLimit}</span>
-                )}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {userRole === "SUPERADMIN" && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -156,7 +134,8 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+            <Link href="/members" className="block hover:opacity-95 transition-opacity">
+          <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -167,7 +146,9 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
+        </Link>
+            <Link href="/songs" className="block hover:opacity-95 transition-opacity">
+          <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -178,7 +159,9 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-green-500 to-green-700 text-white">
+        </Link>
+            <Link href="/setlists" className="block hover:opacity-95 transition-opacity">
+          <Card className="bg-gradient-to-br from-green-500 to-green-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -189,6 +172,7 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
+        </Link>
           </div>
           <div className="grid grid-cols-1 gap-3">
             <Link href="/admin">
@@ -238,32 +222,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {(userRole === "ADMIN" || userRole === "LEADER") && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Link href="/members">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <Users className="w-4 h-4" /> Membros
-            </Button>
-          </Link>
-          <Link href="/songs">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <Music className="w-4 h-4" /> Músicas
-            </Button>
-          </Link>
-          <Link href="/setlists">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <ListMusic className="w-4 h-4" /> Repertórios
-            </Button>
-          </Link>
-          <Link href="/schedules">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <Calendar className="w-4 h-4" /> Escalas
-            </Button>
-          </Link>
-        </div>
-      )}
-
-      {/* Seção de Assinatura para Admin */}
+      {/* Seção de Assinatura para Admin/Leader */}
       {(userRole === "ADMIN" || userRole === "LEADER") && subscription && (
         <Card className={`border ${subscription.isActive ? "border-green-500/40" : subscription.hasSubscription ? "border-yellow-500/40" : "border-gray-300/40"}`}>
           <CardHeader className="py-3">
@@ -276,7 +235,7 @@ export default function DashboardPage() {
                     variant={
                       subscription.subscription?.status === "ACTIVE" ? "success" :
                       subscription.subscription?.status === "TRIALING" ? "info" :
-                      subscription.subscription?.status === "CANCELED" ? "destructive" : "secondary"
+                      subscription.subscription?.status === "CANCELED" ? "danger" : "secondary"
                     }
                     className="ml-2"
                   >
@@ -288,24 +247,26 @@ export default function DashboardPage() {
                 )}
               </CardTitle>
 
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleManageSubscription}
-                disabled={portalLoading}
-              >
-                {portalLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Abrindo...
-                  </>
-                ) : (
-                  <>
-                    Gerenciar
-                    <ExternalLink className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
+              {userRole === "ADMIN" && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleManageSubscription}
+                  disabled={portalLoading}
+                >
+                  {portalLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Abrindo...
+                    </>
+                  ) : (
+                    <>
+                      Gerenciar
+                      <ExternalLink className="w-4 h-4 ml-2" />
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </CardHeader>
 
@@ -323,84 +284,21 @@ export default function DashboardPage() {
                   <span>
                     Usuários:{" "}
                     <span className="font-semibold text-gray-900 dark:text-white">
-                      {subscription.subscription?.usersUsed}/{subscription.subscription?.usersLimit}
+                      {subscription.subscription?.userCount ?? 0}/{subscription.subscription?.userLimit === 0 ? "∞" : subscription.subscription?.userLimit}
                     </span>
                   </span>
 
-                  {subscription.subscription?.nextBillingDate && (
+                  {subscription.subscription?.currentPeriodEnd && (
                     <span>
                       Próxima cobrança:{" "}
                       <span className="font-semibold text-gray-900 dark:text-white">
-                        {format(new Date(subscription.subscription?.nextBillingDate), "dd/MM/yyyy", { locale: ptBR })}
+                        {format(new Date(subscription.subscription.currentPeriodEnd), "dd/MM/yyyy")}
                       </span>
                     </span>
                   )}
                 </>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {subscription.subscription?.trialEndsAt && subscription.subscription?.status === "TRIALING" && (
-                    <div className="p-3 rounded-lg bg-white dark:bg-gray-800">
-                      <p className="text-sm text-gray-500">Teste termina em</p>
-                      <p className="text-lg font-semibold">
-                        {format(new Date(subscription.subscription.trialEndsAt), "dd/MM/yyyy")}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {subscription.subscription?.currentPeriodEnd && (
-                    <div className="p-3 rounded-lg bg-white dark:bg-gray-800">
-                      <p className="text-sm text-gray-500">Próxima Cobrança</p>
-                      <p className="text-lg font-semibold">
-                        {format(new Date(subscription.subscription.currentPeriodEnd), "dd/MM/yyyy")}
-                      </p>
-                    </div>
-                  )}
-
-                  {subscription.subscription?.cancelAtPeriodEnd && (
-                    <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30">
-                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertTriangle className="w-4 h-4" />
-                        Cancelamento Agendado
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <Button
-                  onClick={handleManageSubscription}
-                  disabled={portalLoading}
-                  className="w-full md:w-auto"
-                >
-                  {portalLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <CreditCard className="w-4 h-4 mr-2" />
-                  )}
-                  Gerenciar Assinatura
-                  <ExternalLink className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Seu grupo ainda não possui uma assinatura ativa.
-                </p>
-                <Link href="/planos">
-                  <Button variant="primary">
-                    <Crown className="w-4 h-4 mr-2" />
-                    Ver Planos Disponíveis
-                  </Button>
-                </Link>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
