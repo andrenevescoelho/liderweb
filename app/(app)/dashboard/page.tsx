@@ -134,7 +134,8 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+            <Link href="/members" className="block hover:opacity-95 transition-opacity">
+          <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -145,7 +146,9 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
+        </Link>
+            <Link href="/songs" className="block hover:opacity-95 transition-opacity">
+          <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -156,7 +159,9 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-green-500 to-green-700 text-white">
+        </Link>
+            <Link href="/setlists" className="block hover:opacity-95 transition-opacity">
+          <Card className="bg-gradient-to-br from-green-500 to-green-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -167,6 +172,7 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
+        </Link>
           </div>
           <div className="grid grid-cols-1 gap-3">
             <Link href="/admin">
@@ -213,31 +219,6 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {(userRole === "ADMIN" || userRole === "LEADER") && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Link href="/members">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <Users className="w-4 h-4" /> Membros
-            </Button>
-          </Link>
-          <Link href="/songs">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <Music className="w-4 h-4" /> Músicas
-            </Button>
-          </Link>
-          <Link href="/setlists">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <ListMusic className="w-4 h-4" /> Repertórios
-            </Button>
-          </Link>
-          <Link href="/schedules">
-            <Button variant="secondary" className="w-full justify-start gap-2">
-              <Calendar className="w-4 h-4" /> Escalas
-            </Button>
-          </Link>
         </div>
       )}
 

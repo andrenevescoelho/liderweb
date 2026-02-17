@@ -1,9 +1,9 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth-options";
-import { Navbar } from "@/components/navbar";
+import { AppLayout } from "@/components/app-layout";
 
-export default async function AppLayout({
+export default async function AppLayoutWrapper({
   children,
 }: {
   children: React.ReactNode;
@@ -14,10 +14,5 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  return (
-    <div className="min-h-screen">
-      <Navbar />
-      <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
-    </div>
-  );
+  return <AppLayout>{children}</AppLayout>;
 }
