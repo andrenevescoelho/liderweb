@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const { planId, groupId } = body;
 
     // Buscar o plano
-    const plan = SUBSCRIPTION_PLANS.find((p) => p.id === planId);
+    const plan = SUBSCRIPTION_PLANS.find((p) => p.id === planId) as any;
     if (!plan) {
       return NextResponse.json({ error: "Plano não encontrado" }, { status: 400 });
     }
@@ -51,31 +51,70 @@ export async function POST(req: NextRequest) {
     });
 
     if (!dbPlan) {
-      // Criar produto e preço no Stripe
-      const stripeProduct = await stripe.products.create({
-        name: `Worship Manager - ${plan.name}`,
-        description: plan.description,
-      });
+      // Para plano gratuito, não criar no Stripe
+      if (plan.isFree) {
+        dbPlan = await prisma.subscriptionPlan.create({
+          data: {
+            name: plan.name,
+            stripePriceId: "free_plan", // Identificador especial para plano gratuito
+            price: 0,
+            userLimit: plan.userLimit,
+            features: plan.features,
+          },
+        });
+      } else {
+        // Criar produto e preço no Stripe para planos pagos
+        const stripeProduct = await stripe.products.create({
+          name: `Líder Web - ${plan.name}`,
+          description: plan.description,
+        });
 
-      const stripePrice = await stripe.prices.create({
-        product: stripeProduct.id,
-        unit_amount: Math.round(plan.price * 100), // em centavos
-        currency: "brl",
-        recurring: { interval: "month" },
-      });
+        const stripePrice = await stripe.prices.create({
+          product: stripeProduct.id,
+          unit_amount: Math.round(plan.price * 100), // em centavos
+          currency: "brl",
+          recurring: { interval: "month" },
+        });
 
-      dbPlan = await prisma.subscriptionPlan.create({
-        data: {
-          name: plan.name,
-          stripePriceId: stripePrice.id,
-          price: plan.price,
-          userLimit: plan.userLimit,
-          features: plan.features,
-        },
-      });
+        dbPlan = await prisma.subscriptionPlan.create({
+          data: {
+            name: plan.name,
+            stripePriceId: stripePrice.id,
+            price: plan.price,
+            userLimit: plan.userLimit,
+            features: plan.features,
+          },
+        });
+      }
     }
 
-    // Buscar ou criar cliente no Stripe
+    // Se é plano gratuito, ativar diretamente sem Stripe
+    if (plan.isFree) {
+      if (group.subscription) {
+        await prisma.subscription.update({
+          where: { id: group.subscription.id },
+          data: {
+            planId: dbPlan.id,
+            status: "ACTIVE",
+            stripeSubscriptionId: null,
+            currentPeriodEnd: null,
+          },
+        });
+      } else {
+        await prisma.subscription.create({
+          data: {
+            groupId: group.id,
+            planId: dbPlan.id,
+            status: "ACTIVE",
+          },
+        });
+      }
+
+      const origin = req.headers.get("origin") || "http://localhost:3000";
+      return NextResponse.json({ url: `${origin}/dashboard?subscription=success` });
+    }
+
+    // Para planos pagos, continuar com fluxo Stripe
     let stripeCustomerId = group.subscription?.stripeCustomerId;
 
     if (!stripeCustomerId) {

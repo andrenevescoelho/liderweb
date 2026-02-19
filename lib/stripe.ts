@@ -7,13 +7,28 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
 // Planos de assinatura
 export const SUBSCRIPTION_PLANS = [
   {
+    id: "free",
+    name: "Gratuito",
+    description: "Para conhecer a plataforma",
+    price: 0,
+    userLimit: 10,
+    isFree: true,
+    features: [
+      "Até 10 usuários",
+      "Músicas ilimitadas",
+      "Repertórios ilimitados",
+      "Escalas ilimitadas",
+      "Suporte por email",
+    ],
+  },
+  {
     id: "basico",
     name: "Básico",
     description: "Ideal para ministérios pequenos",
     price: 29.90,
-    userLimit: 10,
+    userLimit: 15,
     features: [
-      "Até 10 usuários",
+      "Até 15 usuários",
       "Músicas ilimitadas",
       "Repertórios ilimitados",
       "Escalas ilimitadas",

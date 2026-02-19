@@ -9,13 +9,28 @@ import { Badge } from "@/components/ui/badge";
 
 const PLANS = [
   {
+    id: "free",
+    name: "Gratuito",
+    description: "Para conhecer a plataforma",
+    price: 0,
+    userLimit: 10,
+    isFree: true,
+    features: [
+      "Até 10 usuários",
+      "Músicas ilimitadas",
+      "Repertórios ilimitados",
+      "Escalas ilimitadas",
+      "Suporte por email",
+    ],
+  },
+  {
     id: "basico",
     name: "Básico",
     description: "Ideal para ministérios pequenos",
     price: 29.90,
-    userLimit: 10,
+    userLimit: 15,
     features: [
-      "Até 10 usuários",
+      "Até 15 usuários",
       "Músicas ilimitadas",
       "Repertórios ilimitados",
       "Escalas ilimitadas",
@@ -110,7 +125,10 @@ export default function PlanosPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Music className="w-8 h-8 text-white" />
-            <span className="text-2xl font-bold text-white">Worship Manager</span>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">Líder Web</span>
+              <span className="text-xs text-purple-300">By Multitrack Gospel</span>
+            </div>
           </div>
           <Button
             variant="secondary"
@@ -187,10 +205,18 @@ export default function PlanosPage() {
               </CardHeader>
               <CardContent className="text-center">
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-purple-600">
-                    R${plan.price.toFixed(2).replace(".", ",")}
-                  </span>
-                  <span className="text-gray-500">/mês</span>
+                  {(plan as any).isFree ? (
+                    <span className="text-4xl font-bold text-green-600">
+                      Grátis
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-4xl font-bold text-purple-600">
+                        R${plan.price.toFixed(2).replace(".", ",")}
+                      </span>
+                      <span className="text-gray-500">/mês</span>
+                    </>
+                  )}
                 </div>
 
                 <ul className="space-y-3 mb-6 text-left">
@@ -206,6 +232,8 @@ export default function PlanosPage() {
                   className={`w-full ${
                     plan.popular
                       ? "bg-yellow-400 hover:bg-yellow-500 text-yellow-900"
+                      : (plan as any).isFree
+                      ? "bg-green-600 hover:bg-green-700 text-white"
                       : ""
                   }`}
                   onClick={() => handleSelectPlan(plan.id)}
@@ -213,6 +241,8 @@ export default function PlanosPage() {
                 >
                   {loading === plan.id ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (plan as any).isFree ? (
+                    "Começar Grátis"
                   ) : (
                     "Começar Teste Grátis"
                   )}
@@ -230,7 +260,7 @@ export default function PlanosPage() {
       {/* Footer */}
       <footer className="border-t border-purple-700 py-8">
         <div className="container mx-auto px-4 text-center text-purple-300">
-          <p>© {new Date().getFullYear()} Worship Manager. Todos os direitos reservados.</p>
+          <p>© 2025 Líder Web by Multitrack Gospel. Todos os direitos reservados.</p>
         </div>
       </footer>
     </div>
