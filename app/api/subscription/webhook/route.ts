@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import Stripe from "stripe";
+import { SubscriptionStatus } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,6 +72,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
+function mapStripeSubscriptionStatus(
+  stripeStatus: Stripe.Subscription.Status
+): SubscriptionStatus {
+  switch (stripeStatus) {
+    case "trialing":
+      return "TRIALING";
+    case "active":
+      return "ACTIVE";
+    case "canceled":
+      return "CANCELED";
+    case "past_due":
+      return "PAST_DUE";
+    case "unpaid":
+      return "UNPAID";
+    case "incomplete":
+      return "PAST_DUE";
+    case "incomplete_expired":
+    case "paused":
+    default:
+      return "INACTIVE";
+  }
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const groupId = session.metadata?.groupId;
   const planId = session.metadata?.planId;
@@ -92,7 +116,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       planId,
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
-      status: stripeSubscription.status === "trialing" ? "TRIALING" : "ACTIVE",
+      status: mapStripeSubscriptionStatus(stripeSubscription.status),
       currentPeriodStart: new Date((stripeSubscription.current_period_start || 0) * 1000),
       currentPeriodEnd: new Date((stripeSubscription.current_period_end || 0) * 1000),
       trialEndsAt: stripeSubscription.trial_end
@@ -103,7 +127,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       planId,
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
-      status: stripeSubscription.status === "trialing" ? "TRIALING" : "ACTIVE",
+      status: mapStripeSubscriptionStatus(stripeSubscription.status),
       currentPeriodStart: new Date((stripeSubscription.current_period_start || 0) * 1000),
       currentPeriodEnd: new Date((stripeSubscription.current_period_end || 0) * 1000),
       trialEndsAt: stripeSubscription.trial_end
@@ -130,11 +154,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       return;
     }
 
-    let status: any = "ACTIVE";
-    if (sub.status === "trialing") status = "TRIALING";
-    else if (sub.status === "canceled") status = "CANCELED";
-    else if (sub.status === "past_due") status = "PAST_DUE";
-    else if (sub.status === "unpaid") status = "UNPAID";
+    const status = mapStripeSubscriptionStatus(sub.status);
 
     await prisma.subscription.update({
       where: { id: existingSub.id },
@@ -149,11 +169,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     return;
   }
 
-  let status: any = "ACTIVE";
-  if (sub.status === "trialing") status = "TRIALING";
-  else if (sub.status === "canceled") status = "CANCELED";
-  else if (sub.status === "past_due") status = "PAST_DUE";
-  else if (sub.status === "unpaid") status = "UNPAID";
+  const status = mapStripeSubscriptionStatus(sub.status);
 
   await prisma.subscription.update({
     where: { groupId },
