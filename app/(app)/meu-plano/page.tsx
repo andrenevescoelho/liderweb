@@ -104,6 +104,7 @@ export default function MeuPlanoPage() {
   const router = useRouter();
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
 
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -111,7 +112,7 @@ export default function MeuPlanoPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
-  const canManage = useMemo(() => ["ADMIN", "SUPERADMIN"].includes(userRole), [userRole]);
+  const canManage = useMemo(() => ["ADMIN", "SUPERADMIN"].includes(userRole) || userPermissions.includes("subscription.manage"), [userPermissions, userRole]);
 
   useEffect(() => {
     if (!session) return;
