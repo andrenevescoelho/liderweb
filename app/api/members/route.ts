@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { SessionUser } from "@/lib/types";
+import { hasPermission } from "@/lib/authorization";
 
 export async function GET(req: NextRequest) {
   try {
@@ -62,8 +63,17 @@ export async function POST(req: NextRequest) {
     const currentUser = session?.user as SessionUser | undefined;
     const userRole = currentUser?.role;
 
-    if (!session || (userRole !== "SUPERADMIN" && userRole !== "ADMIN")) {
+    if (!session || !currentUser) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const requester = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      include: { profile: true },
+    });
+
+    if (!requester || !hasPermission(requester.role, "member.manage", requester.profile?.permissions)) {
+      return NextResponse.json({ error: "Sem permissão para gerenciar membros" }, { status: 403 });
     }
 
     const body = await req.json();
@@ -80,7 +90,10 @@ export async function POST(req: NextRequest) {
       comfortableKeys, 
       availability, 
       phone, 
-      active 
+      active,
+      memberFunction,
+      leadershipRole,
+      permissions,
     } = body ?? {};
 
     // Se tem email e password, criar novo usuário
@@ -148,6 +161,9 @@ export async function POST(req: NextRequest) {
               availability: availability ?? [],
               phone: phone ?? null,
               active: active ?? true,
+              memberFunction: memberFunction ?? null,
+              leadershipRole: leadershipRole ?? null,
+              permissions: permissions ?? [],
             },
           },
         },
@@ -177,6 +193,9 @@ export async function POST(req: NextRequest) {
           availability: availability ?? [],
           phone: phone ?? null,
           active: active ?? true,
+          memberFunction: memberFunction ?? null,
+          leadershipRole: leadershipRole ?? null,
+          permissions: permissions ?? [],
         },
         create: {
           userId,
@@ -187,6 +206,9 @@ export async function POST(req: NextRequest) {
           availability: availability ?? [],
           phone: phone ?? null,
           active: active ?? true,
+          memberFunction: memberFunction ?? null,
+          leadershipRole: leadershipRole ?? null,
+          permissions: permissions ?? [],
         },
       });
 

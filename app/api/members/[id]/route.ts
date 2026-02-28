@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { SessionUser } from "@/lib/types";
+import { hasPermission } from "@/lib/authorization";
 
 export async function GET(
   req: NextRequest,
@@ -15,6 +17,17 @@ export async function GET(
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
+    const sessionUser = session.user as SessionUser;
+
+    const requester = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      include: { profile: true },
+    });
+
+    if (!requester || !hasPermission(requester.role, "member.manage", requester.profile?.permissions)) {
+      return NextResponse.json({ error: "Sem permissão para visualizar membro" }, { status: 403 });
+    }
+
     const member = await prisma.user.findUnique({
       where: { id: params?.id },
       include: { profile: true },
@@ -22,6 +35,10 @@ export async function GET(
 
     if (!member) {
       return NextResponse.json({ error: "Membro não encontrado" }, { status: 404 });
+    }
+
+    if (requester.role !== "SUPERADMIN" && member.groupId !== requester.groupId) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
     return NextResponse.json(member);
@@ -37,20 +54,39 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const userRole = (session?.user as any)?.role;
+    const sessionUser = session?.user as SessionUser | undefined;
 
-    if (!session || (userRole !== "ADMIN" && userRole !== "LEADER")) {
+    if (!session || !sessionUser) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
+    const requester = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      include: { profile: true },
+    });
+
+    if (!requester || !hasPermission(requester.role, "member.manage", requester.profile?.permissions)) {
+      return NextResponse.json({ error: "Sem permissão para gerenciar membros" }, { status: 403 });
+    }
+
     const body = await req.json();
-    const { name, role, instruments, voiceType, vocalRange, comfortableKeys, availability, phone, active } = body ?? {};
+    const { name, role, instruments, voiceType, vocalRange, comfortableKeys, availability, phone, active, memberFunction, leadershipRole, permissions } = body ?? {};
 
     const updateData: any = {};
     if (name) updateData.name = name;
-    if (role && userRole === "ADMIN") updateData.role = role;
+    if (role && requester.role !== "LEADER") updateData.role = role;
 
-    const user = await prisma.user.update({
+    const targetUser = await prisma.user.findUnique({ where: { id: params?.id } });
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "Membro não encontrado" }, { status: 404 });
+    }
+
+    if (requester.role !== "SUPERADMIN" && targetUser.groupId !== requester.groupId) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
+
+    await prisma.user.update({
       where: { id: params?.id },
       data: updateData,
     });
@@ -65,6 +101,9 @@ export async function PUT(
         availability: availability ?? [],
         phone: phone ?? null,
         active: active ?? true,
+        memberFunction: memberFunction ?? null,
+        leadershipRole: leadershipRole ?? null,
+        permissions: permissions ?? [],
       },
       create: {
         userId: params?.id,
@@ -75,6 +114,9 @@ export async function PUT(
         availability: availability ?? [],
         phone: phone ?? null,
         active: active ?? true,
+        memberFunction: memberFunction ?? null,
+        leadershipRole: leadershipRole ?? null,
+        permissions: permissions ?? [],
       },
     });
 
@@ -96,10 +138,29 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const userRole = (session?.user as any)?.role;
+    const sessionUser = session?.user as SessionUser | undefined;
 
-    if (!session || userRole !== "ADMIN") {
+    if (!session || !sessionUser) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const requester = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      include: { profile: true },
+    });
+
+    if (!requester || !hasPermission(requester.role, "member.manage", requester.profile?.permissions)) {
+      return NextResponse.json({ error: "Sem permissão para excluir membros" }, { status: 403 });
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id: params?.id } });
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "Membro não encontrado" }, { status: 404 });
+    }
+
+    if (requester.role !== "SUPERADMIN" && targetUser.groupId !== requester.groupId) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
     await prisma.user.delete({

@@ -102,6 +102,9 @@ model MemberProfile {
   id              String   @id @default(cuid())
   userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberFunction  String?
+  leadershipRole  String?
+  permissions     String[] @default([])
   instruments     String[] @default([])
   voiceType       VoiceType?
   vocalRange      String?
