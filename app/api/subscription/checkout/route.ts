@@ -6,6 +6,10 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { stripe, SUBSCRIPTION_PLANS } from "@/lib/stripe";
 
+function isStripePriceId(value?: string | null) {
+  return Boolean(value && value.startsWith("price_"));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -86,6 +90,25 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+    }
+
+    if (!plan.isFree && !isStripePriceId(dbPlan.stripePriceId)) {
+      const stripeProduct = await stripe.products.create({
+        name: `Líder Web - ${plan.name}`,
+        description: plan.description,
+      });
+
+      const stripePrice = await stripe.prices.create({
+        product: stripeProduct.id,
+        unit_amount: Math.round(plan.price * 100),
+        currency: "brl",
+        recurring: { interval: "month" },
+      });
+
+      dbPlan = await prisma.subscriptionPlan.update({
+        where: { id: dbPlan.id },
+        data: { stripePriceId: stripePrice.id },
+      });
     }
 
     // Se é plano gratuito, ativar diretamente sem Stripe
