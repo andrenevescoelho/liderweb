@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import {
   Music,
   Plus,
@@ -38,6 +39,7 @@ function getYoutubeEmbedUrl(url: string): string | null {
 }
 
 export default function SongsPage() {
+  const searchParams = useSearchParams();
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -58,6 +60,7 @@ export default function SongsPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editSong, setEditSong] = useState<any>(null);
   const [viewSong, setViewSong] = useState<any>(null);
+  const songIdFromQuery = searchParams?.get("songId") ?? "";
 
   const fetchSongs = async () => {
     try {
@@ -79,6 +82,18 @@ export default function SongsPage() {
     const timer = setTimeout(fetchSongs, 300);
     return () => clearTimeout(timer);
   }, [search, filterTag, filterKey]);
+
+  useEffect(() => {
+    if (!songIdFromQuery || loading || (songs?.length ?? 0) === 0 || viewSong) {
+      return;
+    }
+
+    const selectedSong = songs.find((song) => song?.id === songIdFromQuery);
+    if (!selectedSong) return;
+
+    setViewSong(selectedSong);
+    setViewModalOpen(true);
+  }, [songIdFromQuery, songs, loading, viewSong]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta música?")) return;

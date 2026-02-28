@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -44,6 +45,7 @@ const MEMBER_ROLE_HINTS: Record<string, string[]> = {
 };
 
 export default function SchedulesPage() {
+  const searchParams = useSearchParams();
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -61,6 +63,7 @@ export default function SchedulesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<any>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
+  const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
 
   const fetchSchedules = async () => {
     try {
@@ -79,6 +82,25 @@ export default function SchedulesPage() {
   useEffect(() => {
     fetchSchedules();
   }, [currentMonth]);
+
+  useEffect(() => {
+    if (!scheduleIdFromQuery || loading) return;
+
+    const scheduleInCurrentMonth = schedules.find((schedule) => schedule?.id === scheduleIdFromQuery);
+    if (scheduleInCurrentMonth) {
+      setSelectedSchedule(scheduleInCurrentMonth);
+      return;
+    }
+
+    fetch(`/api/schedules/${scheduleIdFromQuery}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((schedule) => {
+        if (schedule?.id) {
+          setSelectedSchedule(schedule);
+        }
+      })
+      .catch(() => {});
+  }, [scheduleIdFromQuery, schedules, loading]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta escala?")) return;
