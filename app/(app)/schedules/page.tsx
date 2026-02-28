@@ -381,6 +381,7 @@ function ScheduleModal({
   const [members, setMembers] = useState<any[]>([]);
   const [addRole, setAddRole] = useState("");
   const [customRole, setCustomRole] = useState("");
+  const [showAddRoleForm, setShowAddRoleForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNewSongModal, setShowNewSongModal] = useState(false);
   const [newSongTitle, setNewSongTitle] = useState("");
@@ -442,6 +443,9 @@ function ScheduleModal({
     setNewSongBpm("");
     setNewSongYoutubeUrl("");
     setNewSongOriginalKey("C");
+    setShowAddRoleForm(false);
+    setAddRole("");
+    setCustomRole("");
   }, [schedule]);
 
   const updateRole = (idx: number, memberId: string) => {
@@ -501,6 +505,7 @@ function ScheduleModal({
     ]);
     setAddRole("");
     setCustomRole("");
+    setShowAddRoleForm(false);
   };
 
 
@@ -749,49 +754,76 @@ function ScheduleModal({
             ))}
           </div>
 
-          <div className="mt-3 rounded-lg border p-3 bg-white dark:bg-gray-950">
-            <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Adicionar novo papel
-            </div>
+          <div className="mt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setShowAddRoleForm((prev) => !prev);
+                if (showAddRoleForm) {
+                  setAddRole("");
+                  setCustomRole("");
+                }
+              }}
+              className="gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              {showAddRoleForm ? "Fechar" : "Adicionar papel"}
+            </Button>
 
-            <div className="flex flex-col gap-2">
-              <Select
-                value={addRole}
-                onChange={(e) => setAddRole(e?.target?.value ?? "")}
-                options={[
-                  { value: "", label: "Selecione um papel" },
-                  ...(SCHEDULE_ROLES
-                    ?.filter?.(
-                      (r) =>
-                        !(roles ?? [])?.some?.(
-                          (x) => (x?.role ?? "").toLowerCase() === String(r).toLowerCase()
-                        )
-                    )
-                    ?.map?.((r) => ({ value: r, label: r })) ?? []),
-                  { value: "__custom__", label: "Outro (digitar)" },
-                ]}
-              />
-
-              {addRole === "__custom__" && (
-                <Input
-                  placeholder="Digite o nome do novo papel (ex: Backing Vocal, Violão 2...)"
-                  value={customRole}
-                  onChange={(e) => setCustomRole(e?.target?.value ?? "")}
+            {showAddRoleForm && (
+              <div className="mt-2 rounded-lg border p-3 bg-white dark:bg-gray-950 space-y-2">
+                <Select
+                  value={addRole}
+                  onChange={(e) => setAddRole(e?.target?.value ?? "")}
+                  options={[
+                    { value: "", label: "Selecione um papel" },
+                    ...(SCHEDULE_ROLES
+                      ?.filter?.(
+                        (r) =>
+                          !(roles ?? [])?.some?.(
+                            (x) => (x?.role ?? "").toLowerCase() === String(r).toLowerCase()
+                          )
+                      )
+                      ?.map?.((r) => ({ value: r, label: r })) ?? []),
+                    { value: "__custom__", label: "Informar nome do papel" },
+                  ]}
                 />
-              )}
 
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={addRoleToList}
-                  disabled={!addRole || (addRole === "__custom__" && !customRole.trim())}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar papel
-                </Button>
+                {addRole === "__custom__" && (
+                  <Input
+                    placeholder="Digite o nome do novo papel (ex: Backing Vocal, Violão 2...)"
+                    value={customRole}
+                    onChange={(e) => setCustomRole(e?.target?.value ?? "")}
+                  />
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowAddRoleForm(false);
+                      setAddRole("");
+                      setCustomRole("");
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={addRoleToList}
+                    disabled={!addRole || (addRole === "__custom__" && !customRole.trim())}
+                  >
+                    Salvar papel
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
         </div>
