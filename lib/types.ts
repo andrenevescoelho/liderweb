@@ -8,6 +8,7 @@ export interface SessionUser {
   email: string;
   role: Role;
   groupId?: string | null;
+  permissions?: string[];
   hasActiveSubscription?: boolean;
   subscriptionStatus?: string | null;
 }

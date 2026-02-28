@@ -21,6 +21,11 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
           include: {
+            profile: {
+              select: {
+                permissions: true,
+              },
+            },
             group: {
               include: {
                 subscription: {
@@ -62,6 +67,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           role: user.role,
           groupId: user.groupId,
+          permissions: user.profile?.permissions ?? [],
           hasActiveSubscription,
           subscriptionStatus,
         };
@@ -75,9 +81,32 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role;
         token.id = user.id;
         token.groupId = (user as any).groupId;
+        token.permissions = (user as any).permissions ?? [];
         token.hasActiveSubscription = (user as any).hasActiveSubscription;
         token.subscriptionStatus = (user as any).subscriptionStatus;
       }
+
+      if (token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: {
+            role: true,
+            groupId: true,
+            profile: {
+              select: {
+                permissions: true,
+              },
+            },
+          },
+        });
+
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.groupId = dbUser.groupId;
+          token.permissions = dbUser.profile?.permissions ?? [];
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -85,6 +114,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role;
         (session.user as any).id = token.id;
         (session.user as any).groupId = token.groupId;
+        (session.user as any).permissions = token.permissions;
         (session.user as any).hasActiveSubscription = token.hasActiveSubscription;
         (session.user as any).subscriptionStatus = token.subscriptionStatus;
       }
