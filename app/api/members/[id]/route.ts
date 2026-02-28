@@ -7,6 +7,11 @@ import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
 
+const isGroupAdminProtected = (
+  requester: { role: string },
+  targetUser: { role: string }
+) => requester.role !== "SUPERADMIN" && targetUser.role === "ADMIN";
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -86,6 +91,13 @@ export async function PUT(
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
+    if (isGroupAdminProtected(requester, targetUser)) {
+      return NextResponse.json(
+        { error: "O administrador do grupo só pode ser alterado por um superadmin global." },
+        { status: 403 }
+      );
+    }
+
     await prisma.user.update({
       where: { id: params?.id },
       data: updateData,
@@ -161,6 +173,13 @@ export async function DELETE(
 
     if (requester.role !== "SUPERADMIN" && targetUser.groupId !== requester.groupId) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
+
+    if (isGroupAdminProtected(requester, targetUser)) {
+      return NextResponse.json(
+        { error: "O administrador do grupo só pode ser alterado por um superadmin global." },
+        { status: 403 }
+      );
     }
 
     await prisma.user.delete({

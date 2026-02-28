@@ -40,7 +40,13 @@ export default function DashboardPage() {
   const [portalLoading, setPortalLoading] = useState(false);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
   const userName = session?.user?.name ?? "";
+  const canAccessReports =
+    userRole === "ADMIN" ||
+    userRole === "LEADER" ||
+    userPermissions.includes("report.group.access") ||
+    userPermissions.includes("report.minister.stats");
 
   const fetchData = () => {
     fetch("/api/dashboard")
@@ -61,10 +67,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
-    if (userRole === "ADMIN" || userRole === "LEADER") {
+    if (canAccessReports) {
       fetchSubscription();
     }
-  }, [userRole]);
+  }, [canAccessReports]);
 
   const handleManageSubscription = async () => {
     setPortalLoading(true);
@@ -184,7 +190,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      {(userRole === "ADMIN" || userRole === "LEADER") && (
+      {canAccessReports && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
             <CardContent className="p-6">
@@ -223,7 +229,7 @@ export default function DashboardPage() {
       )}
 
       {/* Seção de Assinatura para Admin/Leader */}
-      {(userRole === "ADMIN" || userRole === "LEADER") && subscription && (
+      {canAccessReports && subscription && (
         <Card className={`border ${subscription.isActive ? "border-green-500/40" : subscription.hasSubscription ? "border-yellow-500/40" : "border-gray-300/40"}`}>
           <CardHeader className="py-3">
             <div className="flex items-center justify-between gap-3">
@@ -459,7 +465,7 @@ export default function DashboardPage() {
           )}
 
           {/* Escalas do Grupo (apenas para Admin/Leader) */}
-          {(userRole === "ADMIN" || userRole === "LEADER") && (upcomingSchedules?.length ?? 0) > 0 && (
+          {canAccessReports && (upcomingSchedules?.length ?? 0) > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -501,7 +507,7 @@ export default function DashboardPage() {
           )}
 
           {/* Pendências (Admin/Leader) */}
-          {(userRole === "ADMIN" || userRole === "LEADER") && (pendingConfirmations?.length ?? 0) > 0 && (
+          {canAccessReports && (pendingConfirmations?.length ?? 0) > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
