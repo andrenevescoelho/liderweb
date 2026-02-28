@@ -41,6 +41,7 @@ export async function GET() {
         currentPeriodEnd: subscription.currentPeriodEnd,
         trialEndsAt: subscription.trialEndsAt,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        hasStripeCustomer: Boolean(subscription.stripeCustomerId),
       },
     });
   } catch (error: any) {
