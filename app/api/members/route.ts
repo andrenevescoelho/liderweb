@@ -17,23 +17,10 @@ const getOptionalMemberProfileData = ({
   leadershipRole?: string | null;
   permissions?: string[];
 }) => {
-  const modelFields = (prisma as any)?._runtimeDataModel?.models?.MemberProfile?.fields;
-  const hasField = (fieldName: string) => {
-    if (Array.isArray(modelFields)) {
-      return modelFields.some((field: { name: string }) => field.name === fieldName);
-    }
-
-    if (modelFields && typeof modelFields === "object") {
-      return Object.prototype.hasOwnProperty.call(modelFields, fieldName);
-    }
-
-    return false;
-  };
-
   return {
-    ...(hasField("memberFunction") ? { memberFunction: memberFunction ?? null } : {}),
-    ...(hasField("leadershipRole") ? { leadershipRole: leadershipRole ?? null } : {}),
-    ...(hasField("permissions") ? { permissions: permissions ?? [] } : {}),
+    memberFunction: memberFunction ?? null,
+    leadershipRole: leadershipRole ?? null,
+    permissions: permissions ?? [],
   };
 };
 

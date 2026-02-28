@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { SessionUser } from "@/lib/types";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface MenuItem {
   label: string;
@@ -85,6 +86,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const pathname = usePathname();
   const user = session?.user as SessionUser | undefined;
   const userRole = user?.role || "";
+  const userPermissions = user?.permissions ?? [];
+
+  const permissionLabels = userPermissions
+    .map((permissionKey) => PERMISSIONS.find((permission) => permission.key === permissionKey)?.label ?? permissionKey)
+    .slice(0, 2);
 
   const filteredMenuItems = menuItems.filter((item) =>
     item.roles.includes(userRole)
@@ -182,13 +188,24 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       {/* Role Badge */}
       {!collapsed && (
         <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50">
-            <Shield className="w-4 h-4 text-purple-400" />
-            <span className="text-sm text-slate-300">
-              {userRole === "SUPERADMIN" ? "Super Admin" :
-               userRole === "ADMIN" ? "Administrador" :
-               userRole === "LEADER" ? "Líder" : "Membro"}
-            </span>
+          <div className="px-3 py-2 rounded-lg bg-slate-800/50 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-purple-400" />
+              <span className="text-sm text-slate-300">
+                {userRole === "SUPERADMIN" ? "Super Admin" :
+                 userRole === "ADMIN" ? "Administrador" :
+                 userRole === "LEADER" ? "Líder" : "Membro"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}
+            </p>
+            {permissionLabels.length > 0 && (
+              <p className="text-xs text-slate-500 truncate" title={permissionLabels.join(", ")}>
+                {permissionLabels.join(" • ")}
+                {userPermissions.length > permissionLabels.length ? " • ..." : ""}
+              </p>
+            )}
           </div>
         </div>
       )}
