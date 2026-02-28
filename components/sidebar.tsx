@@ -65,7 +65,7 @@ const menuItems: MenuItem[] = [
     label: "Meu Plano",
     href: "/meu-plano",
     icon: <CreditCard className="w-5 h-5" />,
-    roles: ["ADMIN", "SUPERADMIN"],
+    roles: ["ADMIN"],
     permissions: ["subscription.manage"],
   },
 ];
@@ -116,6 +116,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const hidePermissionSummary = pathname?.startsWith("/admin") || userRole === "ADMIN";
 
   const filteredMenuItems = menuItems.filter((item) => {
+    if (item.href === "/meu-plano" && userRole === "SUPERADMIN") {
+      return false;
+    }
+
     if (item.roles.includes(userRole)) {
       return true;
     }

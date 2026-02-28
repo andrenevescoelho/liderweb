@@ -113,17 +113,24 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <LayoutDashboard className="w-8 h-8 text-purple-600" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Olá, {userName?.split?.(' ')?.[0] ?? 'Usuário'}!
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Bem-vindo ao Líder Web
-          </p>
+      {userRole !== "SUPERADMIN" && (
+        <div className="flex items-center gap-3">
+          <LayoutDashboard className="w-8 h-8 text-purple-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Olá, {userName?.split?.(' ')?.[0] ?? 'Usuário'}!
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Bem-vindo ao Líder Web
+            </p>
+            {data?.groupName && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Ministério: {data.groupName}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {userRole === "SUPERADMIN" && (
         <>
