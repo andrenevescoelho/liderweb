@@ -10,13 +10,27 @@ import { Badge } from "@/components/ui/badge";
 
 const PLANS = [
   {
-    id: "basico",
-    name: "Básico",
-    description: "Ideal para ministérios pequenos",
+    id: "free",
+    name: "Gratuito",
+    description: "Para conhecer a plataforma",
     price: 0,
     userLimit: 10,
     features: [
       "Até 10 usuários",
+      "Músicas ilimitadas",
+      "Repertórios ilimitados",
+      "Escalas ilimitadas",
+      "Suporte por email",
+    ],
+  },
+  {
+    id: "basico",
+    name: "Básico",
+    description: "Ideal para ministérios pequenos",
+    price: 29.9,
+    userLimit: 15,
+    features: [
+      "Até 15 usuários",
       "Músicas ilimitadas",
       "Repertórios ilimitados",
       "Escalas ilimitadas",
@@ -126,8 +140,14 @@ export default function MeuPlanoPage() {
   }, [session, canManage, router]);
 
   const currentPlanName = status?.subscription?.planName ?? null;
+  const canUseStripePortal = !!status?.subscription?.hasStripeCustomer;
 
   const handleOpenPortal = async () => {
+    if (!canUseStripePortal) {
+      alert("Esta assinatura não está vinculada ao Stripe. Escolha um plano para migrar.");
+      return;
+    }
+
     setPortalLoading(true);
     try {
       const res = await fetch("/api/subscription/portal", { method: "POST" });
@@ -193,7 +213,7 @@ export default function MeuPlanoPage() {
           </p>
         </div>
 
-        <Button onClick={handleOpenPortal} disabled={portalLoading || loading}>
+        <Button onClick={handleOpenPortal} disabled={portalLoading || loading || !canUseStripePortal}>
           {portalLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
           Gerenciar no Stripe
           <ExternalLink className="w-4 h-4 ml-2" />
@@ -298,38 +318,33 @@ export default function MeuPlanoPage() {
                   ))}
                 </div>
 
-                {status?.hasSubscription ? (
-                  <Button
-                    className="w-full"
-                    variant={isCurrent ? "secondary" : "default"}
-                    disabled={portalLoading}
-                    onClick={() => {
-                      if (isCurrent) {
-                        alert("Você já tem essa assinatura.");
-                        return;
-                      }
+                <Button
+                  className="w-full"
+                  variant={status?.hasSubscription && isCurrent ? "secondary" : "default"}
+                  disabled={!!actionLoading || (status?.hasSubscription && canUseStripePortal && portalLoading)}
+                  onClick={() => {
+                    if (isCurrent) {
+                      alert("Você já tem essa assinatura.");
+                      return;
+                    }
 
+                    if (status?.hasSubscription && canUseStripePortal) {
                       handleOpenPortal();
-                    }}
-                  >
-                    Upgrade/Downgrade (Stripe)
-                  </Button>
-                ) : (
-                  <Button
-                    className="w-full"
-                    onClick={() => handleSubscribe(plan.id)}
-                    disabled={!!actionLoading}
-                  >
-                    {actionLoading === plan.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Crown className="w-4 h-4 mr-2" />
-                    )}
-                    Assinar este plano
-                  </Button>
-                )}
+                      return;
+                    }
 
-                {status?.hasSubscription && !isCurrent ? (
+                    handleSubscribe(plan.id);
+                  }}
+                >
+                  {actionLoading === plan.id || (status?.hasSubscription && canUseStripePortal && portalLoading) ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Crown className="w-4 h-4 mr-2" />
+                  )}
+                  {status?.hasSubscription && canUseStripePortal ? "Upgrade/Downgrade (Stripe)" : "Assinar este plano"}
+                </Button>
+
+                {status?.hasSubscription && !isCurrent && canUseStripePortal ? (
                   <p className="text-xs text-muted-foreground">
                     Você será redirecionado ao portal do Stripe para alterar o plano.
                   </p>

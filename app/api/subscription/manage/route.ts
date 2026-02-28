@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
+import { SUBSCRIPTION_PLANS } from "@/lib/stripe";
 
 // GET - Buscar planos disponíveis
 export async function GET() {
@@ -15,6 +16,38 @@ export async function GET() {
     if (!session || user.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
+
+    await Promise.all(
+      SUBSCRIPTION_PLANS.map(async (catalogPlan) => {
+        const existingPlan = await prisma.subscriptionPlan.findFirst({
+          where: { name: catalogPlan.name },
+        });
+
+        if (existingPlan) {
+          await prisma.subscriptionPlan.update({
+            where: { id: existingPlan.id },
+            data: {
+              price: catalogPlan.price,
+              userLimit: catalogPlan.userLimit,
+              features: catalogPlan.features,
+              active: true,
+            },
+          });
+          return;
+        }
+
+        await prisma.subscriptionPlan.create({
+          data: {
+            name: catalogPlan.name,
+            stripePriceId: catalogPlan.isFree ? "free_plan" : `catalog_${catalogPlan.id}`,
+            price: catalogPlan.price,
+            userLimit: catalogPlan.userLimit,
+            features: catalogPlan.features,
+            active: true,
+          },
+        });
+      })
+    );
 
     const plans = await prisma.subscriptionPlan.findMany({
       where: { active: true },
