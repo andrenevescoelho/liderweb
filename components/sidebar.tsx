@@ -20,13 +20,14 @@ import {
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { SessionUser } from "@/lib/types";
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS, PERMISSION_PRESETS } from "@/lib/permissions";
 
 interface MenuItem {
   label: string;
   href: string;
   icon: React.ReactNode;
   roles: string[];
+  permissions?: string[];
 }
 
 const menuItems: MenuItem[] = [
@@ -47,6 +48,7 @@ const menuItems: MenuItem[] = [
     href: "/members",
     icon: <Users className="w-5 h-5" />,
     roles: ["ADMIN", "LEADER"],
+    permissions: ["member.manage"],
   },
   {
     label: "Músicas",
@@ -71,6 +73,7 @@ const menuItems: MenuItem[] = [
     href: "/meu-plano",
     icon: <CreditCard className="w-5 h-5" />,
     roles: ["ADMIN"],
+    permissions: ["subscription.manage"],
   },
 ];
 
@@ -92,9 +95,27 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     .map((permissionKey) => PERMISSIONS.find((permission) => permission.key === permissionKey)?.label ?? permissionKey)
     .slice(0, 2);
 
-  const filteredMenuItems = menuItems.filter((item) =>
-    item.roles.includes(userRole)
+
+  const matchedPermissionPreset = PERMISSION_PRESETS.find((preset) =>
+    preset.permissions.length === userPermissions.length &&
+    preset.permissions.every((permission) => userPermissions.includes(permission))
   );
+
+  const permissionPresetName = matchedPermissionPreset?.label
+    .replace(/^[^A-Za-zÀ-ÿ0-9]+/, "")
+    .trim();
+
+  const filteredMenuItems = menuItems.filter((item) => {
+    if (item.roles.includes(userRole)) {
+      return true;
+    }
+
+    if (!item.permissions?.length) {
+      return false;
+    }
+
+    return item.permissions.some((permission) => userPermissions.includes(permission));
+  });
 
   const handleLinkClick = () => {
     if (isMobile && onMobileClose) {
@@ -197,10 +218,14 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
                  userRole === "LEADER" ? "Líder" : "Membro"}
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}
-            </p>
-            {permissionLabels.length > 0 && (
+            {permissionPresetName ? (
+              <p className="text-xs text-slate-400">Permissão: {permissionPresetName}</p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}
+              </p>
+            )}
+            {!permissionPresetName && permissionLabels.length > 0 && (
               <p className="text-xs text-slate-500 truncate" title={permissionLabels.join(", ")}>
                 {permissionLabels.join(" • ")}
                 {userPermissions.length > permissionLabels.length ? " • ..." : ""}

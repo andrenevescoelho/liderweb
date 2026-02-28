@@ -38,8 +38,14 @@ export default function MembersPage() {
   const { data: session } = useSession() || {};
   const sessionUser = session?.user as SessionUser | undefined;
   const userRole = sessionUser?.role ?? "MEMBER";
-  const canEdit = userRole === "ADMIN" || userRole === "LEADER" || userRole === "SUPERADMIN";
-  const canCreate = userRole === "ADMIN" || userRole === "SUPERADMIN";
+  const userPermissions = sessionUser?.permissions ?? [];
+  const canManageMembers =
+    userRole === "ADMIN" ||
+    userRole === "LEADER" ||
+    userRole === "SUPERADMIN" ||
+    userPermissions.includes("member.manage");
+  const canEdit = canManageMembers;
+  const canCreate = canManageMembers;
 
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
