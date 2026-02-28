@@ -382,8 +382,11 @@ function ScheduleModal({
   const [addRole, setAddRole] = useState("");
   const [customRole, setCustomRole] = useState("");
   const [saving, setSaving] = useState(false);
-  const [showNewSongForm, setShowNewSongForm] = useState(false);
+  const [showNewSongModal, setShowNewSongModal] = useState(false);
   const [newSongTitle, setNewSongTitle] = useState("");
+  const [newSongArtist, setNewSongArtist] = useState("");
+  const [newSongBpm, setNewSongBpm] = useState("");
+  const [newSongYoutubeUrl, setNewSongYoutubeUrl] = useState("");
   const [newSongOriginalKey, setNewSongOriginalKey] = useState("C");
   const [creatingSong, setCreatingSong] = useState(false);
 
@@ -433,8 +436,11 @@ function ScheduleModal({
       );
     }
 
-    setShowNewSongForm(false);
+    setShowNewSongModal(false);
     setNewSongTitle("");
+    setNewSongArtist("");
+    setNewSongBpm("");
+    setNewSongYoutubeUrl("");
     setNewSongOriginalKey("C");
   }, [schedule]);
 
@@ -567,6 +573,9 @@ function ScheduleModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: newSongTitle.trim(),
+          artist: newSongArtist.trim() || null,
+          bpm: newSongBpm.trim() || null,
+          youtubeUrl: newSongYoutubeUrl.trim() || null,
           originalKey: newSongOriginalKey,
         }),
       });
@@ -588,8 +597,11 @@ function ScheduleModal({
       ]);
 
       setNewSongTitle("");
+      setNewSongArtist("");
+      setNewSongBpm("");
+      setNewSongYoutubeUrl("");
       setNewSongOriginalKey("C");
-      setShowNewSongForm(false);
+      setShowNewSongModal(false);
     } catch (error) {
       console.error(error);
       alert("Não foi possível criar a música agora.");
@@ -633,6 +645,7 @@ function ScheduleModal({
   const musicalKeyOptions = useMemo(() => ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"], []);
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -668,34 +681,12 @@ function ScheduleModal({
               <Plus className="w-4 h-4 mr-2" />
               Adicionar
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setShowNewSongForm((prev) => !prev)}>
+            <Button type="button" variant="secondary" onClick={() => setShowNewSongModal(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Nova música
             </Button>
           </div>
 
-          {showNewSongForm && (
-            <div className="mb-3 rounded-lg border p-3 bg-white dark:bg-gray-950 space-y-3">
-              <Input
-                label="Título da nova música"
-                value={newSongTitle}
-                onChange={(e) => setNewSongTitle(e?.target?.value ?? "")}
-                placeholder="Digite o nome da música"
-              />
-              <Select
-                label="Tom original"
-                value={newSongOriginalKey}
-                onChange={(e) => setNewSongOriginalKey(e?.target?.value ?? "C")}
-                options={musicalKeyOptions.map((k) => ({ value: k, label: k }))}
-              />
-              <div className="flex justify-end">
-                <Button type="button" onClick={createSongAndAddToSchedule} disabled={!newSongTitle.trim() || creatingSong}>
-                  {creatingSong ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                  Salvar e adicionar
-                </Button>
-              </div>
-            </div>
-          )}
 
           <div className="space-y-2 max-h-52 overflow-y-auto">
             {(setlistItems ?? []).map((item, idx) => (
@@ -816,5 +807,59 @@ function ScheduleModal({
         </div>
       </form>
     </Modal>
+      <Modal
+        isOpen={showNewSongModal}
+        onClose={() => setShowNewSongModal(false)}
+        title="Nova Música"
+        className="max-w-xl"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Título da nova música"
+            value={newSongTitle}
+            onChange={(e) => setNewSongTitle(e?.target?.value ?? "")}
+            placeholder="Digite o nome da música"
+          />
+          <Input
+            label="Artista"
+            value={newSongArtist}
+            onChange={(e) => setNewSongArtist(e?.target?.value ?? "")}
+            placeholder="Nome do artista"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="BPM"
+              type="number"
+              value={newSongBpm}
+              onChange={(e) => setNewSongBpm(e?.target?.value ?? "")}
+              placeholder="Ex: 120"
+            />
+            <Select
+              label="Tom original"
+              value={newSongOriginalKey}
+              onChange={(e) => setNewSongOriginalKey(e?.target?.value ?? "C")}
+              options={musicalKeyOptions.map((k) => ({ value: k, label: k }))}
+            />
+          </div>
+          <Input
+            label="Link do YouTube"
+            value={newSongYoutubeUrl}
+            onChange={(e) => setNewSongYoutubeUrl(e?.target?.value ?? "")}
+            placeholder="https://www.youtube.com/watch?v=..."
+          />
+
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setShowNewSongModal(false)} className="flex-1">
+              Cancelar
+            </Button>
+            <Button type="button" onClick={createSongAndAddToSchedule} disabled={!newSongTitle.trim() || creatingSong} className="flex-1">
+              {creatingSong ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              Salvar e adicionar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+    </>
   );
 }
