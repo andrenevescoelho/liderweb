@@ -14,7 +14,6 @@ import {
   Mic,
   UserPlus,
   Mail,
-  Lock,
   Send,
   CheckCircle,
   Copy,
@@ -27,6 +26,13 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { INSTRUMENTS, VOICE_TYPES, WEEKDAYS } from "@/lib/types";
 import { SessionUser } from "@/lib/types";
+import {
+  MINISTRY_MEMBER_FUNCTIONS,
+  MINISTRY_LEADERSHIP_ROLES,
+  PERMISSIONS,
+  PERMISSION_CATEGORIES,
+  PERMISSION_PRESETS,
+} from "@/lib/permissions";
 
 export default function MembersPage() {
   const { data: session } = useSession() || {};
@@ -357,6 +363,23 @@ export default function MembersPage() {
                   </div>
                 )}
 
+                {(member?.profile?.memberFunction || member?.profile?.leadershipRole) && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {member?.profile?.memberFunction && (
+                      <Badge variant="secondary">{member.profile.memberFunction}</Badge>
+                    )}
+                    {member?.profile?.leadershipRole && (
+                      <Badge variant="warning">{member.profile.leadershipRole}</Badge>
+                    )}
+                  </div>
+                )}
+
+                {(member?.profile?.permissions?.length ?? 0) > 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {member.profile.permissions.length} permissões customizadas
+                  </p>
+                )}
+
                 {canEdit && (
                   <div className="flex gap-2 mt-4 pt-4 border-t dark:border-gray-700">
                     <Button
@@ -503,6 +526,9 @@ function MemberModal({
   const [comfortableKeys, setComfortableKeys] = useState<string[]>([]);
   const [availability, setAvailability] = useState<string[]>([]);
   const [active, setActive] = useState(true);
+  const [memberFunction, setMemberFunction] = useState("");
+  const [leadershipRole, setLeadershipRole] = useState("");
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -517,6 +543,9 @@ function MemberModal({
       setComfortableKeys(member?.profile?.comfortableKeys ?? []);
       setAvailability(member?.profile?.availability ?? []);
       setActive(member?.profile?.active ?? true);
+      setMemberFunction(member?.profile?.memberFunction ?? "");
+      setLeadershipRole(member?.profile?.leadershipRole ?? "");
+      setPermissions(member?.profile?.permissions ?? []);
       setPassword("");
       setError("");
     } else {
@@ -530,6 +559,9 @@ function MemberModal({
       setComfortableKeys([]);
       setAvailability([]);
       setActive(true);
+      setMemberFunction("");
+      setLeadershipRole("");
+      setPermissions([]);
       setError("");
     }
   }, [member, isOpen]);
@@ -562,6 +594,9 @@ function MemberModal({
             comfortableKeys,
             availability,
             active,
+            memberFunction: memberFunction || null,
+            leadershipRole: leadershipRole || null,
+            permissions,
           }),
         });
         
@@ -583,6 +618,9 @@ function MemberModal({
             comfortableKeys,
             availability,
             active,
+            memberFunction: memberFunction || null,
+            leadershipRole: leadershipRole || null,
+            permissions,
           }),
         });
       }
@@ -592,6 +630,21 @@ function MemberModal({
       setError(e.message || "Erro ao salvar membro");
     } finally {
       setSaving(false);
+    }
+  };
+
+
+
+  const groupedPermissions = Object.entries(PERMISSION_CATEGORIES).map(([key, label]) => ({
+    key,
+    label,
+    items: PERMISSIONS.filter((permission) => permission.category === key),
+  }));
+
+  const applyPreset = (presetKey: string) => {
+    const preset = PERMISSION_PRESETS.find((item) => item.key === presetKey);
+    if (preset) {
+      setPermissions(preset.permissions);
     }
   };
 
@@ -647,6 +700,26 @@ function MemberModal({
           label="Telefone/WhatsApp"
           value={phone}
           onChange={(e) => setPhone(e?.target?.value ?? '')}
+        />
+
+        <Select
+          label="Função no time"
+          value={memberFunction}
+          onChange={(e) => setMemberFunction(e?.target?.value ?? '')}
+          options={[
+            { value: "", label: "Selecione" },
+            ...(MINISTRY_MEMBER_FUNCTIONS?.map?.((item) => ({ value: item, label: item })) ?? []),
+          ]}
+        />
+
+        <Select
+          label="Cargo de liderança"
+          value={leadershipRole}
+          onChange={(e) => setLeadershipRole(e?.target?.value ?? '')}
+          options={[
+            { value: "", label: "Selecione" },
+            ...(MINISTRY_LEADERSHIP_ROLES?.map?.((item) => ({ value: item, label: item })) ?? []),
+          ]}
         />
 
         <div>
@@ -728,6 +801,59 @@ function MemberModal({
               >
                 {day}
               </button>
+            ))}
+          </div>
+        </div>
+
+
+
+        <div className="space-y-3 rounded-lg border p-3 dark:border-gray-700">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Permissões granulares</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Modelo RBAC + permissões para customização por membro.
+            </p>
+          </div>
+
+          <Select
+            label="Aplicar preset"
+            value=""
+            onChange={(e) => applyPreset(e?.target?.value ?? "")}
+            options={[
+              { value: "", label: "Selecione um preset" },
+              ...(PERMISSION_PRESETS?.map?.((preset) => ({
+                value: preset.key,
+                label: preset.label,
+              })) ?? []),
+            ]}
+          />
+
+          <div className="space-y-3 max-h-72 overflow-auto pr-1">
+            {groupedPermissions.map((group) => (
+              <div key={group.key} className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {group.label}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {group.items.map((permission) => (
+                    <button
+                      key={permission.key}
+                      type="button"
+                      onClick={() => toggleItem(permissions, permission.key, setPermissions)}
+                      className={`px-2 py-1 rounded-full text-xs border transition-colors ${
+                        permissions.includes(permission.key)
+                          ? "bg-purple-600 text-white border-purple-600"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                      }`}
+                      title={permission.description || permission.label}
+                    >
+                      {permission.label}
+                      {permission.future ? " (futuro)" : ""}
+                      {permission.premium ? " • premium" : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
