@@ -67,6 +67,7 @@ export const PERMISSIONS: PermissionDefinition[] = [
   { key: "schedule.presence.confirm.others", label: "Confirmar presença de terceiros", category: "schedule" },
   { key: "schedule.lock", label: "Travar escala", category: "schedule" },
   { key: "schedule.future.view", label: "Visualizar escala futura", category: "schedule" },
+  { key: "schedule.view.all", label: "Visualizar todas as escalas", description: "Permite ver todas as escalas do grupo, não apenas as escalas onde o membro está escalado", category: "schedule" },
   { key: "schedule.history.view", label: "Visualizar histórico completo", category: "schedule" },
   { key: "schedule.export", label: "Exportar escala", category: "schedule" },
   { key: "schedule.publish", label: "Publicar escala", category: "schedule" },
