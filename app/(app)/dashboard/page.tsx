@@ -362,6 +362,14 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
+                      <div className="mb-3">
+                        <Link href={`/schedules?scheduleId=${schedule?.id ?? ""}`}>
+                          <Button size="sm" variant="ghost" className="px-0">
+                            Ver escala
+                          </Button>
+                        </Link>
+                      </div>
+
                       {schedule?.myStatus === "PENDING" && (
                         <div className="flex gap-2 pt-2 border-t dark:border-gray-700">
                           <Button
@@ -412,7 +420,7 @@ export default function DashboardPage() {
                   {songsToRehearse?.map?.((song: any) => (
                     <Link
                       key={song?.id ?? ''}
-                      href="/songs"
+                      href={`/songs?songId=${song?.id ?? ""}`}
                       className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
                     >
                       <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center">
@@ -460,7 +468,7 @@ export default function DashboardPage() {
                   {upcomingSchedules?.slice?.(0, 4)?.map?.((schedule: any) => (
                     <Link
                       key={schedule?.id ?? ''}
-                      href={`/schedules`}
+                      href={`/schedules?scheduleId=${schedule?.id ?? ""}`}
                       className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     >
                       <div className="flex items-center gap-3">
