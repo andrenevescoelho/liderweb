@@ -16,6 +16,20 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const resolveSession = async (attempts = 5) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const session = await getSession();
+
+      if (session?.user) {
+        return session;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e?.preventDefault?.();
     setError("");
@@ -33,8 +47,9 @@ export default function LoginPage() {
         return;
       }
       
-      // Buscar sessão para verificar status da assinatura
-      const session = await getSession();
+      // Buscar sessão para verificar status da assinatura.
+      // Com callbacks JWT mais complexos (RBAC), a sessão pode demorar alguns ms para sincronizar.
+      const session = await resolveSession();
       
       if (session?.user) {
         const user = session.user as any;
@@ -60,7 +75,12 @@ export default function LoginPage() {
         
         // Assinatura ativa - ir para dashboard
         router.replace("/dashboard");
+        return;
       }
+
+      // Fallback: se autenticou mas a sessão ainda não propagou no cliente,
+      // redireciona para a rota raiz que já resolve sessão no servidor.
+      router.replace("/");
     } catch (err) {
       setError("Erro ao fazer login");
     } finally {
