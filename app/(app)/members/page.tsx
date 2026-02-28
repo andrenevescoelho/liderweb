@@ -48,7 +48,11 @@ export default function MembersPage() {
   const canCreate = canManageMembers;
   const canManageTargetMember = (member: any) => {
     if (!canEdit) return false;
-    if ((member?.role ?? "") === "ADMIN" && userRole !== "SUPERADMIN") {
+    if (
+      (member?.role ?? "") === "ADMIN" &&
+      userRole !== "SUPERADMIN" &&
+      userRole !== "ADMIN"
+    ) {
       return false;
     }
     return true;
@@ -412,11 +416,6 @@ export default function MembersPage() {
                       </Button>
                     )}
                   </div>
-                )}
-                {canEdit && !canManageTargetMember(member) && member?.role === "ADMIN" && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
-                    O administrador do grupo não pode ser alterado por regras RBAC customizadas.
-                  </p>
                 )}
               </CardContent>
             </Card>

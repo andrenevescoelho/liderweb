@@ -10,7 +10,10 @@ import { hasPermission } from "@/lib/authorization";
 const isGroupAdminProtected = (
   requester: { role: string },
   targetUser: { role: string }
-) => requester.role !== "SUPERADMIN" && targetUser.role === "ADMIN";
+) =>
+  requester.role !== "SUPERADMIN" &&
+  requester.role !== "ADMIN" &&
+  targetUser.role === "ADMIN";
 
 export async function GET(
   req: NextRequest,
@@ -93,7 +96,7 @@ export async function PUT(
 
     if (isGroupAdminProtected(requester, targetUser)) {
       return NextResponse.json(
-        { error: "O administrador do grupo só pode ser alterado por um superadmin global." },
+        { error: "O administrador do grupo só pode ser alterado por um admin do grupo ou superadmin global." },
         { status: 403 }
       );
     }
@@ -177,7 +180,7 @@ export async function DELETE(
 
     if (isGroupAdminProtected(requester, targetUser)) {
       return NextResponse.json(
-        { error: "O administrador do grupo só pode ser alterado por um superadmin global." },
+        { error: "O administrador do grupo só pode ser alterado por um admin do grupo ou superadmin global." },
         { status: 403 }
       );
     }

@@ -201,9 +201,9 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
         }
 
-        if (targetUser.role === "ADMIN") {
+        if (targetUser.role === "ADMIN" && userRole !== "ADMIN") {
           return NextResponse.json(
-            { error: "O administrador do grupo só pode ser alterado por um superadmin global." },
+            { error: "O administrador do grupo só pode ser alterado por um admin do grupo ou superadmin global." },
             { status: 403 }
           );
         }
