@@ -25,7 +25,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
   { href: "/admin", label: "Grupos", icon: Building2, roles: ["SUPERADMIN"] },
   { href: "/members", label: "Membros", icon: Users, roles: ["ADMIN", "LEADER"] },
-  { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN", "SUPERADMIN"] },
+  { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN"] },
   { href: "/songs", label: "Músicas", icon: Music, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { href: "/schedules", label: "Escalas", icon: Calendar, roles: ["ADMIN", "LEADER", "MEMBER"] },
 ];
@@ -40,6 +40,7 @@ export function Navbar() {
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
 
   const filteredNav = navItems?.filter((item) => {
+    if (item?.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
     if (item?.roles?.includes(userRole)) return true;
     if (item?.href === "/meu-plano") return userPermissions.includes("subscription.manage");
     return false;

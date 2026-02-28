@@ -33,6 +33,7 @@ export async function GET() {
       const totalSetlists = await prisma.setlist.count();
 
       return NextResponse.json({
+        groupName: null,
         upcomingSchedules: [],
         myUpcomingSchedules: [],
         pendingConfirmations: [],
@@ -45,6 +46,14 @@ export async function GET() {
         },
       });
     }
+
+
+    const group = groupId
+      ? await prisma.group.findUnique({
+          where: { id: groupId },
+          select: { name: true },
+        })
+      : null;
 
     // Buscar escalas onde o usuário ESTÁ ESCALADO
     const myScheduleRoles = await prisma.scheduleRole.findMany({
@@ -180,6 +189,7 @@ export async function GET() {
     const totalSetlists = await prisma.setlist.count({ where: setlistWhere });
 
     return NextResponse.json({
+      groupName: group?.name ?? null,
       upcomingSchedules: upcomingSchedules ?? [],
       myUpcomingSchedules: myUpcomingSchedules ?? [],
       pendingConfirmations: pendingConfirmations ?? [],
