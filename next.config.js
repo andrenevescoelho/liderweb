@@ -4,7 +4,7 @@ const packageJson = require('./package.json');
 
 const getVersionFromGit = () => {
   try {
-    const commitCount = execSync('git rev-list --count HEAD').toString().trim();
+    const commitCount = execSync('git rev-list --count --first-parent HEAD').toString().trim();
     const shortSha = execSync('git rev-parse --short HEAD').toString().trim();
     return `${packageJson.version}.${commitCount}-${shortSha}`;
   } catch {
