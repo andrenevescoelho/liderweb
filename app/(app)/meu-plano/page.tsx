@@ -274,6 +274,14 @@ export default function MeuPlanoPage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {PLANS.map((plan) => {
           const isCurrent = !!currentPlanName && plan.name === currentPlanName;
+          const isFreePlan = plan.price === 0;
+          const shouldUsePortal = status?.hasSubscription && canUseStripePortal && !isFreePlan;
+          const isBusy = actionLoading === plan.id || (shouldUsePortal && portalLoading);
+          const buttonLabel = isCurrent
+            ? "Plano atual"
+            : shouldUsePortal
+              ? "Upgrade/Downgrade (Stripe)"
+              : "Assinar este plano";
 
           return (
             <Card
@@ -322,14 +330,9 @@ export default function MeuPlanoPage() {
                 <Button
                   className="w-full"
                   variant={status?.hasSubscription && isCurrent ? "secondary" : "default"}
-                  disabled={!!actionLoading || (status?.hasSubscription && canUseStripePortal && portalLoading)}
+                  disabled={isCurrent || !!actionLoading || (shouldUsePortal && portalLoading)}
                   onClick={() => {
-                    if (isCurrent) {
-                      alert("Você já tem essa assinatura.");
-                      return;
-                    }
-
-                    if (status?.hasSubscription && canUseStripePortal) {
+                    if (shouldUsePortal) {
                       handleOpenPortal();
                       return;
                     }
@@ -337,17 +340,29 @@ export default function MeuPlanoPage() {
                     handleSubscribe(plan.id);
                   }}
                 >
-                  {actionLoading === plan.id || (status?.hasSubscription && canUseStripePortal && portalLoading) ? (
+                  {isBusy ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : (
                     <Crown className="w-4 h-4 mr-2" />
                   )}
-                  {status?.hasSubscription && canUseStripePortal ? "Upgrade/Downgrade (Stripe)" : "Assinar este plano"}
+                  {buttonLabel}
                 </Button>
 
-                {status?.hasSubscription && !isCurrent && canUseStripePortal ? (
+                {isCurrent ? (
+                  <p className="text-xs text-muted-foreground">
+                    Você já possui este plano ativo.
+                  </p>
+                ) : null}
+
+                {status?.hasSubscription && !isCurrent && shouldUsePortal ? (
                   <p className="text-xs text-muted-foreground">
                     Você será redirecionado ao portal do Stripe para alterar o plano.
+                  </p>
+                ) : null}
+
+                {status?.hasSubscription && !isCurrent && isFreePlan ? (
+                  <p className="text-xs text-muted-foreground">
+                    Migração para o plano gratuito é feita diretamente, sem pagamento.
                   </p>
                 ) : null}
               </CardContent>
