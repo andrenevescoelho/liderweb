@@ -27,15 +27,21 @@ export const INSTRUMENTS = [
 export const VOICE_TYPES = ["SOPRANO", "ALTO", "TENOR", "LEAD"] as const;
 
 export const SCHEDULE_ROLES = [
-  "Teclado",
-  "Guitarra 1",
-  "Guitarra 2",
+  "Vocal",
+  "Ministro",
+  "Violão",
+  "Guitarra",
   "Baixo",
   "Bateria",
-  "Vocal Soprano",
-  "Vocal Alto",
-  "Vocal Tenor",
-  "Vocal Lead",
+  "Teclado",
+  "Piano",
+  "Violino",
+  "Flauta",
+  "Gaita",
+  "Percussão",
+  "Sonoplasta",
+  "Operador de projeção",
+  "Saxofone",
 ] as const;
 
 export const SONG_TAGS = [

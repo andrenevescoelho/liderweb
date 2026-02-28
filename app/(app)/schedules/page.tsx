@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -23,7 +23,25 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { MUSICAL_KEYS, SCHEDULE_ROLES } from "@/lib/types";
+import { SCHEDULE_ROLES } from "@/lib/types";
+
+const MEMBER_ROLE_HINTS: Record<string, string[]> = {
+  vocal: ["Vocal"],
+  ministro: ["Ministro"],
+  violão: ["Violão"],
+  guitarra: ["Guitarra"],
+  baixo: ["Baixo"],
+  bateria: ["Bateria"],
+  teclado: ["Teclado", "Piano"],
+  piano: ["Piano", "Teclado"],
+  violino: ["Violino"],
+  flauta: ["Flauta"],
+  gaita: ["Gaita"],
+  percussão: ["Percussão"],
+  sonoplasta: ["Sonoplasta"],
+  "operador de projeção": ["Operador de projeção"],
+  saxofone: ["Saxofone"],
+};
 
 export default function SchedulesPage() {
   const { data: session } = useSession() || {};
@@ -328,6 +346,7 @@ export default function SchedulesPage() {
           setEditSchedule(null);
         }}
         schedule={editSchedule}
+        schedules={schedules}
         onSave={() => {
           setModalOpen(false);
           setEditSchedule(null);
@@ -342,11 +361,13 @@ function ScheduleModal({
   isOpen,
   onClose,
   schedule,
+  schedules,
   onSave,
 }: {
   isOpen: boolean;
   onClose: () => void;
   schedule: any;
+  schedules: any[];
   onSave: () => void;
 }) {
   const { data: session } = useSession() || {};
@@ -361,6 +382,10 @@ function ScheduleModal({
   const [addRole, setAddRole] = useState("");
   const [customRole, setCustomRole] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showNewSongForm, setShowNewSongForm] = useState(false);
+  const [newSongTitle, setNewSongTitle] = useState("");
+  const [newSongOriginalKey, setNewSongOriginalKey] = useState("C");
+  const [creatingSong, setCreatingSong] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -407,6 +432,10 @@ function ScheduleModal({
         })) ?? []
       );
     }
+
+    setShowNewSongForm(false);
+    setNewSongTitle("");
+    setNewSongOriginalKey("C");
   }, [schedule]);
 
   const updateRole = (idx: number, memberId: string) => {
@@ -433,13 +462,6 @@ function ScheduleModal({
     setSelectedSongId("");
   };
 
-  const updateSongKey = (idx: number, key: string) => {
-    const next = [...(setlistItems ?? [])];
-    if (next?.[idx]) {
-      next[idx] = { ...next[idx], selectedKey: key };
-    }
-    setSetlistItems(next);
-  };
 
   const removeSongFromSchedule = (idx: number) => {
     setSetlistItems((setlistItems ?? []).filter((_: any, i: number) => i !== idx));
@@ -476,6 +498,105 @@ function ScheduleModal({
   };
 
 
+  const suggestScale = () => {
+    const roleFrequency = new Map<string, Map<string, number>>();
+
+    (schedules ?? []).forEach((existingSchedule) => {
+      (existingSchedule?.roles ?? []).forEach((roleEntry: any) => {
+        const roleName = roleEntry?.role;
+        const memberId = roleEntry?.memberId;
+        if (!roleName || !memberId) return;
+
+        const frequencyByRole = roleFrequency.get(roleName) ?? new Map<string, number>();
+        frequencyByRole.set(memberId, (frequencyByRole.get(memberId) ?? 0) + 1);
+        roleFrequency.set(roleName, frequencyByRole);
+      });
+    });
+
+    const activeMembers = (members ?? []).filter((m) => m?.profile?.active);
+
+    const nextRoles = (roles ?? []).map((roleEntry) => {
+      const roleName = roleEntry?.role ?? "";
+      const byHistory = roleFrequency.get(roleName);
+
+      if (byHistory && byHistory.size > 0) {
+        let selectedMemberId = "";
+        let selectedCount = -1;
+
+        byHistory.forEach((count, memberId) => {
+          if (count > selectedCount) {
+            selectedMemberId = memberId;
+            selectedCount = count;
+          }
+        });
+
+        if (selectedMemberId) {
+          return { ...roleEntry, memberId: selectedMemberId, status: "PENDING" };
+        }
+      }
+
+      const normalizedRoleName = roleName.toLowerCase();
+      const suggestedByFunction = activeMembers.find((member) => {
+        const memberFunction = String(member?.profile?.memberFunction ?? "").toLowerCase();
+        const instruments = (member?.profile?.instruments ?? []).map((inst: string) => String(inst).toLowerCase());
+        const hints = MEMBER_ROLE_HINTS[memberFunction] ?? [];
+
+        return (
+          hints.some((hint) => hint.toLowerCase() === normalizedRoleName) ||
+          instruments.includes(normalizedRoleName)
+        );
+      });
+
+      if (suggestedByFunction?.id) {
+        return { ...roleEntry, memberId: suggestedByFunction.id, status: "PENDING" };
+      }
+
+      return roleEntry;
+    });
+
+    setRoles(nextRoles);
+  };
+
+  const createSongAndAddToSchedule = async () => {
+    if (!newSongTitle.trim()) return;
+
+    setCreatingSong(true);
+    try {
+      const response = await fetch("/api/songs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newSongTitle.trim(),
+          originalKey: newSongOriginalKey,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha ao criar música");
+      }
+
+      const createdSong = await response.json();
+
+      setSongs((prev) => [...(prev ?? []), createdSong].sort((a, b) => String(a?.title ?? "").localeCompare(String(b?.title ?? ""))));
+      setSetlistItems((prev) => [
+        ...(prev ?? []),
+        {
+          songId: createdSong?.id,
+          songTitle: createdSong?.title,
+          selectedKey: createdSong?.originalKey ?? "C",
+        },
+      ]);
+
+      setNewSongTitle("");
+      setNewSongOriginalKey("C");
+      setShowNewSongForm(false);
+    } catch (error) {
+      console.error(error);
+      alert("Não foi possível criar a música agora.");
+    } finally {
+      setCreatingSong(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e?.preventDefault?.();
@@ -509,6 +630,8 @@ function ScheduleModal({
     }
   };
 
+  const musicalKeyOptions = useMemo(() => ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"], []);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -529,7 +652,7 @@ function ScheduleModal({
           <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
             Músicas da Escala
           </label>
-          <div className="flex gap-2 mb-2">
+          <div className="flex flex-wrap gap-2 mb-2">
             <Select
               value={selectedSongId}
               onChange={(e) => setSelectedSongId(e?.target?.value ?? "")}
@@ -539,23 +662,46 @@ function ScheduleModal({
                   ?.filter?.((song) => !(setlistItems ?? []).some((item) => item?.songId === song?.id))
                   ?.map?.((song) => ({ value: song?.id ?? "", label: song?.title ?? "" })) ?? []),
               ]}
-              className="flex-1"
+              className="flex-1 min-w-[220px]"
             />
             <Button type="button" onClick={addSongToSchedule} disabled={!selectedSongId}>
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 mr-2" />
+              Adicionar
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setShowNewSongForm((prev) => !prev)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nova música
             </Button>
           </div>
+
+          {showNewSongForm && (
+            <div className="mb-3 rounded-lg border p-3 bg-white dark:bg-gray-950 space-y-3">
+              <Input
+                label="Título da nova música"
+                value={newSongTitle}
+                onChange={(e) => setNewSongTitle(e?.target?.value ?? "")}
+                placeholder="Digite o nome da música"
+              />
+              <Select
+                label="Tom original"
+                value={newSongOriginalKey}
+                onChange={(e) => setNewSongOriginalKey(e?.target?.value ?? "C")}
+                options={musicalKeyOptions.map((k) => ({ value: k, label: k }))}
+              />
+              <div className="flex justify-end">
+                <Button type="button" onClick={createSongAndAddToSchedule} disabled={!newSongTitle.trim() || creatingSong}>
+                  {creatingSong ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                  Salvar e adicionar
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2 max-h-52 overflow-y-auto">
             {(setlistItems ?? []).map((item, idx) => (
               <div key={`${item?.songId ?? "song"}-${idx}`} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
                 <span className="w-6 h-6 rounded bg-purple-600 flex items-center justify-center text-xs text-white">{idx + 1}</span>
-                <span className="flex-1 text-sm truncate">{item?.songTitle ?? ""}</span>
-                <Select
-                  value={item?.selectedKey ?? "C"}
-                  onChange={(e) => updateSongKey(idx, e?.target?.value ?? "C")}
-                  options={MUSICAL_KEYS?.slice?.(0, 17)?.map?.((k) => ({ value: k, label: k })) ?? []}
-                  className="w-20"
-                />
+                <span className="flex-1 text-sm truncate">{item?.songTitle ?? "Música sem nome"}</span>
                 <button
                   type="button"
                   onClick={() => removeSongFromSchedule(idx)}
@@ -572,6 +718,11 @@ function ScheduleModal({
           <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
             Atribuir Papéis
           </label>
+          <div className="mb-2 flex justify-end">
+            <Button type="button" variant="secondary" onClick={suggestScale}>
+              Sugerir escala
+            </Button>
+          </div>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {roles?.map?.((role, idx) => (
               <div
