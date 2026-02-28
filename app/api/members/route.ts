@@ -8,6 +8,35 @@ import bcrypt from "bcryptjs";
 import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
 
+const getOptionalMemberProfileData = ({
+  memberFunction,
+  leadershipRole,
+  permissions,
+}: {
+  memberFunction?: string | null;
+  leadershipRole?: string | null;
+  permissions?: string[];
+}) => {
+  const modelFields = (prisma as any)?._runtimeDataModel?.models?.MemberProfile?.fields;
+  const hasField = (fieldName: string) => {
+    if (Array.isArray(modelFields)) {
+      return modelFields.some((field: { name: string }) => field.name === fieldName);
+    }
+
+    if (modelFields && typeof modelFields === "object") {
+      return Object.prototype.hasOwnProperty.call(modelFields, fieldName);
+    }
+
+    return false;
+  };
+
+  return {
+    ...(hasField("memberFunction") ? { memberFunction: memberFunction ?? null } : {}),
+    ...(hasField("leadershipRole") ? { leadershipRole: leadershipRole ?? null } : {}),
+    ...(hasField("permissions") ? { permissions: permissions ?? [] } : {}),
+  };
+};
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -144,6 +173,11 @@ export async function POST(req: NextRequest) {
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
+      const optionalProfileData = getOptionalMemberProfileData({
+        memberFunction,
+        leadershipRole,
+        permissions,
+      });
 
       const newUser = await prisma.user.create({
         data: {
@@ -161,9 +195,7 @@ export async function POST(req: NextRequest) {
               availability: availability ?? [],
               phone: phone ?? null,
               active: active ?? true,
-              memberFunction: memberFunction ?? null,
-              leadershipRole: leadershipRole ?? null,
-              permissions: permissions ?? [],
+              ...optionalProfileData,
             },
           },
         },
@@ -183,6 +215,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      const optionalProfileData = getOptionalMemberProfileData({
+        memberFunction,
+        leadershipRole,
+        permissions,
+      });
+
       const profile = await prisma.memberProfile.upsert({
         where: { userId },
         update: {
@@ -193,9 +231,7 @@ export async function POST(req: NextRequest) {
           availability: availability ?? [],
           phone: phone ?? null,
           active: active ?? true,
-          memberFunction: memberFunction ?? null,
-          leadershipRole: leadershipRole ?? null,
-          permissions: permissions ?? [],
+          ...optionalProfileData,
         },
         create: {
           userId,
@@ -206,9 +242,7 @@ export async function POST(req: NextRequest) {
           availability: availability ?? [],
           phone: phone ?? null,
           active: active ?? true,
-          memberFunction: memberFunction ?? null,
-          leadershipRole: leadershipRole ?? null,
-          permissions: permissions ?? [],
+          ...optionalProfileData,
         },
       });
 
