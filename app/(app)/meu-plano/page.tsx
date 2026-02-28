@@ -82,7 +82,7 @@ function formatBRL(value: number) {
 }
 
 function formatPlanPrice(value: number) {
-  if (value === 0) return "free";
+  if (value === 0) return "Grátis";
   return formatBRL(value);
 }
 
@@ -302,10 +302,17 @@ export default function MeuPlanoPage() {
                   <Button
                     className="w-full"
                     variant={isCurrent ? "secondary" : "default"}
-                    disabled={isCurrent || portalLoading}
-                    onClick={handleOpenPortal}
+                    disabled={portalLoading}
+                    onClick={() => {
+                      if (isCurrent) {
+                        alert("Você já tem essa assinatura.");
+                        return;
+                      }
+
+                      handleOpenPortal();
+                    }}
                   >
-                    {isCurrent ? "Plano atual" : "Upgrade/Downgrade (Stripe)"}
+                    Upgrade/Downgrade (Stripe)
                   </Button>
                 ) : (
                   <Button
