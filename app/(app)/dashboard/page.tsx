@@ -11,7 +11,6 @@ import {
   Calendar,
   Users,
   Music,
-  ListMusic,
   Clock,
   AlertCircle,
   Loader2,
@@ -128,7 +127,7 @@ export default function DashboardPage() {
 
       {userRole === "SUPERADMIN" && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -166,19 +165,6 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
         </Link>
-            <Link href="/setlists" className="block hover:opacity-95 transition-opacity">
-          <Card className="bg-gradient-to-br from-green-500 to-green-700 text-white">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100">Repertórios</p>
-                    <p className="text-3xl font-bold">{stats?.totalSetlists ?? 0}</p>
-                  </div>
-                  <ListMusic className="w-12 h-12 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
-        </Link>
           </div>
           <div className="grid grid-cols-1 gap-3">
             <Link href="/admin">
@@ -191,7 +177,7 @@ export default function DashboardPage() {
       )}
 
       {canAccessReports && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -211,17 +197,6 @@ export default function DashboardPage() {
                   <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
                 </div>
                 <Music className="w-12 h-12 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-green-500 to-green-700 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-green-100">Repertórios</p>
-                  <p className="text-3xl font-bold">{stats?.totalSetlists ?? 0}</p>
-                </div>
-                <ListMusic className="w-12 h-12 opacity-50" />
               </div>
             </CardContent>
           </Card>
