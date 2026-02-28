@@ -95,15 +95,32 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     .map((permissionKey) => PERMISSIONS.find((permission) => permission.key === permissionKey)?.label ?? permissionKey)
     .slice(0, 2);
 
+  const presetScores = PERMISSION_PRESETS.map((preset) => {
+    const matchedCount = preset.permissions.filter((permission) => userPermissions.includes(permission)).length;
+    return {
+      preset,
+      matchedCount,
+      missingCount: Math.max(preset.permissions.length - matchedCount, 0),
+      extraCount: Math.max(userPermissions.length - matchedCount, 0),
+    };
+  });
 
-  const matchedPermissionPreset = PERMISSION_PRESETS.find((preset) =>
-    preset.permissions.length === userPermissions.length &&
-    preset.permissions.every((permission) => userPermissions.includes(permission))
+  const bestPresetMatch = presetScores
+    .filter((item) => item.matchedCount > 0)
+    .sort((a, b) => {
+      if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount;
+      return a.missingCount - b.missingCount;
+    })[0];
+
+  const permissionPresetName = bestPresetMatch?.preset?.label
+    ?.replace(/^[^A-Za-zÀ-ÿ0-9]+/, "")
+    ?.trim();
+
+  const isPresetCustomized = Boolean(
+    bestPresetMatch && (bestPresetMatch.missingCount > 0 || bestPresetMatch.extraCount > 0)
   );
 
-  const permissionPresetName = matchedPermissionPreset?.label
-    .replace(/^[^A-Za-zÀ-ÿ0-9]+/, "")
-    .trim();
+  const hidePermissionSummary = pathname?.startsWith("/admin");
 
   const filteredMenuItems = menuItems.filter((item) => {
     if (item.roles.includes(userRole)) {
@@ -218,18 +235,25 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
                  userRole === "LEADER" ? "Líder" : "Membro"}
               </span>
             </div>
-            {permissionPresetName ? (
-              <p className="text-xs text-slate-400">Permissão: {permissionPresetName}</p>
-            ) : (
-              <p className="text-xs text-slate-400">
-                RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}
-              </p>
-            )}
-            {!permissionPresetName && permissionLabels.length > 0 && (
-              <p className="text-xs text-slate-500 truncate" title={permissionLabels.join(", ")}>
-                {permissionLabels.join(" • ")}
-                {userPermissions.length > permissionLabels.length ? " • ..." : ""}
-              </p>
+            {!hidePermissionSummary && (
+              <>
+                {permissionPresetName ? (
+                  <p className="text-xs text-slate-400">
+                    Permissão: {permissionPresetName}
+                    {isPresetCustomized ? " (customizada)" : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}
+                  </p>
+                )}
+                {!permissionPresetName && permissionLabels.length > 0 && (
+                  <p className="text-xs text-slate-500 truncate" title={permissionLabels.join(", ")}>
+                    {permissionLabels.join(" • ")}
+                    {userPermissions.length > permissionLabels.length ? " • ..." : ""}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

@@ -200,6 +200,13 @@ export async function POST(req: NextRequest) {
         if (!targetUser || targetUser.groupId !== currentUser?.groupId) {
           return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
         }
+
+        if (targetUser.role === "ADMIN") {
+          return NextResponse.json(
+            { error: "O administrador do grupo só pode ser alterado por um superadmin global." },
+            { status: 403 }
+          );
+        }
       }
 
       const optionalProfileData = getOptionalMemberProfileData({

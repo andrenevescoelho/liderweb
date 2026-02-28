@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { hasPermission } from "@/lib/authorization";
 
 export async function GET() {
   try {
@@ -15,8 +16,14 @@ export async function GET() {
     const user = session.user as any;
     const userId = user?.id;
     const userRole = user?.role;
+    const userPermissions = (user?.permissions ?? []) as string[];
     const groupId = user?.groupId;
     const now = new Date();
+    const canAccessGroupReports =
+      userRole === "ADMIN" ||
+      userRole === "LEADER" ||
+      hasPermission(userRole, "report.group.access", userPermissions) ||
+      hasPermission(userRole, "report.minister.stats", userPermissions);
 
     // SuperAdmin vê estatísticas gerais
     if (userRole === "SUPERADMIN") {
@@ -106,7 +113,7 @@ export async function GET() {
 
     // Para Admin/Leader: buscar todas as próximas escalas do grupo
     let upcomingSchedules: any[] = [];
-    if (userRole === "ADMIN" || userRole === "LEADER") {
+    if (canAccessGroupReports) {
       const scheduleWhere: any = { date: { gte: now } };
       if (groupId) {
         scheduleWhere.groupId = groupId;
@@ -129,7 +136,7 @@ export async function GET() {
 
     // Pendências
     let pendingConfirmations: any[] = [];
-    if (userRole === "ADMIN" || userRole === "LEADER") {
+    if (canAccessGroupReports) {
       // Admin/Leader vê todas as pendências do grupo
       pendingConfirmations = await prisma.scheduleRole.findMany({
         where: {
