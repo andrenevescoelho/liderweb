@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Users,
   Music,
-  ListMusic,
   Calendar,
   CreditCard,
   Building2,
@@ -54,12 +53,6 @@ const menuItems: MenuItem[] = [
     label: "Músicas",
     href: "/songs",
     icon: <Music className="w-5 h-5" />,
-    roles: ["ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Repertórios",
-    href: "/setlists",
-    icon: <ListMusic className="w-5 h-5" />,
     roles: ["ADMIN", "LEADER", "MEMBER"],
   },
   {
@@ -120,7 +113,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     bestPresetMatch && (bestPresetMatch.missingCount > 0 || bestPresetMatch.extraCount > 0)
   );
 
-  const hidePermissionSummary = pathname?.startsWith("/admin");
+  const hidePermissionSummary = pathname?.startsWith("/admin") || userRole === "ADMIN";
 
   const filteredMenuItems = menuItems.filter((item) => {
     if (item.roles.includes(userRole)) {

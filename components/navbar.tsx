@@ -8,7 +8,6 @@ import Image from "next/image";
 import {
   Music,
   Users,
-  ListMusic,
   Calendar,
   LayoutDashboard,
   Moon,
@@ -24,12 +23,10 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
-  { href: "/admin", label: "Grupos", icon: Building2,
-  CreditCard, roles: ["SUPERADMIN"] },
+  { href: "/admin", label: "Grupos", icon: Building2, roles: ["SUPERADMIN"] },
   { href: "/members", label: "Membros", icon: Users, roles: ["ADMIN", "LEADER"] },
   { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN", "SUPERADMIN"] },
   { href: "/songs", label: "Músicas", icon: Music, roles: ["ADMIN", "LEADER", "MEMBER"] },
-  { href: "/setlists", label: "Repertórios", icon: ListMusic, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { href: "/schedules", label: "Escalas", icon: Calendar, roles: ["ADMIN", "LEADER", "MEMBER"] },
 ];
 
