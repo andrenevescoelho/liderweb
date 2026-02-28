@@ -6,6 +6,8 @@ import { AppHeader } from "@/components/app-header";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+
 interface AppLayoutProps {
   children: React.ReactNode;
 }
@@ -49,6 +51,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               {children}
             </div>
           </main>
+          <footer className="px-4 md:px-6 pb-4 text-center text-xs text-gray-500 dark:text-gray-400">
+            Versão {APP_VERSION}
+          </footer>
         </div>
       </div>
     );
@@ -104,6 +109,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             {children}
           </div>
         </main>
+        <footer className="px-4 md:px-6 pb-4 text-center text-xs text-gray-500 dark:text-gray-400">
+          Versão {APP_VERSION}
+        </footer>
       </div>
     </div>
   );

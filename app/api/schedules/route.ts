@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
     const year = searchParams?.get?.("year");
 
     const where: any = {};
+    const canViewAllSchedules =
+      user.role === "SUPERADMIN" ||
+      user.role === "ADMIN" ||
+      user.role === "LEADER" ||
+      hasPermission(user.role, "schedule.view.all", user.permissions);
 
     // SuperAdmin vê todos, outros veem apenas do seu grupo
     if (user.role !== "SUPERADMIN") {
@@ -26,6 +31,14 @@ export async function GET(req: NextRequest) {
         return NextResponse.json([]);
       }
       where.groupId = user.groupId;
+
+      if (!canViewAllSchedules && user.id) {
+        where.roles = {
+          some: {
+            memberId: user.id,
+          },
+        };
+      }
     }
 
     if (month && year) {
