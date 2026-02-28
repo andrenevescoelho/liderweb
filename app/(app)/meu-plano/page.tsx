@@ -13,7 +13,7 @@ const PLANS = [
     id: "basico",
     name: "Básico",
     description: "Ideal para ministérios pequenos",
-    price: 29.9,
+    price: 0,
     userLimit: 10,
     features: [
       "Até 10 usuários",
@@ -79,6 +79,11 @@ function formatBRL(value: number) {
   } catch {
     return `R$ ${value.toFixed(2)}`;
   }
+}
+
+function formatPlanPrice(value: number) {
+  if (value === 0) return "free";
+  return formatBRL(value);
 }
 
 export default function MeuPlanoPage() {
@@ -278,8 +283,10 @@ export default function MeuPlanoPage() {
 
               <CardContent className="space-y-4">
                 <div className="text-3xl font-bold">
-                  {formatBRL(plan.price)}
-                  <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                  {formatPlanPrice(plan.price)}
+                  {plan.price > 0 ? (
+                    <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
