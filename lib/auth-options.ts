@@ -4,6 +4,25 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
+async function verifyPassword(password: string, storedPassword: string, userId: string) {
+  try {
+    return await bcrypt.compare(password, storedPassword);
+  } catch {
+    // Compatibilidade com senhas legadas salvas em texto plano.
+    if (password !== storedPassword) {
+      return false;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return true;
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -17,9 +36,16 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
+
+        const normalizedEmail = credentials.email.trim();
         
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+        const user = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: normalizedEmail,
+              mode: "insensitive",
+            },
+          },
           include: {
             profile: {
               select: {
@@ -38,7 +64,7 @@ export const authOptions: NextAuthOptions = {
         
         if (!user) return null;
         
-        const isValid = await bcrypt.compare(credentials.password, user.password);
+        const isValid = await verifyPassword(credentials.password, user.password, user.id);
         if (!isValid) return null;
         
         // Verificar status da assinatura do grupo
