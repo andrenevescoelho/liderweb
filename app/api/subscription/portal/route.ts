@@ -15,12 +15,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    // Verificar se o usuário é admin do grupo
+    // Se não for admin, permitir apenas quando o grupo não tiver nenhum administrador.
     if (user.role !== "SUPERADMIN" && user.role !== "ADMIN") {
-      return NextResponse.json(
-        { error: "Apenas administradores podem gerenciar assinaturas" },
-        { status: 403 }
-      );
+      const groupAdmin = await prisma.user.findFirst({
+        where: {
+          groupId: user.groupId,
+          role: { in: ["SUPERADMIN", "ADMIN"] },
+        },
+        select: { id: true },
+      });
+
+      if (groupAdmin) {
+        return NextResponse.json(
+          { error: "Apenas administradores podem gerenciar assinaturas" },
+          { status: 403 }
+        );
+      }
     }
 
     const subscription = await prisma.subscription.findUnique({
