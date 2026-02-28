@@ -112,12 +112,10 @@ export const authOptions: NextAuthOptions = {
         token.subscriptionStatus = (user as any).subscriptionStatus;
       }
 
-      if (token.id) {
+      if (token.id && typeof token.id === "string") {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id },
-          select: {
-            role: true,
-            groupId: true,
+          include: {
             profile: {
               select: {
                 permissions: true,
