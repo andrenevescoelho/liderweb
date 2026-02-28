@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { date, setlistId, roles } = body ?? {};
+    const { date, roles, setlistItems } = body ?? {};
 
     if (!date) {
       return NextResponse.json({ error: "Data é obrigatória" }, { status: 400 });
@@ -101,10 +101,25 @@ export async function POST(req: NextRequest) {
     const [year, month, day] = date.split("-").map(Number);
     const scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
 
+    const createdSetlist = await prisma.setlist.create({
+      data: {
+        name: `Escala ${date}`,
+        date: scheduleDate,
+        groupId: user.groupId ?? null,
+        items: {
+          create: (setlistItems ?? []).map((item: any, index: number) => ({
+            songId: item?.songId,
+            selectedKey: item?.selectedKey ?? "C",
+            order: index,
+          })),
+        },
+      },
+    });
+
     const schedule = await prisma.schedule.create({
       data: {
         date: scheduleDate,
-        setlistId: setlistId ?? null,
+        setlistId: createdSetlist.id,
         groupId: user.groupId ?? null,
         roles: {
           create: (roles ?? [])?.map?.((r: any) => ({
@@ -115,7 +130,14 @@ export async function POST(req: NextRequest) {
         },
       },
       include: {
-        setlist: true,
+        setlist: {
+          include: {
+            items: {
+              include: { song: true },
+              orderBy: { order: "asc" },
+            },
+          },
+        },
         roles: {
           include: {
             member: {
