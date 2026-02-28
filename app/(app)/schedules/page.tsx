@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { SCHEDULE_ROLES } from "@/lib/types";
+import { MUSICAL_KEYS, SCHEDULE_ROLES } from "@/lib/types";
 
 export default function SchedulesPage() {
   const { data: session } = useSession() || {};
@@ -171,7 +171,7 @@ export default function SchedulesPage() {
                       {schedule && (
                         <div className="mt-1">
                           <Badge variant="info" className="text-xs truncate block">
-                            {schedule?.setlist?.name ?? "Escala"}
+                            {`${schedule?.setlist?.items?.length ?? 0} músicas`}
                           </Badge>
                         </div>
                       )}
@@ -234,9 +234,9 @@ export default function SchedulesPage() {
           <CardContent>
             {selectedSchedule?.setlist && (
               <div className="mb-4">
-                <p className="text-sm text-gray-500">Repertório</p>
+                <p className="text-sm text-gray-500">Músicas da escala</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {selectedSchedule?.setlist?.name}
+                  {`${selectedSchedule?.setlist?.items?.length ?? 0} música(s)`}
                 </p>
               </div>
             )}
@@ -353,9 +353,10 @@ function ScheduleModal({
   const currentRole = (session?.user as any)?.role ?? "MEMBER";
 
   const [date, setDate] = useState("");
-  const [setlistId, setSetlistId] = useState("");
+  const [setlistItems, setSetlistItems] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
-  const [setlists, setSetlists] = useState<any[]>([]);
+  const [songs, setSongs] = useState<any[]>([]);
+  const [selectedSongId, setSelectedSongId] = useState("");
   const [members, setMembers] = useState<any[]>([]);
   const [addRole, setAddRole] = useState("");
   const [customRole, setCustomRole] = useState("");
@@ -363,11 +364,11 @@ function ScheduleModal({
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/setlists").then((r) => r.json()),
+      fetch("/api/songs").then((r) => r.json()),
       fetch("/api/members").then((r) => r.json()),
     ])
-      .then(([setlistsData, membersData]) => {
-        setSetlists(setlistsData ?? []);
+      .then(([songsData, membersData]) => {
+        setSongs(songsData ?? []);
         setMembers(membersData ?? []);
       })
       .catch(console.error);
@@ -381,7 +382,13 @@ function ScheduleModal({
         ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         : "";
       setDate(formattedDate);
-      setSetlistId(schedule?.setlistId ?? "");
+      setSetlistItems(
+        schedule?.setlist?.items?.map?.((item: any) => ({
+          songId: item?.songId,
+          songTitle: item?.song?.title,
+          selectedKey: item?.selectedKey ?? item?.song?.originalKey ?? "C",
+        })) ?? []
+      );
       setRoles(
         schedule?.roles?.map?.((r: any) => ({
           role: r?.role ?? '',
@@ -391,7 +398,7 @@ function ScheduleModal({
       );
     } else {
       setDate("");
-      setSetlistId("");
+      setSetlistItems([]);
       setRoles(
         SCHEDULE_ROLES?.map?.((r) => ({
           role: r,
@@ -408,6 +415,34 @@ function ScheduleModal({
       newRoles[idx] = { ...newRoles[idx], memberId, status: "PENDING" };
     }
     setRoles(newRoles);
+  };
+
+  const addSongToSchedule = () => {
+    if (!selectedSongId) return;
+    const song = songs?.find?.((s) => s?.id === selectedSongId);
+    if (!song) return;
+
+    setSetlistItems([
+      ...(setlistItems ?? []),
+      {
+        songId: song?.id,
+        songTitle: song?.title,
+        selectedKey: song?.originalKey ?? "C",
+      },
+    ]);
+    setSelectedSongId("");
+  };
+
+  const updateSongKey = (idx: number, key: string) => {
+    const next = [...(setlistItems ?? [])];
+    if (next?.[idx]) {
+      next[idx] = { ...next[idx], selectedKey: key };
+    }
+    setSetlistItems(next);
+  };
+
+  const removeSongFromSchedule = (idx: number) => {
+    setSetlistItems((setlistItems ?? []).filter((_: any, i: number) => i !== idx));
   };
 
   const removeRole = (idx: number) => {
@@ -455,7 +490,10 @@ function ScheduleModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date,
-          setlistId: setlistId || null,
+          setlistItems: setlistItems?.map?.((item) => ({
+            songId: item?.songId,
+            selectedKey: item?.selectedKey,
+          })),
           roles: roles?.filter?.((r) => r?.memberId)?.map?.((r) => ({
             role: r?.role,
             memberId: r?.memberId,
@@ -487,15 +525,48 @@ function ScheduleModal({
           required
         />
 
-        <Select
-          label="Repertório"
-          value={setlistId}
-          onChange={(e) => setSetlistId(e?.target?.value ?? '')}
-          options={[
-            { value: "", label: "Selecione (opcional)" },
-            ...(setlists?.map?.((s) => ({ value: s?.id ?? '', label: s?.name ?? '' })) ?? []),
-          ]}
-        />
+        <div>
+          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            Músicas da Escala
+          </label>
+          <div className="flex gap-2 mb-2">
+            <Select
+              value={selectedSongId}
+              onChange={(e) => setSelectedSongId(e?.target?.value ?? "")}
+              options={[
+                { value: "", label: "Selecione uma música" },
+                ...(songs
+                  ?.filter?.((song) => !(setlistItems ?? []).some((item) => item?.songId === song?.id))
+                  ?.map?.((song) => ({ value: song?.id ?? "", label: song?.title ?? "" })) ?? []),
+              ]}
+              className="flex-1"
+            />
+            <Button type="button" onClick={addSongToSchedule} disabled={!selectedSongId}>
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="space-y-2 max-h-52 overflow-y-auto">
+            {(setlistItems ?? []).map((item, idx) => (
+              <div key={`${item?.songId ?? "song"}-${idx}`} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <span className="w-6 h-6 rounded bg-purple-600 flex items-center justify-center text-xs text-white">{idx + 1}</span>
+                <span className="flex-1 text-sm truncate">{item?.songTitle ?? ""}</span>
+                <Select
+                  value={item?.selectedKey ?? "C"}
+                  onChange={(e) => updateSongKey(idx, e?.target?.value ?? "C")}
+                  options={MUSICAL_KEYS?.slice?.(0, 17)?.map?.((k) => ({ value: k, label: k })) ?? []}
+                  className="w-20"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeSongFromSchedule(idx)}
+                  className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <div>
           <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">

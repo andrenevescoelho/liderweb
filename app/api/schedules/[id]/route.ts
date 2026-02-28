@@ -60,7 +60,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { date, setlistId, roles } = body ?? {};
+    const { date, roles, setlistItems } = body ?? {};
 
     await prisma.scheduleRole.deleteMany({
       where: { scheduleId: params?.id },
@@ -73,11 +73,52 @@ export async function PUT(
       scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
     }
 
+    const existingSchedule = await prisma.schedule.findUnique({
+      where: { id: params?.id },
+      select: { setlistId: true },
+    });
+
+    let setlistId = existingSchedule?.setlistId ?? null;
+
+    if (setlistId) {
+      await prisma.setlistItem.deleteMany({ where: { setlistId } });
+      await prisma.setlist.update({
+        where: { id: setlistId },
+        data: {
+          name: date ? `Escala ${date}` : undefined,
+          date: scheduleDate,
+          items: {
+            create: (setlistItems ?? []).map((item: any, index: number) => ({
+              songId: item?.songId,
+              selectedKey: item?.selectedKey ?? "C",
+              order: index,
+            })),
+          },
+        },
+      });
+    } else {
+      const newSetlist = await prisma.setlist.create({
+        data: {
+          name: date ? `Escala ${date}` : "Escala",
+          date: scheduleDate ?? new Date(),
+          groupId: (session?.user as any)?.groupId ?? null,
+          items: {
+            create: (setlistItems ?? []).map((item: any, index: number) => ({
+              songId: item?.songId,
+              selectedKey: item?.selectedKey ?? "C",
+              order: index,
+            })),
+          },
+        },
+      });
+      setlistId = newSetlist.id;
+    }
+
     const schedule = await prisma.schedule.update({
       where: { id: params?.id },
       data: {
         date: scheduleDate,
-        setlistId: setlistId ?? null,
+        setlistId,
         roles: {
           create: (roles ?? [])?.map?.((r: any) => ({
             role: r?.role,
@@ -87,7 +128,14 @@ export async function PUT(
         },
       },
       include: {
-        setlist: true,
+        setlist: {
+          include: {
+            items: {
+              include: { song: true },
+              orderBy: { order: "asc" },
+            },
+          },
+        },
         roles: {
           include: {
             member: {
