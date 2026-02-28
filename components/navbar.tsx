@@ -40,8 +40,13 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
 
-  const filteredNav = navItems?.filter((item) => item?.roles?.includes(userRole)) ?? [];
+  const filteredNav = navItems?.filter((item) => {
+    if (item?.roles?.includes(userRole)) return true;
+    if (item?.href === "/meu-plano") return userPermissions.includes("subscription.manage");
+    return false;
+  }) ?? [];
 
   if (!session) return null;
 

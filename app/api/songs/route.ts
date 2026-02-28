@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { hasPermission } from "@/lib/authorization";
 
 export async function GET(req: NextRequest) {
   try {
@@ -57,10 +58,20 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const user = session?.user as any;
-    const userRole = user?.role;
+    const userRole = user?.role ?? "MEMBER";
 
-    if (!session || (userRole !== "SUPERADMIN" && userRole !== "ADMIN" && userRole !== "LEADER")) {
+    if (!session || !user) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const canCreateSong =
+      userRole === "SUPERADMIN" ||
+      userRole === "ADMIN" ||
+      userRole === "LEADER" ||
+      hasPermission(userRole, "music.rehearsal.send", user?.permissions);
+
+    if (!canCreateSong) {
+      return NextResponse.json({ error: "Sem permissão para criar músicas" }, { status: 403 });
     }
 
     // Usuário precisa ter um grupo (exceto SuperAdmin)

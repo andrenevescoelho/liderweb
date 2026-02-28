@@ -72,7 +72,7 @@ const menuItems: MenuItem[] = [
     label: "Meu Plano",
     href: "/meu-plano",
     icon: <CreditCard className="w-5 h-5" />,
-    roles: ["ADMIN"],
+    roles: ["ADMIN", "SUPERADMIN"],
     permissions: ["subscription.manage"],
   },
 ];

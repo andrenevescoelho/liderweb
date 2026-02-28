@@ -28,8 +28,14 @@ import { SCHEDULE_ROLES } from "@/lib/types";
 export default function SchedulesPage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
   const userId = (session?.user as any)?.id;
-  const canEdit = userRole === "SUPERADMIN" || userRole === "ADMIN" || userRole === "LEADER";
+  const canEdit =
+    userRole === "SUPERADMIN" ||
+    userRole === "ADMIN" ||
+    userRole === "LEADER" ||
+    userPermissions.includes("schedule.create") ||
+    userPermissions.includes("schedule.edit");
 
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

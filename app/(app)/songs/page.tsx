@@ -40,7 +40,14 @@ function getYoutubeEmbedUrl(url: string): string | null {
 export default function SongsPage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
-  const canEdit = userRole === "ADMIN" || userRole === "LEADER" || userRole === "SUPERADMIN";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const canEdit =
+    userRole === "ADMIN" ||
+    userRole === "LEADER" ||
+    userRole === "SUPERADMIN" ||
+    userPermissions.includes("music.rehearsal.send") ||
+    userPermissions.includes("music.submitted.edit") ||
+    userPermissions.includes("setlist.music.add");
 
   const [songs, setSongs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
