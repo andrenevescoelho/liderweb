@@ -23,7 +23,7 @@ export default function EnsaiosPage() {
   useEffect(() => {
     fetch("/api/rehearsals")
       .then((res) => res.json())
-      .then((data) => setRehearsals(data ?? []))
+      .then((data) => setRehearsals(Array.isArray(data) ? data : []))
       .catch(() => setRehearsals([]));
   }, []);
 
