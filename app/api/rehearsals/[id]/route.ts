@@ -14,6 +14,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
+    if (!db?.rehearsal?.findUnique) {
+      console.error("Get rehearsal error: Prisma delegate 'rehearsal' is not available");
+      return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
+    }
+
     const rehearsal = await db.rehearsal.findUnique({
       where: { id: params.id },
       include: {
@@ -51,6 +56,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json();
     const { date, time, location, notes, type, status, estimatedMinutes, songs, checklist } = body ?? {};
 
+    if (!db?.rehearsal?.update || !db?.rehearsalSong?.deleteMany || !db?.rehearsalChecklistItem?.deleteMany) {
+      return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
+    }
+
     const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true } });
     if (!current) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
 
@@ -82,6 +91,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
                 bpm: song.bpm ? Number(song.bpm) : null,
                 partNotes: song.partNotes || null,
                 notes: song.notes || null,
+                audioUrl: song.audioUrl || null,
+                youtubeUrl: song.youtubeUrl || null,
                 tags: song.tags || [],
                 status: song.status || (song.songId ? "REHEARSED" : "REHEARSAL_ONLY"),
               })),

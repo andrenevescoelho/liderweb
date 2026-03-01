@@ -1,7 +1,5 @@
 generator client {
     provider = "prisma-client-js"
-    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/worship_manager/nextjs_space/node_modules/.prisma/client"
 }
 
 datasource db {
@@ -267,6 +265,8 @@ model RehearsalSong {
   bpm         Int?
   partNotes   String?
   notes       String?
+  audioUrl    String?
+  youtubeUrl  String?
   tags        String[] @default([])
   status      RehearsalSongStatus @default(REHEARSAL_ONLY)
   createdAt   DateTime @default(now())

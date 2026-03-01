@@ -91,6 +91,14 @@ export default function EnsaioDetalhePage() {
               <p className="font-medium">{song.title} {song.artist ? `- ${song.artist}` : ""}</p>
               <p className="text-xs text-gray-500">Tom: {song.key || "-"} | BPM: {song.bpm || "-"} | Tags: {(song.tags || []).join(", ") || "-"}</p>
               {song.notes && <p className="text-sm">{song.notes}</p>}
+              {song.youtubeUrl && (
+                <a className="text-xs text-blue-600 underline" href={song.youtubeUrl} target="_blank" rel="noreferrer">YouTube</a>
+              )}
+              {song.audioUrl && (
+                <audio controls className="w-full h-10">
+                  <source src={song.audioUrl} />
+                </audio>
+              )}
               <div className="text-xs text-gray-500">Arquivos: {(song.song?.attachments?.length ?? 0) > 0 ? `${song.song.attachments.length} anexos` : "Sem anexos"}</div>
               {(song.tasks ?? []).length > 0 && (
                 <div className="text-sm">

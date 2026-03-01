@@ -110,6 +110,8 @@ export async function POST(req: NextRequest) {
             bpm: song.bpm ? Number(song.bpm) : null,
             partNotes: song.partNotes || null,
             notes: song.notes || null,
+            audioUrl: song.audioUrl || null,
+            youtubeUrl: song.youtubeUrl || null,
             tags: song.tags || [],
             status: song.songId ? "REHEARSED" : "REHEARSAL_ONLY",
           })),
