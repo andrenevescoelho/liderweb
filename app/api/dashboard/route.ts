@@ -357,7 +357,16 @@ export async function GET() {
       upcomingSchedules = await prisma.schedule.findMany({
         where: scheduleWhere,
         include: {
-          setlist: true,
+          setlist: {
+            include: {
+              items: {
+                include: {
+                  song: true,
+                },
+                orderBy: { order: "asc" },
+              },
+            },
+          },
           roles: {
             include: {
               member: true,

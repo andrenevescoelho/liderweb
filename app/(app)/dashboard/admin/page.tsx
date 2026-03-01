@@ -29,6 +29,7 @@ export default function AdminDashboardPage() {
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
   const canAccessAdminDashboard = userRole === "ADMIN" || userPermissions.includes("report.group.access");
+  const canViewSongsCard = userPermissions.includes("music.view") || userPermissions.includes("music.manage") || userPermissions.includes("setlist.music.add") || userRole === "ADMIN";
 
   useEffect(() => {
     if (!canAccessAdminDashboard) {
@@ -100,7 +101,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
         <Card className="rounded-xl border border-border/80">
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">Frequência de confirmações</p>
@@ -128,6 +129,17 @@ export default function AdminDashboardPage() {
             <p className="text-xs text-muted-foreground">BPM médio: {adminInsights?.repertoire?.averageBpm ?? "N/A"}</p>
           </CardContent>
         </Card>
+        {canViewSongsCard && (
+          <Link href="/songs" className="block">
+            <Card className="rounded-xl border border-border/80 h-full hover:border-violet-300 transition-colors">
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Músicas</p>
+                <p className="mt-2 text-3xl font-semibold">{data?.stats?.totalSongs ?? 0}</p>
+                <p className="text-xs text-muted-foreground">Gerenciar repertório</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

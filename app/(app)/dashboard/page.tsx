@@ -232,6 +232,30 @@ export default function DashboardPage() {
     section?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const getScheduleSongsPreview = (schedule: any) => {
+    const songs = (schedule?.setlist?.items ?? [])
+      .map((item: any) => item?.song?.title)
+      .filter(Boolean) as string[];
+
+    if (songs.length === 0) {
+      return {
+        preview: "Sem músicas definidas",
+        fullPreview: "Sem músicas definidas",
+        countLabel: "0 músicas",
+      };
+    }
+
+    const previewSongs = songs.slice(0, 3);
+    const remaining = songs.length - previewSongs.length;
+    const preview = `${previewSongs.join(" • ")}${remaining > 0 ? ` • +${remaining}` : ""}`;
+
+    return {
+      preview,
+      fullPreview: songs.join(" • "),
+      countLabel: `${songs.length} música${songs.length > 1 ? "s" : ""}`,
+    };
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -249,7 +273,7 @@ export default function DashboardPage() {
   const canConfirmPresence = can(sessionUser, "schedule.presence.confirm.self");
   const canViewMembersCard = canAny(sessionUser, ["member.view", "member.manage"]);
   const canManageSchedules = canAny(sessionUser, ["schedule.create", "schedule.edit"]);
-  const canManageSongs = canAny(sessionUser, ["setlist.music.add", "music.rehearsal.send", "music.submitted.edit"]);
+  const canViewSongsCard = canAny(sessionUser, ["music.view", "music.manage", "setlist.music.add", "music.rehearsal.send", "music.submitted.edit"]);
   const canSendReminder = canAny(sessionUser, ["communication.schedule.announce", "schedule.edit", "report.group.access"]);
   const quickActions = [
     canManageSchedules
@@ -260,7 +284,7 @@ export default function DashboardPage() {
           icon: Plus,
         }
       : null,
-    canManageSongs
+    canViewSongsCard
       ? {
           key: "song",
           href: "/songs",
@@ -614,11 +638,17 @@ export default function DashboardPage() {
                         </Badge>
                       </div>
                       
-                      <div className="flex items-center gap-2 mb-3">
-                        <Badge variant="info">{schedule?.myRole}</Badge>
-                        <span className="text-sm text-gray-500">
-                          {schedule?.setlist?.items?.length ?? 0} músicas no repertório
-                        </span>
+                      <div className="mb-3 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="info">{schedule?.myRole}</Badge>
+                          <span className="text-sm text-gray-500">{getScheduleSongsPreview(schedule).countLabel}</span>
+                        </div>
+                        <p
+                          className="text-sm text-gray-600 dark:text-gray-300 truncate"
+                          title={getScheduleSongsPreview(schedule).fullPreview}
+                        >
+                          {getScheduleSongsPreview(schedule).preview}
+                        </p>
                       </div>
 
                       <div className="mb-3">
@@ -747,6 +777,12 @@ export default function DashboardPage() {
                               ? format(new Date(schedule?.date), "dd 'de' MMMM", { locale: ptBR })
                               : ""}
                           </p>
+                          <p
+                            className="text-xs text-gray-500 dark:text-gray-400 truncate"
+                            title={getScheduleSongsPreview(schedule).fullPreview}
+                          >
+                            {getScheduleSongsPreview(schedule).preview} · {getScheduleSongsPreview(schedule).countLabel}
+                          </p>
                         </div>
                       </div>
                       <Badge variant="info">
@@ -777,7 +813,7 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {canManageSongs && (
+            {canViewSongsCard && (
               <Card className="rounded-xl border border-border/80">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">

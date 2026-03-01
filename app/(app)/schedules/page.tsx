@@ -130,6 +130,30 @@ export default function SchedulesPage() {
     return schedules?.find?.((s) => isSameDay(new Date(s?.date ?? ''), day));
   };
 
+  const formatScheduleSongs = (schedule: any) => {
+    const songs = (schedule?.setlist?.items ?? [])
+      .map((item: any) => item?.song?.title)
+      .filter(Boolean) as string[];
+
+    if (songs.length === 0) {
+      return {
+        preview: "Sem músicas definidas",
+        fullPreview: "Sem músicas definidas",
+        countLabel: "0 músicas",
+      };
+    }
+
+    const previewSongs = songs.slice(0, 3);
+    const remaining = songs.length - previewSongs.length;
+    const preview = `${previewSongs.join(" • ")}${remaining > 0 ? ` • +${remaining}` : ""}`;
+
+    return {
+      preview,
+      fullPreview: songs.join(" • "),
+      countLabel: `${songs.length} música${songs.length > 1 ? "s" : ""}`,
+    };
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -210,8 +234,12 @@ export default function SchedulesPage() {
                       </span>
                       {schedule && (
                         <div className="mt-1">
-                          <Badge variant="info" className="text-xs truncate block">
-                            {`${schedule?.setlist?.items?.length ?? 0} músicas`}
+                          <Badge
+                            variant="info"
+                            className="text-xs truncate block"
+                            title={`${formatScheduleSongs(schedule).fullPreview} · ${formatScheduleSongs(schedule).countLabel}`}
+                          >
+                            {formatScheduleSongs(schedule).preview}
                           </Badge>
                         </div>
                       )}
@@ -275,9 +303,13 @@ export default function SchedulesPage() {
             {selectedSchedule?.setlist && (
               <div className="mb-4">
                 <p className="text-sm text-gray-500">Músicas da escala</p>
-                <p className="font-medium text-gray-900 dark:text-white">
-                  {`${selectedSchedule?.setlist?.items?.length ?? 0} música(s)`}
+                <p
+                  className="font-medium text-gray-900 dark:text-white truncate"
+                  title={formatScheduleSongs(selectedSchedule).fullPreview}
+                >
+                  {formatScheduleSongs(selectedSchedule).preview}
                 </p>
+                <p className="text-xs text-gray-500 mt-1">{formatScheduleSongs(selectedSchedule).countLabel}</p>
               </div>
             )}
 
