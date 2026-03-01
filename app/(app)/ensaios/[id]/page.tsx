@@ -21,6 +21,29 @@ import { toast } from "@/hooks/use-toast";
 import { hasPermission } from "@/lib/authorization";
 
 export default function EnsaioDetalhePage() {
+  const statusMeta: Record<string, { label: string; badge: string; icon: string; classes: string }> = {
+    PUBLISHED: { label: "Escala disponível", badge: "Disponível", icon: "📢", classes: "bg-blue-100 text-blue-800" },
+    ACCEPTED: { label: "Presença confirmada", badge: "Confirmado", icon: "✅", classes: "bg-green-100 text-green-800" },
+    REJECTED: { label: "Sem disponibilidade", badge: "Indisponível", icon: "⚠️", classes: "bg-red-100 text-red-800" },
+    DECLINED: { label: "Sem disponibilidade", badge: "Indisponível", icon: "⚠️", classes: "bg-red-100 text-red-800" },
+    PENDING: { label: "Aguardando resposta", badge: "Aguardando", icon: "🕒", classes: "bg-amber-100 text-amber-800" },
+    DRAFT: { label: "Em preparação", badge: "Rascunho", icon: "📝", classes: "bg-slate-100 text-slate-700" },
+  };
+
+  const renderStatusBadge = (status?: string) => {
+    const meta = statusMeta[status ?? ""];
+    if (!meta) return status || "-";
+
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${meta.classes}`}>
+        <span>{meta.icon}</span>
+        <span>{meta.badge}</span>
+      </span>
+    );
+  };
+
+  const getStatusLabel = (status?: string) => statusMeta[status ?? ""]?.label ?? status ?? "-";
+
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { data: session } = useSession() || {};
@@ -188,7 +211,7 @@ export default function EnsaioDetalhePage() {
       <Card>
         <CardHeader><CardTitle>Resumo</CardTitle></CardHeader>
         <CardContent className="space-y-1 text-sm">
-          <p>Status: <b>{rehearsal.status}</b></p>
+          <p>Status do ensaio: <b>{getStatusLabel(rehearsal.status)}</b> {renderStatusBadge(rehearsal.status)}</p>
           <p>Local: {rehearsal.location || "Não definido"}</p>
           <p>Tipo: {rehearsal.type}</p>
           <p>Confirmações: {accepted} aceitos / {pending} pendentes</p>
@@ -199,7 +222,7 @@ export default function EnsaioDetalhePage() {
       <Card>
         <CardHeader><CardTitle>{myAttendance?.status === "ACCEPTED" ? "Presença" : "Confirmar presença"}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-sm">Meu status atual: <b>{myAttendance?.status || "PENDING"}</b></p>
+          <p className="text-sm">Meu status atual: <b>{getStatusLabel(myAttendance?.status || "PENDING")}</b> {renderStatusBadge(myAttendance?.status || "PENDING")}</p>
           {myAttendance?.status !== "ACCEPTED" && (
             <>
               <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Justificativa (opcional)" />
@@ -254,7 +277,10 @@ export default function EnsaioDetalhePage() {
             {(rehearsal.attendance ?? []).map((item: any) => (
               <div key={item.id} className="border rounded p-2 flex items-center justify-between">
                 <span>{item.member?.name}</span>
-                <span>{item.status}</span>
+                <span className="inline-flex items-center gap-2">
+                  <span>{getStatusLabel(item.status)}</span>
+                  {renderStatusBadge(item.status)}
+                </span>
               </div>
             ))}
             <Button variant="outline">Enviar lembrete (stub)</Button>
