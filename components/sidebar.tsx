@@ -9,6 +9,7 @@ import {
   Users,
   Music,
   Calendar,
+  NotebookPen,
   CreditCard,
   Building2,
   Settings,
@@ -67,6 +68,13 @@ const menuItems: MenuItem[] = [
     href: "/schedules",
     icon: <Calendar className="w-5 h-5" />,
     roles: ["ADMIN", "LEADER", "MEMBER"],
+  },
+  {
+    label: "Ensaios",
+    href: "/ensaios",
+    icon: <NotebookPen className="w-5 h-5" />,
+    roles: ["ADMIN", "LEADER"],
+    permissions: ["rehearsal.view"],
   },
   {
     label: "Meu Plano",

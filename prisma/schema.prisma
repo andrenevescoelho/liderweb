@@ -29,6 +29,32 @@ enum InviteStatus {
   DECLINED
 }
 
+enum RehearsalType {
+  GENERAL
+  VOCAL
+  BAND
+  TECHNICAL
+  DEVOTIONAL
+}
+
+enum RehearsalStatus {
+  DRAFT
+  PUBLISHED
+  COMPLETED
+}
+
+enum RehearsalAttendanceStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum RehearsalSongStatus {
+  REHEARSAL_ONLY
+  REHEARSED
+  PROMOTED
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -52,6 +78,7 @@ model Group {
   schedules   Schedule[]
   subscription Subscription?
   inviteTokens InviteToken[]
+  rehearsals   Rehearsal[]
 }
 
 model SubscriptionPlan {
@@ -96,6 +123,8 @@ model User {
   updatedAt     DateTime  @updatedAt
   profile       MemberProfile?
   scheduleRoles ScheduleRole[]
+  rehearsalAttendances RehearsalAttendance[]
+  rehearsalTasks RehearsalTask[]
 }
 
 model MemberProfile {
@@ -134,6 +163,7 @@ model Song {
   updatedAt     DateTime @updatedAt
   setlistItems  SetlistItem[]
   attachments   Attachment[]
+  rehearsalSongs RehearsalSong[]
 }
 
 model Attachment {
@@ -202,4 +232,83 @@ model InviteToken {
   used      Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model Rehearsal {
+  id          String   @id @default(cuid())
+  groupId     String?
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  dateTime    DateTime
+  location    String?
+  notes       String?
+  type        RehearsalType   @default(GENERAL)
+  status      RehearsalStatus @default(DRAFT)
+  estimatedMinutes Int?
+  reminder24hEnabled Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  songs       RehearsalSong[]
+  attendance  RehearsalAttendance[]
+  checklist   RehearsalChecklistItem[]
+
+  @@index([groupId, dateTime])
+}
+
+model RehearsalSong {
+  id          String   @id @default(cuid())
+  rehearsalId String
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  songId      String?
+  song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
+  title       String
+  artist      String?
+  order       Int
+  key         String?
+  bpm         Int?
+  partNotes   String?
+  notes       String?
+  tags        String[] @default([])
+  status      RehearsalSongStatus @default(REHEARSAL_ONLY)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       RehearsalTask[]
+
+  @@index([rehearsalId, order])
+}
+
+model RehearsalAttendance {
+  id          String   @id @default(cuid())
+  rehearsalId String
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  memberId    String
+  member      User     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  status      RehearsalAttendanceStatus @default(PENDING)
+  justification String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([rehearsalId, memberId])
+}
+
+model RehearsalChecklistItem {
+  id          String   @id @default(cuid())
+  rehearsalId String
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  label       String
+  done        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RehearsalTask {
+  id              String   @id @default(cuid())
+  rehearsalSongId String
+  rehearsalSong   RehearsalSong @relation(fields: [rehearsalSongId], references: [id], onDelete: Cascade)
+  memberId        String
+  member          User     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  notes           String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([rehearsalSongId, memberId])
 }
