@@ -77,6 +77,8 @@ model Group {
   subscription Subscription?
   inviteTokens InviteToken[]
   rehearsals   Rehearsal[]
+  messages     GroupMessage[]
+  broadcasts   GroupBroadcast[]
 }
 
 model SubscriptionPlan {
@@ -123,6 +125,33 @@ model User {
   scheduleRoles ScheduleRole[]
   rehearsalAttendances RehearsalAttendance[]
   rehearsalTasks RehearsalTask[]
+  sentGroupMessages GroupMessage[] @relation("GroupMessageSender")
+  sentGroupBroadcasts GroupBroadcast[] @relation("GroupBroadcastSender")
+}
+
+model GroupMessage {
+  id           String   @id @default(cuid())
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderUserId String
+  sender       User     @relation("GroupMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+  content      String   @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([groupId, createdAt])
+}
+
+model GroupBroadcast {
+  id           String   @id @default(cuid())
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderUserId String
+  sender       User     @relation("GroupBroadcastSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+  senderRole   Role
+  content      String   @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([groupId, createdAt])
 }
 
 model MemberProfile {
