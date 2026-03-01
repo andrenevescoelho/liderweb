@@ -595,14 +595,6 @@ export async function GET() {
             .map(([instrument, total]) => ({ instrument, total }))
             .slice(0, 5);
 
-          const nextThreeGuitarists = new Set(
-            nextThreeSchedules.flatMap((schedule) =>
-              schedule.roles
-                .filter((role) => /guit|guitar/i.test(role.role) && !!role.memberId)
-                .map((role) => role.memberId as string)
-            )
-          ).size;
-
           const overloadShare = topMembers.length > 0
             ? (topMembers.slice(0, 5).reduce((acc, item) => acc + item.value, 0) /
                 Math.max(1, topMembers.reduce((acc, item) => acc + item.value, 0))) * 100
@@ -640,7 +632,6 @@ export async function GET() {
               participationDistribution: roleDistribution.map((item) => ({ memberId: item.memberId, count: item._count._all })),
               musicianBalance: distributionMin > 0 ? Number((distributionMax / distributionMin).toFixed(2)) : null,
               instrumentsWithShortage,
-              strongInsight: `Você tem apenas ${nextThreeGuitarists} guitarrista(s) disponível(is) nos próximos 3 cultos.`,
             },
             repertoire: {
               mostUsedSongs: songsRanking.slice(0, 5),

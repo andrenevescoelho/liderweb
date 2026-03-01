@@ -16,6 +16,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  CircleDashed,
   Headphones,
   Youtube,
   Play,
@@ -35,6 +36,9 @@ import {
   BarChart,
   Bar,
   Cell,
+  PieChart,
+  Pie,
+  Legend,
   ComposedChart,
   Area,
   Line,
@@ -143,6 +147,25 @@ export default function DashboardPage() {
   ];
   const monthlySchedules = adminInsights?.reports?.schedulesByMonth ?? [];
   const instrumentsWithShortage = adminInsights?.schedules?.instrumentsWithShortage ?? [];
+  const schedulesCreatedInMonth = adminInsights?.schedules?.createdInMonth ?? 0;
+  const musicianBalanceRatio = adminInsights?.schedules?.musicianBalance;
+  const musicianBalanceScore = musicianBalanceRatio ? Number((100 / musicianBalanceRatio).toFixed(1)) : 0;
+  const schedulesOverviewData = [
+    { name: "Escalas no mês", value: schedulesCreatedInMonth, fill: "#8b5cf6" },
+    { name: "Equilíbrio", value: musicianBalanceScore, fill: "#22c55e" },
+  ];
+
+  const renderIndicatorStatus = (value?: boolean | null) => {
+    if (value === true) {
+      return <AlertCircle className="h-4 w-4 text-amber-500" aria-label="atenção" />;
+    }
+
+    if (value === false) {
+      return <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-label="ok" />;
+    }
+
+    return <CircleDashed className="h-4 w-4 text-gray-400" aria-label="sem dados" />;
+  };
 
   return (
     <div className="space-y-6">
@@ -339,24 +362,146 @@ export default function DashboardPage() {
         <div className="space-y-5">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border-slate-700">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Próxima escala</CardTitle></CardHeader>
-              <CardContent>
-                <p className="font-semibold">{adminInsights?.nextSchedule?.setlist?.name ?? "Sem escala"}</p>
-                <p className="text-sm text-gray-500">{adminInsights?.nextSchedule?.date ? format(new Date(adminInsights.nextSchedule.date), "dd/MM/yyyy HH:mm") : "Cadastre novas escalas"}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border-slate-700">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Pendências</CardTitle></CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{adminInsights?.pendingTasks ?? 0}</p>
-                <p className="text-sm text-gray-500">confirmações aguardando retorno</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border-slate-700">
               <CardHeader className="pb-2"><CardTitle className="text-base">Frequência de confirmações</CardTitle></CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold">{(adminInsights?.confirmationRate ?? 0).toFixed(1)}%</p>
                 <p className="text-sm text-gray-500">taxa de aceite no mês</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader><CardTitle>👥 Gestão de Membros</CardTitle></CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2"><p className="text-xs text-gray-500">Total</p><p className="font-semibold">{adminInsights?.members?.totalMembers ?? 0}</p></div>
+                  <div className="rounded-md bg-emerald-50 dark:bg-emerald-900/20 p-2"><p className="text-xs text-emerald-600">Ativos</p><p className="font-semibold">{adminInsights?.members?.activeMembers ?? 0}</p></div>
+                  <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 p-2"><p className="text-xs text-amber-600">Inativos</p><p className="font-semibold">{adminInsights?.members?.inactiveMembers ?? 0}</p></div>
+                </div>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topScaledMembers} layout="vertical" margin={{ left: 16 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="escalas" fill="#6366f1" radius={[0, 6, 6, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>📅 Escalas</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="h-52 rounded-lg bg-slate-100/70 dark:bg-slate-800/40 p-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={schedulesOverviewData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={45}
+                        outerRadius={72}
+                        paddingAngle={4}
+                      >
+                        {schedulesOverviewData.map((item) => (
+                          <Cell key={item.name} fill={item.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-slate-100 dark:bg-slate-800/60 p-3">
+                    <p className="text-xs text-gray-500">Criadas no mês</p>
+                    <p className="text-lg font-semibold">{schedulesCreatedInMonth}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-100 dark:bg-slate-800/60 p-3">
+                    <p className="text-xs text-gray-500">Equilíbrio entre músicos</p>
+                    <p className="text-lg font-semibold">{musicianBalanceRatio ?? "N/A"}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-medium mb-2">Instrumentos com falta</p>
+                  <div className="flex flex-wrap gap-2">
+                    {instrumentsWithShortage.length > 0 ? instrumentsWithShortage.map((item: any) => (
+                      <Badge key={item.instrument} variant="secondary">{item.instrument} ({item.total})</Badge>
+                    )) : <p className="text-gray-500">Sem alertas de falta</p>}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>📈 Evolução de escalas</CardTitle></CardHeader>
+              <CardContent className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={monthlySchedules}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="count" fill="#c4b5fd" stroke="#8b5cf6" fillOpacity={0.25} />
+                    <Line type="monotone" dataKey="count" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader><CardTitle>🎵 Repertório</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="rounded-lg border border-violet-200/60 dark:border-violet-700/60 bg-gradient-to-r from-violet-50 to-fuchsia-50 dark:from-violet-900/20 dark:to-fuchsia-900/20 p-3">
+                  <p className="text-xs uppercase tracking-wide text-violet-500">Músicas novas no mês</p>
+                  <p className="text-2xl font-bold text-violet-700 dark:text-violet-300">{adminInsights?.repertoire?.newSongsInMonth ?? 0}</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-3">
+                    <p className="text-xs text-gray-500">Sem uso há 6 meses</p>
+                    <p className="font-semibold text-base">{adminInsights?.repertoire?.songsUnusedSixMonths?.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-3">
+                    <p className="text-xs text-gray-500">Tom mais usado</p>
+                    <p className="font-semibold text-base">{adminInsights?.repertoire?.topKey ?? "N/A"}</p>
+                  </div>
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-3">
+                    <p className="text-xs text-gray-500">Média BPM</p>
+                    <p className="font-semibold text-base">{adminInsights?.repertoire?.avgBpm ?? 0}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>🎯 Indicadores Inteligentes</CardTitle></CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 flex items-center justify-between gap-2"><span>Ministério sobrecarregado?</span>{renderIndicatorStatus(adminInsights?.smartIndicators?.overloadedMinistry)}</div>
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 flex items-center justify-between gap-2"><span>Escalando os mesmos?</span>{renderIndicatorStatus(adminInsights?.smartIndicators?.repeatedMembers)}</div>
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 flex items-center justify-between gap-2"><span>Falta de diversidade?</span>{renderIndicatorStatus(adminInsights?.smartIndicators?.lowDiversity)}</div>
+                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 flex items-center justify-between gap-2"><span>Alta ausência?</span>{renderIndicatorStatus(adminInsights?.smartIndicators?.highAbsenceMember)}</div>
+                </div>
+                <div className="h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={attendanceHistory}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                        {attendanceHistory.map((item) => (
+                          <Cell key={item.name} fill={item.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -403,107 +548,6 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader><CardTitle>👥 Gestão de Membros</CardTitle></CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2"><p className="text-xs text-gray-500">Total</p><p className="font-semibold">{adminInsights?.members?.totalMembers ?? 0}</p></div>
-                  <div className="rounded-md bg-emerald-50 dark:bg-emerald-900/20 p-2"><p className="text-xs text-emerald-600">Ativos</p><p className="font-semibold">{adminInsights?.members?.activeMembers ?? 0}</p></div>
-                  <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 p-2"><p className="text-xs text-amber-600">Inativos</p><p className="font-semibold">{adminInsights?.members?.inactiveMembers ?? 0}</p></div>
-                </div>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topScaledMembers} layout="vertical" margin={{ left: 16 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" allowDecimals={false} />
-                      <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Bar dataKey="escalas" fill="#6366f1" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>📅 Escalas</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-slate-800/60 p-3">
-                  <p className="text-gray-500">Criadas no mês</p>
-                  <p className="text-lg font-semibold">{adminInsights?.schedules?.createdInMonth ?? 0}</p>
-                </div>
-                <div className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-slate-800/60 p-3">
-                  <p className="text-gray-500">Equilíbrio entre músicos</p>
-                  <p className="text-lg font-semibold">{adminInsights?.schedules?.musicianBalance ?? "N/A"}</p>
-                </div>
-                <div>
-                  <p className="font-medium mb-2">Instrumentos com falta</p>
-                  <div className="flex flex-wrap gap-2">
-                    {instrumentsWithShortage.length > 0 ? instrumentsWithShortage.map((item: any) => (
-                      <Badge key={item.instrument} variant="secondary">{item.instrument} ({item.total})</Badge>
-                    )) : <p className="text-gray-500">Sem alertas de falta</p>}
-                  </div>
-                </div>
-                <p className="text-purple-700 dark:text-purple-300 font-semibold pt-1">💡 {adminInsights?.schedules?.strongInsight}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>📈 Evolução de escalas</CardTitle></CardHeader>
-              <CardContent className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={monthlySchedules}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="count" fill="#c4b5fd" stroke="#8b5cf6" fillOpacity={0.25} />
-                    <Line type="monotone" dataKey="count" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader><CardTitle>🎵 Repertório</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>Músicas novas no mês: <span className="font-semibold">{adminInsights?.repertoire?.newSongsInMonth ?? 0}</span></p>
-                <p>Músicas sem uso há 6 meses: <span className="font-semibold">{adminInsights?.repertoire?.songsUnusedSixMonths?.length ?? 0}</span></p>
-                <p>Tom mais usado: <span className="font-semibold">{adminInsights?.repertoire?.topKey ?? "N/A"}</span></p>
-                <p>Média BPM dos cultos: <span className="font-semibold">{adminInsights?.repertoire?.avgBpm ?? 0}</span></p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>🎯 Indicadores Inteligentes</CardTitle></CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2">Ministério sobrecarregado? <span className="font-semibold">{adminInsights?.smartIndicators?.overloadedMinistry ? "Sim" : "Não"}</span></div>
-                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2">Escalando os mesmos? <span className="font-semibold">{adminInsights?.smartIndicators?.repeatedMembers ? "Sim" : "Não"}</span></div>
-                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2">Falta de diversidade? <span className="font-semibold">{adminInsights?.smartIndicators?.lowDiversity ? "Sim" : "Não"}</span></div>
-                  <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2">Alta ausência? <span className="font-semibold">{adminInsights?.smartIndicators?.highAbsenceMember ? "Sim" : "Não"}</span></div>
-                </div>
-                <div className="h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={attendanceHistory}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                        {attendanceHistory.map((item) => (
-                          <Cell key={item.name} fill={item.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
 
