@@ -11,6 +11,8 @@ import {
   Calendar,
   NotebookPen,
   CreditCard,
+  Megaphone,
+  MessageCircle,
   Building2,
   Settings,
   Shield,
@@ -76,6 +78,18 @@ const menuItems: MenuItem[] = [
     roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
   },
   {
+    label: "Comunicados",
+    href: "/comunicados",
+    icon: <Megaphone className="w-5 h-5" />,
+    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
+  },
+  {
+    label: "Chat do Grupo",
+    href: "/chat-grupo",
+    icon: <MessageCircle className="w-5 h-5" />,
+    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
+  },
+  {
     label: "Meu Plano",
     href: "/meu-plano",
     icon: <CreditCard className="w-5 h-5" />,
@@ -134,7 +148,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       return false;
     }
 
-    if (item.href === "/ensaios" && !user?.groupId) {
+    if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) {
       return false;
     }
 
