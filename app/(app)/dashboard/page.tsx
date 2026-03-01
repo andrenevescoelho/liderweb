@@ -26,6 +26,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ResponsiveContainer,
   CartesianGrid,
@@ -256,14 +257,6 @@ export default function DashboardPage() {
     };
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-      </div>
-    );
-  }
-
   const stats = data?.stats ?? {};
   const upcomingSchedules = data?.upcomingSchedules ?? [];
   const myUpcomingSchedules = data?.myUpcomingSchedules ?? [];
@@ -273,7 +266,7 @@ export default function DashboardPage() {
   const canConfirmPresence = can(sessionUser, "schedule.presence.confirm.self");
   const canViewMembersCard = canAny(sessionUser, ["member.view", "member.manage"]);
   const canManageSchedules = canAny(sessionUser, ["schedule.create", "schedule.edit"]);
-  const canViewSongsCard = canAny(sessionUser, ["music.view", "music.manage", "setlist.music.add", "music.rehearsal.send", "music.submitted.edit"]);
+  const canViewSongsCard = userRole === "ADMIN" || canAny(sessionUser, ["music.view", "music.manage"]);
   const canSendReminder = canAny(sessionUser, ["communication.schedule.announce", "schedule.edit", "report.group.access"]);
   const quickActions = [
     canManageSchedules
@@ -822,7 +815,11 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
+                  {loading ? (
+                    <Skeleton className="h-9 w-16" />
+                  ) : (
+                    <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
+                  )}
                   <Link href="/songs">
                     <Button size="sm" variant="outline">Gerenciar repertório</Button>
                   </Link>
