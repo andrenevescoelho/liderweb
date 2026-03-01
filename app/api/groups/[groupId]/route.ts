@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { groupId: string } }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -15,15 +15,15 @@ export async function GET(
   }
 
   const user = session.user as any;
-  const { id } = params;
+  const { groupId } = params;
 
   // Verificar permissão
-  if (user.role !== "SUPERADMIN" && user.groupId !== id) {
+  if (user.role !== "SUPERADMIN" && user.groupId !== groupId) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   }
 
   const group = await prisma.group.findUnique({
-    where: { id },
+    where: { id: groupId },
     include: {
       users: {
         include: { profile: true },
@@ -43,7 +43,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { groupId: string } }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -51,10 +51,10 @@ export async function PUT(
   }
 
   const user = session.user as any;
-  const { id } = params;
+  const { groupId } = params;
 
   // Apenas SuperAdmin ou Admin do grupo pode editar
-  if (user.role !== "SUPERADMIN" && (user.role !== "ADMIN" || user.groupId !== id)) {
+  if (user.role !== "SUPERADMIN" && (user.role !== "ADMIN" || user.groupId !== groupId)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   }
 
@@ -62,7 +62,7 @@ export async function PUT(
   const { name, description, active } = body;
 
   const group = await prisma.group.update({
-    where: { id },
+    where: { id: groupId },
     data: {
       ...(name && { name }),
       ...(description !== undefined && { description }),
@@ -75,7 +75,7 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { groupId: string } }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -89,10 +89,10 @@ export async function DELETE(
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   }
 
-  const { id } = params;
+  const { groupId } = params;
 
   await prisma.group.delete({
-    where: { id },
+    where: { id: groupId },
   });
 
   return NextResponse.json({ success: true });
