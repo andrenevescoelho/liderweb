@@ -17,12 +17,14 @@ import {
   X,
   Building2,
   CreditCard,
+  Shield,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { href: "/dashboard", label: "Início", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { href: "/dashboard/admin", label: "Administração", icon: Shield, roles: ["ADMIN"] },
   { href: "/admin", label: "Grupos", icon: Building2, roles: ["SUPERADMIN"] },
   { href: "/members", label: "Membros", icon: Users, roles: ["ADMIN", "LEADER"] },
   { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN"] },
@@ -43,6 +45,7 @@ export function Navbar() {
     if (item?.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
     if (item?.roles?.includes(userRole)) return true;
     if (item?.href === "/meu-plano") return userPermissions.includes("subscription.manage");
+    if (item?.href === "/dashboard/admin") return userPermissions.includes("report.group.access");
     return false;
   }) ?? [];
 
