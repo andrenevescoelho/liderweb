@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -37,12 +38,16 @@ import {
   Area,
   Line,
 } from "recharts";
+import { toast } from "@/hooks/use-toast";
+import { can, canAny } from "@/lib/rbac";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { data: session } = useSession() || {};
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<string | null>(null);
+  const [confirmingNextCommitment, setConfirmingNextCommitment] = useState(false);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -54,6 +59,10 @@ export default function DashboardPage() {
     userPermissions.includes("report.minister.stats");
   const canAccessAdminDashboard =
     userRole === "ADMIN" || userPermissions.includes("report.group.access");
+  const sessionUser = {
+    role: userRole,
+    permissions: userPermissions,
+  };
 
   const fetchData = () => {
     fetch("/api/dashboard")
@@ -73,16 +82,148 @@ export default function DashboardPage() {
   const handleRespond = async (scheduleId: string, roleId: string, status: "ACCEPTED" | "DECLINED") => {
     setResponding(roleId);
     try {
-      await fetch(`/api/schedules/${scheduleId}/respond`, {
+      const res = await fetch(`/api/schedules/${scheduleId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roleId, status }),
       });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          toast({
+            title: "Sessão expirada",
+            description: "Faça login novamente para continuar.",
+            variant: "destructive",
+          });
+          router.push("/login");
+          return;
+        }
+
+        if (res.status === 403) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para confirmar presença.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (res.status === 404) {
+          toast({
+            title: "Compromisso não encontrado",
+            description: "Atualizando os seus compromissos.",
+            variant: "destructive",
+          });
+          fetchData();
+          return;
+        }
+
+        toast({
+          title: "Erro ao responder",
+          description: "Não foi possível atualizar sua presença agora.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: status === "ACCEPTED" ? "Presença confirmada" : "Presença recusada",
+      });
       fetchData();
     } catch (e) {
       console.error(e);
+      toast({
+        title: "Erro ao responder",
+        description: "Não foi possível atualizar sua presença agora.",
+        variant: "destructive",
+      });
     } finally {
       setResponding(null);
+    }
+  };
+
+  const handleConfirmNextCommitment = async () => {
+    const nextCommitment = myUpcomingSchedules?.[0];
+
+    if (!nextCommitment?.id || !nextCommitment?.roleId || nextCommitment?.myStatus !== "PENDING") {
+      return;
+    }
+
+    setConfirmingNextCommitment(true);
+
+    try {
+      const res = await fetch(`/api/schedules/${nextCommitment.id}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleId: nextCommitment.roleId, status: "ACCEPTED" }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          toast({
+            title: "Sessão expirada",
+            description: "Faça login novamente para continuar.",
+            variant: "destructive",
+          });
+          router.push("/login");
+          return;
+        }
+
+        if (res.status === 403) {
+          toast({
+            title: "Sem permissão",
+            description: "Você não tem permissão para confirmar presença.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (res.status === 404) {
+          toast({
+            title: "Compromisso não encontrado",
+            description: "Atualizando os seus compromissos.",
+            variant: "destructive",
+          });
+          fetchData();
+          return;
+        }
+
+        toast({
+          title: "Erro ao confirmar",
+          description: "Não foi possível confirmar sua presença agora.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setData((prev: any) => {
+        const previousSchedules = prev?.myUpcomingSchedules ?? [];
+        const updatedSchedules = previousSchedules.map((schedule: any) =>
+          schedule?.id === nextCommitment.id && schedule?.roleId === nextCommitment.roleId
+            ? { ...schedule, myStatus: "ACCEPTED" }
+            : schedule
+        );
+
+        return {
+          ...prev,
+          myUpcomingSchedules: updatedSchedules,
+        };
+      });
+
+      toast({
+        title: "Presença confirmada",
+        description: "Seu próximo compromisso foi confirmado com sucesso.",
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Erro ao confirmar",
+        description: "Não foi possível confirmar sua presença agora.",
+        variant: "destructive",
+      });
+    } finally {
+      setConfirmingNextCommitment(false);
     }
   };
 
@@ -104,7 +245,46 @@ export default function DashboardPage() {
   const myUpcomingSchedules = data?.myUpcomingSchedules ?? [];
   const pendingConfirmations = data?.pendingConfirmations ?? [];
   const songsToRehearse = data?.songsToRehearse ?? [];
+  const nextCommitment = myUpcomingSchedules?.[0] ?? null;
+  const canConfirmPresence = can(sessionUser, "schedule.presence.confirm.self");
+  const canViewMembersCard = canAny(sessionUser, ["member.view", "member.manage"]);
+  const canManageSchedules = canAny(sessionUser, ["schedule.create", "schedule.edit"]);
+  const canManageSongs = canAny(sessionUser, ["setlist.music.add", "music.rehearsal.send", "music.submitted.edit"]);
+  const canSendReminder = canAny(sessionUser, ["communication.schedule.announce", "schedule.edit", "report.group.access"]);
+  const quickActions = [
+    canManageSchedules
+      ? {
+          key: "schedule",
+          href: "/schedules",
+          label: "Criar escala",
+          icon: Plus,
+        }
+      : null,
+    canManageSongs
+      ? {
+          key: "song",
+          href: "/songs",
+          label: "Adicionar música",
+          icon: Music,
+        }
+      : null,
+    canSendReminder
+      ? {
+          key: "reminder",
+          href: canAccessAdminDashboard ? "/dashboard/admin" : "/schedules",
+          label: "Enviar lembrete",
+          icon: Bell,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; href: string; label: string; icon: any }>;
 
+  const showQuickActions = quickActions.length > 0;
+  const shouldShowNextCommitmentCard =
+    userRole === "MEMBER" &&
+    !!nextCommitment?.id &&
+    !!nextCommitment?.roleId &&
+    canConfirmPresence;
+  const isNextCommitmentPending = nextCommitment?.myStatus === "PENDING";
 
   return (
     <div className="space-y-6">
@@ -297,15 +477,37 @@ export default function DashboardPage() {
       )}
 
 
-      {userRole === "MEMBER" && (
+      {shouldShowNextCommitmentCard && (
         <Card>
           <CardContent className="p-4 flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
             <div>
               <p className="text-sm text-gray-500">Próximo compromisso</p>
-              <p className="font-semibold">{myUpcomingSchedules?.[0]?.setlist?.name ?? "Nenhum compromisso pendente"}</p>
+              <p className="font-semibold">{nextCommitment?.setlist?.name ?? "Compromisso sem repertório"}</p>
+              {nextCommitment?.date && (
+                <p className="text-sm text-gray-500 mt-1">
+                  {format(new Date(nextCommitment.date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                </p>
+              )}
             </div>
-            <div className="flex gap-2">
-              <Link href="/schedules"><Button size="sm" variant="primary">Confirmar presença</Button></Link>
+            <div className="flex gap-2 items-center">
+              {isNextCommitmentPending ? (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleConfirmNextCommitment}
+                  disabled={confirmingNextCommitment}
+                >
+                  {confirmingNextCommitment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Confirmar presença"
+                  )}
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" disabled>
+                  Confirmado
+                </Button>
+              )}
               <Link href="/songs"><Button size="sm" variant="outline">Baixar material</Button></Link>
             </div>
           </CardContent>
@@ -314,33 +516,27 @@ export default function DashboardPage() {
 
       {userRole !== "SUPERADMIN" && (
         <>
-          <Card className="rounded-xl border border-border/80">
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Ações rápidas</p>
-                  <p className="text-base font-semibold">Acelere a rotina do ministério</p>
+          {showQuickActions && (
+            <Card className="rounded-xl border border-border/80">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Ações rápidas</p>
+                    <p className="text-base font-semibold">Acelere a rotina do ministério</p>
+                  </div>
+                  <div className="grid w-full gap-2 sm:grid-cols-3 md:w-auto">
+                    {quickActions.map((action) => (
+                      <Link key={action.key} href={action.href}>
+                        <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                          <action.icon className="h-4 w-4" /> {action.label}
+                        </Button>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid w-full gap-2 sm:grid-cols-3 md:w-auto">
-                  <Link href="/schedules">
-                    <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-                      <Plus className="h-4 w-4" /> Criar escala
-                    </Button>
-                  </Link>
-                  <Link href="/songs">
-                    <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-                      <Music className="h-4 w-4" /> Adicionar música
-                    </Button>
-                  </Link>
-                  <Link href={canAccessAdminDashboard ? "/dashboard/admin" : "/schedules"}>
-                    <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-                      <Bell className="h-4 w-4" /> Enviar lembrete
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {canAccessAdminDashboard && (
             <Card className="rounded-xl border border-border/80">
@@ -564,35 +760,39 @@ export default function DashboardPage() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="rounded-xl border border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-600" />
-                  Membros
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-3xl font-bold">{stats?.totalMembers ?? 0}</p>
-                <Link href="/members">
-                  <Button size="sm" variant="outline">Gerenciar membros</Button>
-                </Link>
-              </CardContent>
-            </Card>
+            {canViewMembersCard && (
+              <Card className="rounded-xl border border-border/80">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-600" />
+                    Membros
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-3xl font-bold">{stats?.totalMembers ?? 0}</p>
+                  <Link href="/members">
+                    <Button size="sm" variant="outline">Gerenciar membros</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card className="rounded-xl border border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Music className="w-5 h-5 text-blue-600" />
-                  Músicas
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
-                <Link href="/songs">
-                  <Button size="sm" variant="outline">Gerenciar repertório</Button>
-                </Link>
-              </CardContent>
-            </Card>
+            {canManageSongs && (
+              <Card className="rounded-xl border border-border/80">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Music className="w-5 h-5 text-blue-600" />
+                    Músicas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
+                  <Link href="/songs">
+                    <Button size="sm" variant="outline">Gerenciar repertório</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Pendências (mantidas só para membros sem gestão) */}
