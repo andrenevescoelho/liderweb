@@ -198,6 +198,27 @@ export async function GET() {
 
       const engagementDrop = schedulesPrev30 > 0 ? ((schedulesPrev30 - schedulesLast30) / schedulesPrev30) * 100 : 0;
 
+      const systemHealthDetails = [
+        ...riskSubscriptions.map((subscription) => ({
+          id: subscription.id,
+          category: "Falha de pagamento",
+          entity: subscription.group?.name ?? "Igreja sem nome",
+          status: subscription.status,
+          severity: "ALTA",
+          detail: subscription.cancelAtPeriodEnd
+            ? "Assinatura marcada para cancelamento no fim do período"
+            : "Assinatura em situação de risco financeiro",
+        })),
+        ...lowActivityGroups.map((group) => ({
+          id: group.id,
+          category: "Baixa atividade",
+          entity: group.name,
+          status: "INATIVA_30_DIAS",
+          severity: "MÉDIA",
+          detail: "Sem escalas criadas nos últimos 30 dias",
+        })),
+      ];
+
       return NextResponse.json({
         groupName: null,
         upcomingSchedules: [],
@@ -245,6 +266,7 @@ export async function GET() {
             engagementDrop: Number(engagementDrop.toFixed(1)),
             paymentIssues: riskSubscriptions.length,
             systemErrors: riskSubscriptions.length + canceledThisMonth,
+            systemHealthDetails,
           },
           aiSuggestions: {
             upgradePotential: Math.max(0, Math.floor(totalGroups * 0.15)),
