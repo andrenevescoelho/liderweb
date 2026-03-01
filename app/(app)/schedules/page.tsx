@@ -137,18 +137,21 @@ export default function SchedulesPage() {
 
     if (songs.length === 0) {
       return {
+        previewSongs: [] as string[],
+        remainingSongs: 0,
         preview: "Sem músicas definidas",
         fullPreview: "Sem músicas definidas",
         countLabel: "0 músicas",
       };
     }
 
-    const previewSongs = songs.slice(0, 3);
+    const previewSongs = songs.slice(0, 5);
     const remaining = songs.length - previewSongs.length;
-    const preview = `${previewSongs.join(" • ")}${remaining > 0 ? ` • +${remaining}` : ""}`;
 
     return {
-      preview,
+      previewSongs,
+      remainingSongs: remaining,
+      preview: `${previewSongs.join(" • ")}${remaining > 0 ? ` • +${remaining}` : ""}`,
       fullPreview: songs.join(" • "),
       countLabel: `${songs.length} música${songs.length > 1 ? "s" : ""}`,
     };
@@ -303,13 +306,38 @@ export default function SchedulesPage() {
             {selectedSchedule?.setlist && (
               <div className="mb-4">
                 <p className="text-sm text-gray-500">Músicas da escala</p>
-                <p
-                  className="font-medium text-gray-900 dark:text-white truncate"
-                  title={formatScheduleSongs(selectedSchedule).fullPreview}
-                >
-                  {formatScheduleSongs(selectedSchedule).preview}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">{formatScheduleSongs(selectedSchedule).countLabel}</p>
+                {(() => {
+                  const songsData = formatScheduleSongs(selectedSchedule);
+
+                  if (songsData.previewSongs.length === 0) {
+                    return (
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        Sem músicas definidas
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <ul className="mt-1 space-y-1.5">
+                      {songsData.previewSongs.map((songTitle: string, index: number) => (
+                        <li
+                          key={`${songTitle}-${index}`}
+                          className="flex items-center gap-2 text-sm text-gray-900 dark:text-white"
+                          title={songTitle}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 shrink-0" />
+                          <span className="truncate">{songTitle}</span>
+                        </li>
+                      ))}
+                      {songsData.remainingSongs > 0 && (
+                        <li className="text-sm text-gray-500 dark:text-gray-400 pl-3.5">
+                          +{songsData.remainingSongs} música{songsData.remainingSongs > 1 ? "s" : ""}
+                        </li>
+                      )}
+                    </ul>
+                  );
+                })()}
+                <p className="text-xs text-gray-500 mt-2">{formatScheduleSongs(selectedSchedule).countLabel}</p>
               </div>
             )}
 
