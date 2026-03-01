@@ -445,19 +445,242 @@ export async function GET() {
     ]);
 
     const adminInsights = canAccessGroupReports
-      ? {
-          nextSchedule: upcomingSchedules?.[0] ?? null,
-          pendingTasks: pendingConfirmations.length,
-          frequencyChart: [
-            { label: "Mês passado", value: setlistsPreviousMonth },
-            { label: "Mês atual", value: setlistsCurrentMonth },
-          ],
-          confirmationRate: totalInvitesCurrentMonth > 0 ? (confirmationsCurrentMonth / totalInvitesCurrentMonth) * 100 : 0,
-          automaticAlerts: {
-            lowActivity: setlistsCurrentMonth === 0,
-            manyPendingConfirmations: pendingConfirmations.length >= 5,
-          },
-        }
+      ? await (async () => {
+          const weekAhead = toDate(7);
+          const sixMonthsAgo = toDate(-180);
+
+          const [
+            totalActiveMembers,
+            totalInactiveMembers,
+            weeklySchedules,
+            confirmedInWeek,
+            unconfirmedInWeek,
+            absenceAlerts,
+            memberLoad,
+            membersWithoutServing,
+            schedulesCreatedMonth,
+            roleDistribution,
+            songsMostUsed,
+            songsNewMonth,
+            songsUnused6M,
+            keyUsage,
+            bpmSamples,
+            frequencyByInstrument,
+            attendanceHistory,
+            schedulesByMonth,
+            activeProfiles,
+            nextThreeSchedules,
+          ] = await Promise.all([
+            prisma.user.count({ where: { ...memberWhere, profile: { is: { active: true } } } }),
+            prisma.user.count({ where: { ...memberWhere, OR: [{ profile: { is: null } }, { profile: { is: { active: false } } }] } }),
+            prisma.schedule.findMany({
+              where: { ...(groupId && { groupId }), date: { gte: now, lte: weekAhead } },
+              include: { setlist: true, roles: true },
+              orderBy: { date: "asc" },
+              take: 5,
+            }),
+            prisma.scheduleRole.count({
+              where: { schedule: { ...(groupId && { groupId }), date: { gte: now, lte: weekAhead } }, status: "ACCEPTED" },
+            }),
+            prisma.scheduleRole.count({
+              where: {
+                schedule: { ...(groupId && { groupId }), date: { gte: now, lte: weekAhead } },
+                status: { in: ["PENDING", "DECLINED"] },
+              },
+            }),
+            prisma.scheduleRole.count({
+              where: { schedule: { ...(groupId && { groupId }), date: { gte: now, lte: weekAhead } }, status: "DECLINED" },
+            }),
+            prisma.scheduleRole.groupBy({
+              by: ["memberId"],
+              where: { schedule: { ...(groupId && { groupId }), date: { gte: sixMonthsAgo } }, memberId: { not: null } },
+              _count: { _all: true },
+            }),
+            prisma.user.findMany({
+              where: { ...memberWhere, profile: { is: { active: true } }, scheduleRoles: { none: { schedule: { date: { gte: toDate(-60) } } } } },
+              select: { id: true, name: true },
+              take: 5,
+            }),
+            prisma.schedule.count({ where: { ...(groupId && { groupId }), createdAt: { gte: monthStart } } }),
+            prisma.scheduleRole.groupBy({
+              by: ["memberId"],
+              where: { schedule: { ...(groupId && { groupId }), date: { gte: monthStart } }, memberId: { not: null } },
+              _count: { _all: true },
+            }),
+            prisma.setlistItem.findMany({
+              where: { setlist: { ...(groupId && { groupId }), schedules: { some: { date: { gte: sixMonthsAgo } } } } },
+              include: { song: true },
+            }),
+            prisma.song.count({ where: { ...songWhere, createdAt: { gte: monthStart } } }),
+            prisma.song.findMany({
+              where: { ...songWhere, setlistItems: { none: { setlist: { schedules: { some: { date: { gte: sixMonthsAgo } } } } } } },
+              select: { id: true, title: true },
+              take: 5,
+            }),
+            prisma.setlistItem.groupBy({
+              by: ["selectedKey"],
+              where: { setlist: { ...(groupId && { groupId }), schedules: { some: { date: { gte: sixMonthsAgo } } } } },
+              _count: { _all: true },
+            }),
+            prisma.setlistItem.findMany({
+              where: { setlist: { ...(groupId && { groupId }), schedules: { some: { date: { gte: monthStart } } } }, song: { bpm: { not: null } } },
+              include: { song: { select: { bpm: true } } },
+            }),
+            prisma.scheduleRole.groupBy({
+              by: ["role"],
+              where: { schedule: { ...(groupId && { groupId }), date: { gte: monthStart } } },
+              _count: { _all: true },
+            }),
+            prisma.scheduleRole.groupBy({
+              by: ["status"],
+              where: { schedule: { ...(groupId && { groupId }), date: { gte: toDate(-60) } } },
+              _count: { _all: true },
+            }),
+            Promise.all(
+              Array.from({ length: 6 }).map(async (_, index) => {
+                const start = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+                const end = new Date(now.getFullYear(), now.getMonth() - (4 - index), 1);
+                const count = await prisma.schedule.count({ where: { ...(groupId && { groupId }), createdAt: { gte: start, lt: end } } });
+                return { month: start.toLocaleDateString("pt-BR", { month: "short" }), count };
+              })
+            ),
+            prisma.memberProfile.findMany({
+              where: { user: { ...(groupId && { groupId }), role: { not: "SUPERADMIN" } }, active: true },
+              select: { instruments: true },
+            }),
+            prisma.schedule.findMany({
+              where: { ...(groupId && { groupId }), date: { gte: now } },
+              include: { roles: true },
+              orderBy: { date: "asc" },
+              take: 3,
+            }),
+          ]);
+
+          const memberCountMap = new Map(memberLoad.map((item) => [item.memberId, item._count._all]));
+          const memberNames = await prisma.user.findMany({
+            where: { id: { in: Array.from(memberCountMap.keys()).filter(Boolean) as string[] } },
+            select: { id: true, name: true },
+          });
+          const topMembers = memberNames
+            .map((member) => ({ name: member.name, value: memberCountMap.get(member.id) ?? 0 }))
+            .sort((a, b) => b.value - a.value);
+
+          const distributionValues = roleDistribution.map((item) => item._count._all);
+          const distributionMin = distributionValues.length ? Math.min(...distributionValues) : 0;
+          const distributionMax = distributionValues.length ? Math.max(...distributionValues) : 0;
+
+          const songCounter = songsMostUsed.reduce((acc: Record<string, { title: string; uses: number }>, item) => {
+            if (!item.song) return acc;
+            const key = item.song.id;
+            acc[key] = acc[key] ?? { title: item.song.title, uses: 0 };
+            acc[key].uses += 1;
+            return acc;
+          }, {});
+
+          const songsRanking = Object.values(songCounter).sort((a, b) => b.uses - a.uses);
+          const topKey = keyUsage.sort((a, b) => b._count._all - a._count._all)[0]?.selectedKey ?? "N/A";
+          const avgBpm = bpmSamples.length > 0
+            ? bpmSamples.reduce((acc, item) => acc + (item.song?.bpm ?? 0), 0) / bpmSamples.length
+            : 0;
+
+          const instrumentCounter = activeProfiles.reduce((acc: Record<string, number>, profile) => {
+            profile.instruments.forEach((instrument) => {
+              acc[instrument] = (acc[instrument] ?? 0) + 1;
+            });
+            return acc;
+          }, {});
+
+          const instrumentsWithShortage = Object.entries(instrumentCounter)
+            .filter(([, total]) => total <= 1)
+            .map(([instrument, total]) => ({ instrument, total }))
+            .slice(0, 5);
+
+          const nextThreeGuitarists = new Set(
+            nextThreeSchedules.flatMap((schedule) =>
+              schedule.roles
+                .filter((role) => /guit|guitar/i.test(role.role) && !!role.memberId)
+                .map((role) => role.memberId as string)
+            )
+          ).size;
+
+          const overloadShare = topMembers.length > 0
+            ? (topMembers.slice(0, 5).reduce((acc, item) => acc + item.value, 0) /
+                Math.max(1, topMembers.reduce((acc, item) => acc + item.value, 0))) * 100
+            : 0;
+
+          const attendanceSummary = attendanceHistory.reduce((acc: Record<string, number>, item) => {
+            acc[item.status] = item._count._all;
+            return acc;
+          }, {});
+
+          return {
+            nextSchedule: upcomingSchedules?.[0] ?? null,
+            pendingTasks: pendingConfirmations.length,
+            confirmationRate: totalInvitesCurrentMonth > 0 ? (confirmationsCurrentMonth / totalInvitesCurrentMonth) * 100 : 0,
+            frequencyChart: [
+              { label: "Mês passado", value: setlistsPreviousMonth },
+              { label: "Mês atual", value: setlistsCurrentMonth },
+            ],
+            quickWeek: {
+              nextWorship: weeklySchedules?.[0] ?? null,
+              weekSchedules: weeklySchedules.length,
+              confirmedInWeek,
+              unconfirmedInWeek,
+              absenceAlerts,
+            },
+            members: {
+              totalMembers,
+              activeMembers: totalActiveMembers,
+              inactiveMembers: totalInactiveMembers,
+              topScaled: topMembers.slice(0, 5),
+              withoutServing: membersWithoutServing,
+            },
+            schedules: {
+              createdInMonth: schedulesCreatedMonth,
+              participationDistribution: roleDistribution.map((item) => ({ memberId: item.memberId, count: item._count._all })),
+              musicianBalance: distributionMin > 0 ? Number((distributionMax / distributionMin).toFixed(2)) : null,
+              instrumentsWithShortage,
+              strongInsight: `Você tem apenas ${nextThreeGuitarists} guitarrista(s) disponível(is) nos próximos 3 cultos.`,
+            },
+            repertoire: {
+              mostUsedSongs: songsRanking.slice(0, 5),
+              newSongsInMonth: songsNewMonth,
+              songsUnusedSixMonths: songsUnused6M,
+              topKey,
+              avgBpm: Number(avgBpm.toFixed(1)),
+            },
+            reports: {
+              individualFrequency: topMembers.slice(0, 10),
+              frequencyByInstrument: frequencyByInstrument.map((item) => ({ role: item.role, count: item._count._all })),
+              participationByPeriod: {
+                manha: weeklySchedules.filter((s) => new Date(s.date).getHours() < 12).length,
+                tarde: weeklySchedules.filter((s) => {
+                  const h = new Date(s.date).getHours();
+                  return h >= 12 && h < 18;
+                }).length,
+                noite: weeklySchedules.filter((s) => new Date(s.date).getHours() >= 18).length,
+              },
+              schedulesByMonth,
+              attendanceHistory: attendanceSummary,
+            },
+            smartIndicators: {
+              overloadedMinistry: overloadShare > 60,
+              repeatedMembers: (topMembers[0]?.value ?? 0) > Math.max(3, (topMembers[1]?.value ?? 0) * 1.8),
+              lowDiversity: instrumentsWithShortage.length > 0,
+              highAbsenceMember: (attendanceSummary.DECLINED ?? 0) > (attendanceSummary.ACCEPTED ?? 0) * 0.35,
+            },
+            aiFuture: {
+              audioTechAssessment: "Em breve",
+              ministryAverageLevel: "Em breve",
+              repertoireSuggestionByLevel: "Em breve",
+              balancedAutoScaleSuggestion: "Em breve",
+            },
+            automaticAlerts: {
+              lowActivity: setlistsCurrentMonth === 0,
+              manyPendingConfirmations: pendingConfirmations.length >= 5,
+            },
+          };
+        })()
       : null;
 
     return NextResponse.json({

@@ -125,6 +125,7 @@ export default function DashboardPage() {
   const myUpcomingSchedules = data?.myUpcomingSchedules ?? [];
   const pendingConfirmations = data?.pendingConfirmations ?? [];
   const songsToRehearse = data?.songsToRehearse ?? [];
+  const adminInsights = data?.adminInsights;
 
   return (
     <div className="space-y-6">
@@ -317,29 +318,95 @@ export default function DashboardPage() {
       )}
 
 
-      {(userRole === "ADMIN" || userRole === "LEADER") && data?.adminInsights && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {(userRole === "ADMIN" || userRole === "LEADER") && adminInsights && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Próxima escala</CardTitle></CardHeader>
+              <CardContent>
+                <p className="font-semibold">{adminInsights?.nextSchedule?.setlist?.name ?? "Sem escala"}</p>
+                <p className="text-sm text-gray-500">{adminInsights?.nextSchedule?.date ? format(new Date(adminInsights.nextSchedule.date), "dd/MM/yyyy HH:mm") : "Cadastre novas escalas"}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Pendências</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">{adminInsights?.pendingTasks ?? 0}</p>
+                <p className="text-sm text-gray-500">confirmações aguardando retorno</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Frequência de confirmações</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">{(adminInsights?.confirmationRate ?? 0).toFixed(1)}%</p>
+                <p className="text-sm text-gray-500">taxa de aceite no mês</p>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Próxima escala</CardTitle></CardHeader>
-            <CardContent>
-              <p className="font-semibold">{data.adminInsights?.nextSchedule?.setlist?.name ?? "Sem escala"}</p>
-              <p className="text-sm text-gray-500">{data.adminInsights?.nextSchedule?.date ? format(new Date(data.adminInsights.nextSchedule.date), "dd/MM/yyyy HH:mm") : "Cadastre novas escalas"}</p>
+            <CardHeader><CardTitle>🎵 Visão Rápida da Semana</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 text-sm">
+              <div><p className="text-gray-500">Próximo culto</p><p className="font-semibold">{adminInsights?.quickWeek?.nextWorship?.setlist?.name ?? "Sem culto"}</p></div>
+              <div><p className="text-gray-500">Escalas da semana</p><p className="font-semibold">{adminInsights?.quickWeek?.weekSchedules ?? 0}</p></div>
+              <div><p className="text-gray-500">Quem confirmou</p><p className="font-semibold text-green-600">{adminInsights?.quickWeek?.confirmedInWeek ?? 0}</p></div>
+              <div><p className="text-gray-500">Quem não confirmou</p><p className="font-semibold text-amber-600">{adminInsights?.quickWeek?.unconfirmedInWeek ?? 0}</p></div>
+              <div><p className="text-gray-500">Alertas de ausência</p><p className="font-semibold text-rose-600">{adminInsights?.quickWeek?.absenceAlerts ?? 0}</p></div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Pendências</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{data.adminInsights?.pendingTasks ?? 0}</p>
-              <p className="text-sm text-gray-500">confirmações aguardando retorno</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Frequência de confirmações</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{(data.adminInsights?.confirmationRate ?? 0).toFixed(1)}%</p>
-              <p className="text-sm text-gray-500">taxa de aceite no mês</p>
-            </CardContent>
-          </Card>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader><CardTitle>👥 Gestão de Membros</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>Total: <span className="font-semibold">{adminInsights?.members?.totalMembers ?? 0}</span></p>
+                <p>Ativos: <span className="font-semibold text-green-600">{adminInsights?.members?.activeMembers ?? 0}</span></p>
+                <p>Inativos: <span className="font-semibold text-amber-600">{adminInsights?.members?.inactiveMembers ?? 0}</span></p>
+                <p className="pt-2 font-medium">Top 5 mais escalados</p>
+                <ul className="space-y-1">
+                  {(adminInsights?.members?.topScaled ?? []).map((member: any) => (
+                    <li key={member.name} className="flex justify-between"><span>{member.name}</span><span className="font-semibold">{member.value}x</span></li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>📅 Escalas</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>Escalas criadas no mês: <span className="font-semibold">{adminInsights?.schedules?.createdInMonth ?? 0}</span></p>
+                <p>Equilíbrio entre músicos: <span className="font-semibold">{adminInsights?.schedules?.musicianBalance ?? "N/A"}</span></p>
+                <p className="font-medium">Instrumentos com falta</p>
+                <ul className="space-y-1">
+                  {(adminInsights?.schedules?.instrumentsWithShortage ?? []).map((item: any) => (
+                    <li key={item.instrument}>{item.instrument} ({item.total})</li>
+                  ))}
+                </ul>
+                <p className="text-purple-700 dark:text-purple-300 font-semibold pt-1">💡 {adminInsights?.schedules?.strongInsight}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader><CardTitle>🎵 Repertório</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>Músicas novas no mês: <span className="font-semibold">{adminInsights?.repertoire?.newSongsInMonth ?? 0}</span></p>
+                <p>Músicas sem uso há 6 meses: <span className="font-semibold">{adminInsights?.repertoire?.songsUnusedSixMonths?.length ?? 0}</span></p>
+                <p>Tom mais usado: <span className="font-semibold">{adminInsights?.repertoire?.topKey ?? "N/A"}</span></p>
+                <p>Média BPM dos cultos: <span className="font-semibold">{adminInsights?.repertoire?.avgBpm ?? 0}</span></p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>🎯 Indicadores Inteligentes</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>Ministério sobrecarregado? <span className="font-semibold">{adminInsights?.smartIndicators?.overloadedMinistry ? "Sim" : "Não"}</span></p>
+                <p>Escalando sempre os mesmos? <span className="font-semibold">{adminInsights?.smartIndicators?.repeatedMembers ? "Sim" : "Não"}</span></p>
+                <p>Falta de diversidade? <span className="font-semibold">{adminInsights?.smartIndicators?.lowDiversity ? "Sim" : "Não"}</span></p>
+                <p>Membro com alta ausência? <span className="font-semibold">{adminInsights?.smartIndicators?.highAbsenceMember ? "Sim" : "Não"}</span></p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
