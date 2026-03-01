@@ -1,21 +1,44 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "@/hooks/use-toast";
+import { hasPermission } from "@/lib/authorization";
 
 export default function EnsaioDetalhePage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
   const userId = (session?.user as any)?.id;
-  const canManage = userRole === "SUPERADMIN" || userRole === "ADMIN";
+  const isAdmin = userRole === "SUPERADMIN" || userRole === "ADMIN";
+  const canEdit =
+    isAdmin || hasPermission(userRole, "rehearsal.manage", userPermissions) || hasPermission(userRole, "rehearsal.edit", userPermissions);
+  const canDelete =
+    isAdmin || hasPermission(userRole, "rehearsal.manage", userPermissions) || hasPermission(userRole, "rehearsal.delete", userPermissions);
+  const canPublish =
+    isAdmin || hasPermission(userRole, "rehearsal.manage", userPermissions) || hasPermission(userRole, "rehearsal.publish", userPermissions);
+  const canManage = canEdit || canDelete || canPublish;
 
   const [rehearsal, setRehearsal] = useState<any>(null);
   const [justification, setJustification] = useState("");
+  const [loadingAction, setLoadingAction] = useState<"publish" | "delete" | null>(null);
 
   const load = async () => {
     const res = await fetch(`/api/rehearsals/${params.id}`);
@@ -50,6 +73,74 @@ export default function EnsaioDetalhePage() {
     load();
   };
 
+  const togglePublish = async () => {
+    if (!rehearsal?.id || !canPublish) return;
+
+    setLoadingAction("publish");
+    try {
+      const nextStatus = rehearsal.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
+      const res = await fetch(`/api/rehearsals/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+
+      if (!res.ok) {
+        toast({
+          title: "Não foi possível atualizar o status",
+          description: "Verifique suas permissões e tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: nextStatus === "PUBLISHED" ? "Ensaio publicado" : "Ensaio despublicado",
+      });
+      load();
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao atualizar ensaio",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const deleteRehearsal = async () => {
+    if (!rehearsal?.id) return;
+
+    setLoadingAction("delete");
+    try {
+      const res = await fetch(`/api/rehearsals/${params.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        toast({
+          title: "Não foi possível excluir",
+          description: "Verifique suas permissões e tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({ title: "Ensaio excluído com sucesso" });
+      router.push("/ensaios");
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao excluir ensaio",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   if (!rehearsal) return <p>Carregando...</p>;
 
   const pending = rehearsal.attendance?.filter((a: any) => a.status === "PENDING")?.length ?? 0;
@@ -57,7 +148,42 @@ export default function EnsaioDetalhePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Detalhe do ensaio</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Detalhe do ensaio</h1>
+        {canManage && (
+          <div className="flex flex-wrap gap-2">
+            {canPublish && (
+              <Button variant="outline" onClick={togglePublish} disabled={loadingAction === "publish"}>
+                {rehearsal.status === "PUBLISHED" ? "Despublicar" : "Publicar"}
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="outline" onClick={() => router.push(`/ensaios/novo?rehearsalId=${rehearsal.id}`)}>
+                Editar ensaio
+              </Button>
+            )}
+            {canDelete && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" disabled={loadingAction === "delete"}>Excluir ensaio</Button>
+                </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Tem certeza que deseja excluir este ensaio?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Essa ação é irreversível e removerá o ensaio permanentemente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={deleteRehearsal}>Excluir ensaio</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        )}
+      </div>
 
       <Card>
         <CardHeader><CardTitle>Resumo</CardTitle></CardHeader>

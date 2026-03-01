@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,9 +14,18 @@ const TAGS = ["🔁 Nova", "🎯 Ajuste técnico", "🎤 Treinar vocal", "🥁 F
 
 export default function NovoEnsaioPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
-  const canManage = userRole === "SUPERADMIN" || userRole === "ADMIN";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const canManage =
+    userRole === "SUPERADMIN" ||
+    userRole === "ADMIN" ||
+    userPermissions.includes("rehearsal.manage") ||
+    userPermissions.includes("rehearsal.create") ||
+    userPermissions.includes("rehearsal.edit");
+  const rehearsalId = searchParams.get("rehearsalId");
+  const isEditing = Boolean(rehearsalId);
   const [songsCatalog, setSongsCatalog] = useState<any[]>([]);
   const [form, setForm] = useState<any>({
     date: "",
@@ -39,6 +48,39 @@ export default function NovoEnsaioPage() {
       .then((data) => setSongsCatalog(data ?? []))
       .catch(() => setSongsCatalog([]));
   }, [canManage]);
+
+  useEffect(() => {
+    if (!canManage || !rehearsalId) return;
+
+    fetch(`/api/rehearsals/${rehearsalId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data?.id) return;
+
+        const dateTime = data.dateTime ? new Date(data.dateTime) : null;
+        setForm({
+          date: dateTime ? dateTime.toISOString().slice(0, 10) : "",
+          time: dateTime ? dateTime.toISOString().slice(11, 16) : "19:30",
+          location: data.location || "",
+          notes: data.notes || "",
+          type: data.type || "GENERAL",
+          estimatedMinutes: data.estimatedMinutes || "",
+          songs: (data.songs || []).map((song: any) => ({
+            songId: song.songId || undefined,
+            title: song.title || "",
+            artist: song.artist || "",
+            key: song.key || "",
+            bpm: song.bpm || "",
+            youtubeUrl: song.youtubeUrl || "",
+            audioUrl: song.audioUrl || "",
+            partNotes: song.partNotes || "",
+            notes: song.notes || "",
+            tags: song.tags || [],
+          })),
+        });
+      })
+      .catch(() => undefined);
+  }, [canManage, rehearsalId]);
 
   const addExistingSong = (songId: string) => {
     const song = songsCatalog.find((item) => item.id === songId);
@@ -97,8 +139,8 @@ export default function NovoEnsaioPage() {
   };
 
   const save = async (status: "DRAFT" | "PUBLISHED") => {
-    const res = await fetch("/api/rehearsals", {
-      method: "POST",
+    const res = await fetch(isEditing ? `/api/rehearsals/${rehearsalId}` : "/api/rehearsals", {
+      method: isEditing ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, status }),
     });
@@ -106,12 +148,13 @@ export default function NovoEnsaioPage() {
     if (!res.ok) return alert("Erro ao salvar ensaio");
     const created = await res.json();
     router.push(`/ensaios/${created.id}`);
+    router.refresh();
   };
 
   if (!canManage) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Novo ensaio</h1>
+        <h1 className="text-2xl font-bold">{isEditing ? "Editar ensaio" : "Novo ensaio"}</h1>
         <p className="text-sm text-gray-500">Somente administradores podem criar ensaios.</p>
       </div>
     );
@@ -119,7 +162,7 @@ export default function NovoEnsaioPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Novo ensaio</h1>
+      <h1 className="text-2xl font-bold">{isEditing ? "Editar ensaio" : "Novo ensaio"}</h1>
 
       <Card>
         <CardHeader><CardTitle>Dados gerais</CardTitle></CardHeader>
