@@ -155,8 +155,12 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => scrollToSection("alertas-inteligentes")}>Ir para Alertas inteligentes</Button>
-            <Button variant="outline" onClick={() => scrollToSection("saude-sistema")}>Ir para Saúde do sistema</Button>
+            <Link href="/dashboard/alertas-inteligentes">
+              <Button variant="outline">Ir para Alertas inteligentes</Button>
+            </Link>
+            <Link href="/dashboard/saude-sistema">
+              <Button variant="outline">Ir para Saúde do sistema</Button>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -265,12 +269,12 @@ export default function DashboardPage() {
                 <CardTitle>Alertas inteligentes</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="p-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20">
+                <Link href="/dashboard/alertas-inteligentes#igrejas-baixa-atividade" className="block p-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 hover:opacity-90 transition-opacity">
                   Igrejas com baixa atividade: <span className="font-semibold">{data?.superadminInsights?.alerts?.lowActivityGroups?.length ?? 0}</span>
-                </div>
-                <div className="p-3 rounded-md bg-rose-50 dark:bg-rose-900/20">
+                </Link>
+                <Link href="/dashboard/alertas-inteligentes#risco-pagamento" className="block p-3 rounded-md bg-rose-50 dark:bg-rose-900/20 hover:opacity-90 transition-opacity">
                   Risco de cancelamento/falha de pagamento: <span className="font-semibold">{data?.superadminInsights?.alerts?.paymentIssues ?? 0}</span>
-                </div>
+                </Link>
                 <div className="p-3 rounded-md bg-blue-50 dark:bg-blue-900/20">
                   Queda de engajamento: <span className="font-semibold">{data?.superadminInsights?.alerts?.engagementDrop ?? 0}%</span>
                 </div>
@@ -289,18 +293,18 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-md bg-rose-50 dark:bg-rose-900/20 p-4">
+              <Link href="/dashboard/saude-sistema#erros-criticos" className="rounded-md bg-rose-50 dark:bg-rose-900/20 p-4 hover:opacity-90 transition-opacity">
                 <p className="text-sm text-gray-600 dark:text-gray-300">Erros críticos</p>
                 <p className="text-2xl font-bold text-rose-600">{data?.superadminInsights?.alerts?.systemErrors ?? 0}</p>
-              </div>
-              <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4">
+              </Link>
+              <Link href="/dashboard/saude-sistema#falhas-pagamento" className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 hover:opacity-90 transition-opacity">
                 <p className="text-sm text-gray-600 dark:text-gray-300">Falhas de pagamento</p>
                 <p className="text-2xl font-bold text-yellow-600">{data?.superadminInsights?.alerts?.paymentIssues ?? 0}</p>
-              </div>
-              <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-4">
+              </Link>
+              <Link href="/dashboard/saude-sistema#risco-cancelamento" className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-4 hover:opacity-90 transition-opacity">
                 <p className="text-sm text-gray-600 dark:text-gray-300">Risco de cancelamento</p>
                 <p className="text-2xl font-bold text-blue-600">{data?.superadminInsights?.alerts?.riskSubscriptions?.length ?? 0}</p>
-              </div>
+              </Link>
             </CardContent>
           </Card>
 
