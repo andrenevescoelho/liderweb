@@ -197,15 +197,19 @@ export default function EnsaioDetalhePage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Confirmar presença</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{myAttendance?.status === "ACCEPTED" ? "Presença" : "Confirmar presença"}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm">Meu status atual: <b>{myAttendance?.status || "PENDING"}</b></p>
-          <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Justificativa (opcional)" />
-          <div className="flex gap-2">
-            <Button onClick={() => respond("ACCEPTED")}>Aceito</Button>
-            <Button variant="outline" onClick={() => respond("PENDING")}>Pendente</Button>
-            <Button variant="outline" onClick={() => respond("DECLINED")}>Recusar</Button>
-          </div>
+          {myAttendance?.status !== "ACCEPTED" && (
+            <>
+              <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Justificativa (opcional)" />
+              <div className="flex gap-2">
+                <Button onClick={() => respond("ACCEPTED")}>Aceito</Button>
+                <Button variant="outline" onClick={() => respond("PENDING")}>Pendente</Button>
+                <Button variant="outline" onClick={() => respond("DECLINED")}>Recusar</Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
