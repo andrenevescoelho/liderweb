@@ -31,6 +31,11 @@ export async function GET(req: NextRequest) {
     const status = req.nextUrl.searchParams.get("status");
     if (status) where.status = status;
 
+    if (!db?.rehearsal?.findMany) {
+      console.error("Get rehearsals error: Prisma delegate 'rehearsal' is not available");
+      return NextResponse.json([]);
+    }
+
     const rehearsals = await db.rehearsal.findMany({
       where,
       include: {
@@ -63,6 +68,10 @@ export async function POST(req: NextRequest) {
 
     if (!canManage) {
       return NextResponse.json({ error: "Sem permissão para criar ensaio" }, { status: 403 });
+    }
+
+    if (!db?.rehearsal?.create) {
+      return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
     }
 
     const body = await req.json();
