@@ -60,6 +60,7 @@ export default function SongsPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editSong, setEditSong] = useState<any>(null);
   const [viewSong, setViewSong] = useState<any>(null);
+  const openedSongIdFromQueryRef = useRef<string | null>(null);
   const songIdFromQuery = searchParams?.get("songId") ?? "";
 
   const fetchSongs = async () => {
@@ -84,16 +85,22 @@ export default function SongsPage() {
   }, [search, filterTag, filterKey]);
 
   useEffect(() => {
-    if (!songIdFromQuery || loading || (songs?.length ?? 0) === 0 || viewSong) {
+    if (
+      !songIdFromQuery ||
+      loading ||
+      (songs?.length ?? 0) === 0 ||
+      openedSongIdFromQueryRef.current === songIdFromQuery
+    ) {
       return;
     }
 
     const selectedSong = songs.find((song) => song?.id === songIdFromQuery);
     if (!selectedSong) return;
 
+    openedSongIdFromQueryRef.current = songIdFromQuery;
     setViewSong(selectedSong);
     setViewModalOpen(true);
-  }, [songIdFromQuery, songs, loading, viewSong]);
+  }, [songIdFromQuery, songs, loading]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta música?")) return;
