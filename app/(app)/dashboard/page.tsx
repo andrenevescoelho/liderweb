@@ -21,11 +21,23 @@ import {
   Play,
   CreditCard,
   ExternalLink,
+  ServerCrash,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar } from "recharts";
+import {
+  ResponsiveContainer,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar,
+  ComposedChart,
+  Area,
+  Line,
+} from "recharts";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -95,6 +107,11 @@ export default function DashboardPage() {
     }
   };
 
+  const scrollToSection = (sectionId: string) => {
+    const section = document.getElementById(sectionId);
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -138,51 +155,75 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <Card className="bg-gradient-to-br from-emerald-500 to-emerald-700 text-white">
-              <CardContent className="p-6">
-                <p className="text-emerald-100">MRR</p>
-                <p className="text-3xl font-bold">R$ {(stats?.mrr ?? 0).toLocaleString("pt-BR")}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white">
-              <CardContent className="p-6">
-                <p className="text-indigo-100">Igrejas ativas</p>
-                <p className="text-3xl font-bold">{stats?.activeChurches ?? 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-amber-500 to-amber-700 text-white">
-              <CardContent className="p-6">
-                <p className="text-amber-100">Igrejas em trial</p>
-                <p className="text-3xl font-bold">{stats?.trialChurches ?? 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-rose-500 to-rose-700 text-white">
-              <CardContent className="p-6">
-                <p className="text-rose-100">Churn mensal</p>
-                <p className="text-3xl font-bold">{(stats?.churn ?? 0).toFixed(1)}%</p>
-              </CardContent>
-            </Card>
+            <Button
+              variant="ghost"
+              className="h-auto p-0 rounded-lg hover:opacity-95"
+              onClick={() => scrollToSection("financeiro-consolidado")}
+            >
+              <Card className="w-full text-left bg-gradient-to-br from-emerald-500 to-emerald-700 text-white">
+                <CardContent className="p-6">
+                  <p className="text-emerald-100">MRR</p>
+                  <p className="text-3xl font-bold">R$ {(stats?.mrr ?? 0).toLocaleString("pt-BR")}</p>
+                  <p className="mt-2 text-xs text-emerald-100/90">Ver consolidado</p>
+                </CardContent>
+              </Card>
+            </Button>
+            <Button variant="ghost" className="h-auto p-0 rounded-lg hover:opacity-95" onClick={() => scrollToSection("uso-consolidado")}>
+              <Card className="w-full text-left bg-gradient-to-br from-indigo-500 to-indigo-700 text-white">
+                <CardContent className="p-6">
+                  <p className="text-indigo-100">Igrejas ativas</p>
+                  <p className="text-3xl font-bold">{stats?.activeChurches ?? 0}</p>
+                  <p className="mt-2 text-xs text-indigo-100/90">Ver uso consolidado</p>
+                </CardContent>
+              </Card>
+            </Button>
+            <Button variant="ghost" className="h-auto p-0 rounded-lg hover:opacity-95" onClick={() => scrollToSection("crescimento-mensal")}>
+              <Card className="w-full text-left bg-gradient-to-br from-amber-500 to-amber-700 text-white">
+                <CardContent className="p-6">
+                  <p className="text-amber-100">Igrejas em trial</p>
+                  <p className="text-3xl font-bold">{stats?.trialChurches ?? 0}</p>
+                  <p className="mt-2 text-xs text-amber-100/90">Ver crescimento</p>
+                </CardContent>
+              </Card>
+            </Button>
+            <Button variant="ghost" className="h-auto p-0 rounded-lg hover:opacity-95" onClick={() => scrollToSection("saude-sistema")}>
+              <Card className="w-full text-left bg-gradient-to-br from-rose-500 to-rose-700 text-white">
+                <CardContent className="p-6">
+                  <p className="text-rose-100">Churn mensal</p>
+                  <p className="text-3xl font-bold">{(stats?.churn ?? 0).toFixed(1)}%</p>
+                  <p className="mt-2 text-xs text-rose-100/90">Ver saúde do sistema</p>
+                </CardContent>
+              </Card>
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <Card className="xl:col-span-2">
+            <Card className="xl:col-span-2" id="crescimento-mensal">
               <CardHeader>
                 <CardTitle>Crescimento mensal</CardTitle>
               </CardHeader>
               <CardContent className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data?.superadminInsights?.monthlyGrowth ?? []}>
+                  <ComposedChart data={data?.superadminInsights?.monthlyGrowth ?? []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
                     <Tooltip />
-                    <Line type="monotone" dataKey="newGroups" stroke="#7c3aed" name="Novas igrejas" />
-                    <Line type="monotone" dataKey="setlistsCreated" stroke="#2563eb" name="Escalas criadas" />
-                  </LineChart>
+                    <Area
+                      type="monotone"
+                      dataKey="setlistsCreated"
+                      fill="#60a5fa"
+                      stroke="#2563eb"
+                      fillOpacity={0.2}
+                      name="Escalas criadas"
+                    />
+                    <Bar dataKey="newGroups" fill="#7c3aed" name="Novas igrejas" radius={[6, 6, 0, 0]} barSize={26} />
+                    <Line type="monotone" dataKey="newGroups" stroke="#5b21b6" dot={{ r: 4 }} />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-            <Card>
+            <Card id="financeiro-consolidado">
               <CardHeader>
                 <CardTitle>Plano mais vendido</CardTitle>
               </CardHeader>
@@ -198,7 +239,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <Card>
+            <Card id="uso-consolidado">
               <CardHeader>
                 <CardTitle>Uso por igreja (últimos 30 dias)</CardTitle>
               </CardHeader>
@@ -234,6 +275,29 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          <Card id="saude-sistema">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ServerCrash className="h-5 w-5 text-rose-500" />
+                Saúde do sistema
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-md bg-rose-50 dark:bg-rose-900/20 p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-300">Erros críticos</p>
+                <p className="text-2xl font-bold text-rose-600">{data?.superadminInsights?.alerts?.systemErrors ?? 0}</p>
+              </div>
+              <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-300">Falhas de pagamento</p>
+                <p className="text-2xl font-bold text-yellow-600">{data?.superadminInsights?.alerts?.paymentIssues ?? 0}</p>
+              </div>
+              <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-300">Risco de cancelamento</p>
+                <p className="text-2xl font-bold text-blue-600">{data?.superadminInsights?.alerts?.riskSubscriptions?.length ?? 0}</p>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card><CardContent className="p-4"><p className="text-sm text-gray-500">Total de músicas</p><p className="text-2xl font-bold">{stats?.totalSongs ?? 0}</p></CardContent></Card>

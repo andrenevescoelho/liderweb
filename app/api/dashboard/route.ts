@@ -244,7 +244,7 @@ export async function GET() {
             })),
             engagementDrop: Number(engagementDrop.toFixed(1)),
             paymentIssues: riskSubscriptions.length,
-            systemErrors: 0,
+            systemErrors: riskSubscriptions.length + canceledThisMonth,
           },
           aiSuggestions: {
             upgradePotential: Math.max(0, Math.floor(totalGroups * 0.15)),
