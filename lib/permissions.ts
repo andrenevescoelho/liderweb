@@ -71,6 +71,8 @@ export const PERMISSIONS: PermissionDefinition[] = [
   { key: "schedule.history.view", label: "Visualizar histórico completo", category: "schedule" },
   { key: "schedule.export", label: "Exportar escala", category: "schedule" },
   { key: "schedule.publish", label: "Publicar escala", category: "schedule" },
+  { key: "rehearsal.view", label: "Visualizar ensaios", category: "schedule" },
+  { key: "rehearsal.manage", label: "Gerenciar ensaios", category: "schedule" },
 
   { key: "report.participation.view", label: "Ver histórico de participação", category: "reports" },
   { key: "report.attendance.view", label: "Ver frequência do membro", category: "reports" },
