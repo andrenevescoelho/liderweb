@@ -14,6 +14,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
+    const canViewRehearsal =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.view", user.permissions) ||
+      hasPermission(user.role, "rehearsal.attendance", user.permissions) ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    if (!canViewRehearsal) {
+      return NextResponse.json({ error: "Sem permissão para visualizar ensaio" }, { status: 403 });
+    }
+
     if (!db?.rehearsal?.findUnique) {
       console.error("Get rehearsal error: Prisma delegate 'rehearsal' is not available");
       return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
@@ -45,16 +55,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-    const canManage =
+    const canEdit =
       user.role === "SUPERADMIN" ||
-      user.role === "ADMIN" ||
-      user.role === "LEADER" ||
+      hasPermission(user.role, "rehearsal.edit", user.permissions) ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
-    if (!canManage) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    if (!canEdit) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
     const body = await req.json();
     const { date, time, location, notes, type, status, estimatedMinutes, songs, checklist } = body ?? {};
+
+    const isPublishing = status === "PUBLISHED";
+    const canPublish =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.publish", user.permissions) ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    if (isPublishing && !canPublish) {
+      return NextResponse.json({ error: "Sem permissão para publicar ensaio" }, { status: 403 });
+    }
 
     if (!db?.rehearsal?.update || !db?.rehearsalSong?.deleteMany || !db?.rehearsalChecklistItem?.deleteMany) {
       return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
@@ -116,5 +135,35 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch (error) {
     console.error("Patch rehearsal error:", error);
     return NextResponse.json({ error: "Erro ao atualizar ensaio" }, { status: 500 });
+  }
+}
+
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+    const canDelete =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.delete", user.permissions) ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    if (!canDelete) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+
+    if (!db?.rehearsal?.delete) {
+      return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
+    }
+
+    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true } });
+    if (!current) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
+
+    await db.rehearsal.delete({ where: { id: params.id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete rehearsal error:", error);
+    return NextResponse.json({ error: "Erro ao excluir ensaio" }, { status: 500 });
   }
 }

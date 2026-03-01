@@ -15,8 +15,9 @@ export default function EnsaiosPage() {
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
 
-  const canManage =
-    ["SUPERADMIN", "ADMIN", "LEADER"].includes(userRole) || userPermissions.includes("rehearsal.manage");
+  const canManage = userRole === "SUPERADMIN" || userPermissions.includes("rehearsal.manage");
+  const canCreate = canManage || userPermissions.includes("rehearsal.create");
+  const canSendReminder = canManage || userPermissions.includes("rehearsal.reminder");
 
   const [rehearsals, setRehearsals] = useState<any[]>([]);
 
@@ -74,7 +75,7 @@ export default function EnsaiosPage() {
           <Link href="/ensaios/calendario">
             <Button variant="outline">Calendário</Button>
           </Link>
-          {canManage && (
+          {canCreate && (
             <Link href="/ensaios/novo">
               <Button><Plus className="w-4 h-4 mr-2" /> Criar ensaio</Button>
             </Link>
@@ -142,13 +143,13 @@ export default function EnsaiosPage() {
         </CardContent>
       </Card>
 
-      {canManage && (
+      {(canCreate || canSendReminder) && (
         <Card>
           <CardHeader><CardTitle>Ações rápidas</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Link href="/ensaios/novo"><Button><Plus className="w-4 h-4 mr-2" /> Criar ensaio</Button></Link>
+            {canCreate && <Link href="/ensaios/novo"><Button><Plus className="w-4 h-4 mr-2" /> Criar ensaio</Button></Link>}
             <Button variant="outline">Importar repertório de escala</Button>
-            <Button variant="outline"><BellRing className="w-4 h-4 mr-2" /> Enviar lembrete</Button>
+            {canSendReminder && <Button variant="outline"><BellRing className="w-4 h-4 mr-2" /> Enviar lembrete</Button>}
           </CardContent>
         </Card>
       )}

@@ -23,6 +23,16 @@ export async function GET(req: NextRequest) {
     const user = session.user as any;
     const where: any = {};
 
+    const canViewRehearsals =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.view", user.permissions) ||
+      hasPermission(user.role, "rehearsal.attendance", user.permissions) ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    if (!canViewRehearsals) {
+      return NextResponse.json({ error: "Sem permissão para visualizar ensaios" }, { status: 403 });
+    }
+
     if (user.role !== "SUPERADMIN") {
       if (!user.groupId) return NextResponse.json([]);
       where.groupId = user.groupId;
@@ -60,13 +70,12 @@ export async function POST(req: NextRequest) {
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-    const canManage =
+    const canCreate =
       user.role === "SUPERADMIN" ||
-      user.role === "ADMIN" ||
-      user.role === "LEADER" ||
+      hasPermission(user.role, "rehearsal.create", user.permissions) ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
-    if (!canManage) {
+    if (!canCreate) {
       return NextResponse.json({ error: "Sem permissão para criar ensaio" }, { status: 403 });
     }
 
@@ -86,6 +95,16 @@ export async function POST(req: NextRequest) {
       songs = [],
       checklist,
     } = body ?? {};
+
+    const isPublishing = status === "PUBLISHED";
+    const canPublish =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.publish", user.permissions) ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    if (isPublishing && !canPublish) {
+      return NextResponse.json({ error: "Sem permissão para publicar ensaio" }, { status: 403 });
+    }
 
     if (!date) return NextResponse.json({ error: "Data é obrigatória" }, { status: 400 });
 

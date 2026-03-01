@@ -101,6 +101,17 @@ export async function PUT(
       );
     }
 
+    if (permissions !== undefined && requester.id !== targetUser.id) {
+      const canManagePermissions =
+        requester.role === "SUPERADMIN" ||
+        requester.role === "ADMIN" ||
+        hasPermission(requester.role as any, "permission.manage", requester.profile?.permissions);
+
+      if (!canManagePermissions) {
+        return NextResponse.json({ error: "Sem permissão para alterar permissões de outros membros" }, { status: 403 });
+      }
+    }
+
     await prisma.user.update({
       where: { id: params?.id },
       data: updateData,

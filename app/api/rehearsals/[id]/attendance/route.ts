@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { hasPermission } from "@/lib/authorization";
 
 const db = prisma as any;
 
@@ -15,10 +16,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const { status, justification, memberId } = await req.json();
 
-    const targetMemberId =
-      user.role === "SUPERADMIN" || user.role === "ADMIN" || user.role === "LEADER"
-        ? memberId || user.id
-        : user.id;
+    const canManageAttendance =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    const canTakeAttendance =
+      hasPermission(user.role, "rehearsal.attendance", user.permissions) || canManageAttendance;
+
+    if (!canTakeAttendance) {
+      return NextResponse.json({ error: "Sem permissão para confirmar presença" }, { status: 403 });
+    }
+
+    const targetMemberId = canManageAttendance ? memberId || user.id : user.id;
 
     const attendance = await db.rehearsalAttendance.upsert({
       where: {

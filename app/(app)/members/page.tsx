@@ -549,6 +549,18 @@ function MemberModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const rehearsalPermissions = [
+    { key: "rehearsal.view", label: "Ver ensaios" },
+    { key: "rehearsal.attendance", label: "Confirmar presença" },
+    { key: "rehearsal.create", label: "Criar ensaio" },
+    { key: "rehearsal.edit", label: "Editar ensaio" },
+    { key: "rehearsal.publish", label: "Publicar ensaio" },
+    { key: "rehearsal.delete", label: "Excluir ensaio" },
+    { key: "rehearsal.reminder", label: "Enviar lembrete" },
+  ] as const;
+
+  const REHEARSAL_MANAGE_DEPENDENCIES = rehearsalPermissions.map((item) => item.key);
+
   useEffect(() => {
     if (member) {
       setName(member?.name ?? "");
@@ -655,7 +667,7 @@ function MemberModal({
   const groupedPermissions = Object.entries(PERMISSION_CATEGORIES).map(([key, label]) => ({
     key,
     label,
-    items: PERMISSIONS.filter((permission) => permission.category === key),
+    items: PERMISSIONS.filter((permission) => permission.category === key && !permission.key.startsWith("rehearsal.")),
   }));
 
   const applyPreset = (presetKey: string) => {
@@ -671,6 +683,36 @@ function MemberModal({
     } else {
       setter([...(arr ?? []), item]);
     }
+  };
+
+  const toggleRehearsalPermission = (permissionKey: string) => {
+    setPermissions((current) => {
+      const next = new Set(current ?? []);
+
+      if (permissionKey === "rehearsal.manage") {
+        const isEnabled = next.has("rehearsal.manage");
+        if (isEnabled) {
+          next.delete("rehearsal.manage");
+        } else {
+          next.add("rehearsal.manage");
+          REHEARSAL_MANAGE_DEPENDENCIES.forEach((key) => next.add(key));
+        }
+        return Array.from(next);
+      }
+
+      if (next.has(permissionKey)) {
+        next.delete(permissionKey);
+      } else {
+        next.add(permissionKey);
+      }
+
+      const hasAllDependencies = REHEARSAL_MANAGE_DEPENDENCIES.every((key) => next.has(key));
+      if (!hasAllDependencies) {
+        next.delete("rehearsal.manage");
+      }
+
+      return Array.from(next);
+    });
   };
 
   return (
@@ -844,6 +886,28 @@ function MemberModal({
               })) ?? []),
             ]}
           />
+
+          <div className="space-y-2 rounded-lg border p-3 dark:border-gray-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Ensaios
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[...rehearsalPermissions, { key: "rehearsal.manage", label: "Admin de ensaios" }].map((permission) => (
+                <button
+                  key={permission.key}
+                  type="button"
+                  onClick={() => toggleRehearsalPermission(permission.key)}
+                  className={`px-2 py-1 rounded-full text-xs border transition-colors ${
+                    permissions.includes(permission.key)
+                      ? "bg-purple-600 text-white border-purple-600"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                  }`}
+                >
+                  {permission.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="space-y-3 max-h-72 overflow-auto pr-1">
             {groupedPermissions.map((group) => (
