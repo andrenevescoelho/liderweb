@@ -14,20 +14,18 @@ import {
   Clock,
   AlertCircle,
   Loader2,
-  Building2,
   CheckCircle2,
   XCircle,
   Headphones,
   Youtube,
   Play,
   CreditCard,
-  Crown,
   ExternalLink,
-  AlertTriangle,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar } from "recharts";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -133,54 +131,158 @@ export default function DashboardPage() {
       )}
 
       {userRole === "SUPERADMIN" && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Estratégico</h1>
+            <p className="text-gray-600 dark:text-gray-400">Visão macro da saúde e crescimento da plataforma</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card className="bg-gradient-to-br from-emerald-500 to-emerald-700 text-white">
+              <CardContent className="p-6">
+                <p className="text-emerald-100">MRR</p>
+                <p className="text-3xl font-bold">R$ {(stats?.mrr ?? 0).toLocaleString("pt-BR")}</p>
+              </CardContent>
+            </Card>
             <Card className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white">
               <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-indigo-100">Grupos</p>
-                    <p className="text-3xl font-bold">{stats?.totalGroups ?? 0}</p>
-                  </div>
-                  <Building2 className="w-12 h-12 opacity-50" />
-                </div>
+                <p className="text-indigo-100">Igrejas ativas</p>
+                <p className="text-3xl font-bold">{stats?.activeChurches ?? 0}</p>
               </CardContent>
             </Card>
-            <Link href="/members" className="block hover:opacity-95 transition-opacity">
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+            <Card className="bg-gradient-to-br from-amber-500 to-amber-700 text-white">
               <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-purple-100">Usuários</p>
-                    <p className="text-3xl font-bold">{stats?.totalMembers ?? 0}</p>
-                  </div>
-                  <Users className="w-12 h-12 opacity-50" />
-                </div>
+                <p className="text-amber-100">Igrejas em trial</p>
+                <p className="text-3xl font-bold">{stats?.trialChurches ?? 0}</p>
               </CardContent>
             </Card>
-        </Link>
-            <Link href="/songs" className="block hover:opacity-95 transition-opacity">
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
+            <Card className="bg-gradient-to-br from-rose-500 to-rose-700 text-white">
               <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-100">Músicas</p>
-                    <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
-                  </div>
-                  <Music className="w-12 h-12 opacity-50" />
+                <p className="text-rose-100">Churn mensal</p>
+                <p className="text-3xl font-bold">{(stats?.churn ?? 0).toFixed(1)}%</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle>Crescimento mensal</CardTitle>
+              </CardHeader>
+              <CardContent className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data?.superadminInsights?.monthlyGrowth ?? []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="newGroups" stroke="#7c3aed" name="Novas igrejas" />
+                    <Line type="monotone" dataKey="setlistsCreated" stroke="#2563eb" name="Escalas criadas" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Plano mais vendido</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats?.topPlan ?? "Sem dados"}</p>
+                <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                  <p>Total de ministérios: <span className="font-semibold">{stats?.totalMinistries ?? 0}</span></p>
+                  <p>Ativos 30d: <span className="font-semibold">{stats?.activeMinistries30d ?? 0}</span></p>
+                  <p>Inativos: <span className="font-semibold">{stats?.inactiveMinistries ?? 0}</span></p>
                 </div>
               </CardContent>
             </Card>
-        </Link>
           </div>
-          <div className="grid grid-cols-1 gap-3">
-            <Link href="/admin">
-              <Button variant="primary" className="w-full md:w-auto justify-start gap-2">
-                <Building2 className="w-4 h-4" /> Gerenciar Grupos
-              </Button>
-            </Link>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Uso por igreja (últimos 30 dias)</CardTitle>
+              </CardHeader>
+              <CardContent className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data?.superadminInsights?.schedulesByGroup ?? []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" hide />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="usage" fill="#0ea5e9" name="Escalas" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Alertas inteligentes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="p-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20">
+                  Igrejas com baixa atividade: <span className="font-semibold">{data?.superadminInsights?.alerts?.lowActivityGroups?.length ?? 0}</span>
+                </div>
+                <div className="p-3 rounded-md bg-rose-50 dark:bg-rose-900/20">
+                  Risco de cancelamento/falha de pagamento: <span className="font-semibold">{data?.superadminInsights?.alerts?.paymentIssues ?? 0}</span>
+                </div>
+                <div className="p-3 rounded-md bg-blue-50 dark:bg-blue-900/20">
+                  Queda de engajamento: <span className="font-semibold">{data?.superadminInsights?.alerts?.engagementDrop ?? 0}%</span>
+                </div>
+                <div className="p-3 rounded-md bg-purple-50 dark:bg-purple-900/20">
+                  Sugestão IA de plano: <span className="font-semibold">{data?.superadminInsights?.aiSuggestions?.suggestedPlan ?? "N/A"}</span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card><CardContent className="p-4"><p className="text-sm text-gray-500">Total de músicas</p><p className="text-2xl font-bold">{stats?.totalSongs ?? 0}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-gray-500">Escalas no mês</p><p className="text-2xl font-bold">{stats?.setlistsInMonth ?? 0}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-gray-500">Membros ativos (30d)</p><p className="text-2xl font-bold">{stats?.activeMembersIn30d ?? 0}</p></CardContent></Card>
+          </div>
+        </div>
+      )}
+
+
+      {(userRole === "ADMIN" || userRole === "LEADER") && data?.adminInsights && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Próxima escala</CardTitle></CardHeader>
+            <CardContent>
+              <p className="font-semibold">{data.adminInsights?.nextSchedule?.setlist?.name ?? "Sem escala"}</p>
+              <p className="text-sm text-gray-500">{data.adminInsights?.nextSchedule?.date ? format(new Date(data.adminInsights.nextSchedule.date), "dd/MM/yyyy HH:mm") : "Cadastre novas escalas"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Pendências</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{data.adminInsights?.pendingTasks ?? 0}</p>
+              <p className="text-sm text-gray-500">confirmações aguardando retorno</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Frequência de confirmações</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{(data.adminInsights?.confirmationRate ?? 0).toFixed(1)}%</p>
+              <p className="text-sm text-gray-500">taxa de aceite no mês</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {userRole === "MEMBER" && (
+        <Card>
+          <CardContent className="p-4 flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Próximo compromisso</p>
+              <p className="font-semibold">{myUpcomingSchedules?.[0]?.setlist?.name ?? "Nenhum compromisso pendente"}</p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/schedules"><Button size="sm" variant="primary">Confirmar presença</Button></Link>
+              <Link href="/songs"><Button size="sm" variant="outline">Baixar material</Button></Link>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {canAccessReports && (
