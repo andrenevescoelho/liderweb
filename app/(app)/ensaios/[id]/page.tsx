@@ -211,7 +211,7 @@ export default function EnsaioDetalhePage() {
       <Card>
         <CardHeader><CardTitle>Resumo</CardTitle></CardHeader>
         <CardContent className="space-y-1 text-sm">
-          <p>Status do ensaio: <b>{getStatusLabel(rehearsal.status)}</b> {renderStatusBadge(rehearsal.status)}</p>
+          <p>Status do ensaio: {renderStatusBadge(rehearsal.status)}</p>
           <p>Local: {rehearsal.location || "Não definido"}</p>
           <p>Tipo: {rehearsal.type}</p>
           <p>Confirmações: {accepted} aceitos / {pending} pendentes</p>
@@ -222,7 +222,7 @@ export default function EnsaioDetalhePage() {
       <Card>
         <CardHeader><CardTitle>{myAttendance?.status === "ACCEPTED" ? "Presença" : "Confirmar presença"}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-sm">Meu status atual: <b>{getStatusLabel(myAttendance?.status || "PENDING")}</b> {renderStatusBadge(myAttendance?.status || "PENDING")}</p>
+          <p className="text-sm">Meu status atual: {renderStatusBadge(myAttendance?.status || "PENDING")}</p>
           {myAttendance?.status !== "ACCEPTED" && (
             <>
               <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Justificativa (opcional)" />
@@ -277,10 +277,7 @@ export default function EnsaioDetalhePage() {
             {(rehearsal.attendance ?? []).map((item: any) => (
               <div key={item.id} className="border rounded p-2 flex items-center justify-between">
                 <span>{item.member?.name}</span>
-                <span className="inline-flex items-center gap-2">
-                  <span>{getStatusLabel(item.status)}</span>
-                  {renderStatusBadge(item.status)}
-                </span>
+                {renderStatusBadge(item.status)}
               </div>
             ))}
             <Button variant="outline">Enviar lembrete (stub)</Button>
