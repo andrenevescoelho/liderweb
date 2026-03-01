@@ -14,18 +14,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
+    const rehearsal = await db.rehearsal.findUnique({
+      where: { id: params.id },
+      select: { id: true, groupId: true },
+    });
+
+    if (!rehearsal) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
+
+    if (user.role !== "SUPERADMIN" && rehearsal.groupId !== user.groupId) {
+      return NextResponse.json({ error: "Sem permissão para confirmar presença" }, { status: 403 });
+    }
+
     const { status, justification, memberId } = await req.json();
 
     const canManageAttendance =
       user.role === "SUPERADMIN" ||
+      user.role === "ADMIN" ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
-
-    const canTakeAttendance =
-      hasPermission(user.role, "rehearsal.attendance", user.permissions) || canManageAttendance;
-
-    if (!canTakeAttendance) {
-      return NextResponse.json({ error: "Sem permissão para confirmar presença" }, { status: 403 });
-    }
 
     const targetMemberId = canManageAttendance ? memberId || user.id : user.id;
 

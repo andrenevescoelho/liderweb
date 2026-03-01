@@ -13,11 +13,9 @@ import { Button } from "@/components/ui/button";
 export default function EnsaiosPage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
-  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
-
-  const canManage = userRole === "SUPERADMIN" || userPermissions.includes("rehearsal.manage");
-  const canCreate = canManage || userPermissions.includes("rehearsal.create");
-  const canSendReminder = canManage || userPermissions.includes("rehearsal.reminder");
+  const canManage = userRole === "SUPERADMIN" || userRole === "ADMIN";
+  const canCreate = canManage;
+  const canSendReminder = canManage;
 
   const [rehearsals, setRehearsals] = useState<any[]>([]);
 

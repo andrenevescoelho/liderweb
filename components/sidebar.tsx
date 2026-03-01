@@ -73,8 +73,7 @@ const menuItems: MenuItem[] = [
     label: "Ensaios",
     href: "/ensaios",
     icon: <NotebookPen className="w-5 h-5" />,
-    roles: ["ADMIN", "LEADER"],
-    permissions: ["rehearsal.view", "rehearsal.attendance", "rehearsal.manage"],
+    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
   },
   {
     label: "Meu Plano",
@@ -132,6 +131,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
 
   const filteredMenuItems = menuItems.filter((item) => {
     if (item.href === "/meu-plano" && userRole === "SUPERADMIN") {
+      return false;
+    }
+
+    if (item.href === "/ensaios" && !user?.groupId) {
       return false;
     }
 
