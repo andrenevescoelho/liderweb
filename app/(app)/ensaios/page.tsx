@@ -17,6 +17,30 @@ const formatUtcDateTime = (value: string) => {
   return `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()} às ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
 };
 
+const statusMeta: Record<string, { badge: string; icon: string; classes: string }> = {
+  PUBLISHED: { badge: "Disponível", icon: "📢", classes: "bg-blue-100 text-blue-800" },
+  ACCEPTED: { badge: "Confirmado", icon: "✅", classes: "bg-green-100 text-green-800" },
+  REJECTED: { badge: "Indisponível", icon: "⚠️", classes: "bg-red-100 text-red-800" },
+  DECLINED: { badge: "Indisponível", icon: "⚠️", classes: "bg-red-100 text-red-800" },
+  PENDING: { badge: "Aguardando", icon: "🕒", classes: "bg-amber-100 text-amber-800" },
+  DRAFT: { badge: "Rascunho", icon: "📝", classes: "bg-slate-100 text-slate-700" },
+};
+
+const renderStatusBadge = (status?: string) => {
+  const meta = statusMeta[status ?? ""];
+
+  if (!meta) {
+    return <Badge>{status ?? "-"}</Badge>;
+  }
+
+  return (
+    <Badge className={`inline-flex items-center gap-1 ${meta.classes}`}>
+      <span>{meta.icon}</span>
+      <span>{meta.badge}</span>
+    </Badge>
+  );
+};
+
 export default function EnsaiosPage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
@@ -106,7 +130,7 @@ export default function EnsaiosPage() {
               <div className="space-y-2">
                 <p className="font-medium">{formatUtcDateTime(nextRehearsal.dateTime)}</p>
                 <p className="text-sm text-gray-500">Local: {nextRehearsal.location || "Não definido"}</p>
-                <Badge>{nextRehearsal.status}</Badge>
+                {renderStatusBadge(nextRehearsal.status)}
               </div>
             )}
           </CardContent>
