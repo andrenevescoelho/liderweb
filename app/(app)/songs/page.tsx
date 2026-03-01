@@ -20,6 +20,8 @@ import {
   Upload,
   X,
   FileAudio,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -366,6 +368,9 @@ function SongModal({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const [saving, setSaving] = useState(false);
+  const [communitySongs, setCommunitySongs] = useState<any[]>([]);
+  const [loadingCommunitySongs, setLoadingCommunitySongs] = useState(false);
+  const [addingSongId, setAddingSongId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -397,6 +402,47 @@ function SongModal({
     setUploading(false);
     setUploadProgress("");
   }, [song, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || song) return;
+
+    const fetchCommunitySongs = async () => {
+      setLoadingCommunitySongs(true);
+      try {
+        const res = await fetch("/api/songs?library=community");
+        const data = await res.json();
+        setCommunitySongs(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoadingCommunitySongs(false);
+      }
+    };
+
+    fetchCommunitySongs();
+  }, [isOpen, song]);
+
+  const handleAddFromCommunity = async (sourceSongId: string) => {
+    setAddingSongId(sourceSongId);
+    try {
+      const res = await fetch("/api/songs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceSongId }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || "Não foi possível adicionar a música");
+      }
+
+      onSave();
+    } catch (error: any) {
+      alert(error?.message || "Erro ao adicionar música existente");
+    } finally {
+      setAddingSongId("");
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -529,6 +575,64 @@ function SongModal({
       className="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+        {!song && (
+          <div className="space-y-3 p-4 border rounded-lg bg-purple-50/60 dark:bg-purple-900/10">
+            <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+              <Sparkles className="w-4 h-4" />
+              <h4 className="font-medium">Adicionar música já cadastrada</h4>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Selecione uma música de outros grupos e adicione direto ao seu repertório.
+            </p>
+
+            {loadingCommunitySongs ? (
+              <div className="flex items-center justify-center h-20">
+                <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+              </div>
+            ) : (communitySongs?.length ?? 0) === 0 ? (
+              <p className="text-sm text-gray-500">Nenhuma música compartilhada disponível no momento.</p>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {communitySongs.map((communitySong) => (
+                  <div
+                    key={communitySong?.id}
+                    className="min-w-[240px] max-w-[240px] border rounded-lg bg-white dark:bg-gray-900 p-3 space-y-2"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2">
+                        {communitySong?.title}
+                      </p>
+                      {communitySong?.artist && (
+                        <p className="text-xs text-gray-500">{communitySong.artist}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Badge variant="info">{communitySong?.originalKey ?? "C"}</Badge>
+                      {communitySong?.bpm && <span>{communitySong.bpm} BPM</span>}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleAddFromCommunity(communitySong?.id ?? "")}
+                      disabled={!!addingSongId}
+                    >
+                      {addingSongId === communitySong?.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-1" />
+                          Adicionar ao repertório
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <Input
           label="Título *"
           value={title}
