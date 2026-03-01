@@ -154,6 +154,11 @@ export default function DashboardPage() {
             <p className="text-gray-600 dark:text-gray-400">Visão macro da saúde e crescimento da plataforma</p>
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => scrollToSection("alertas-inteligentes")}>Ir para Alertas inteligentes</Button>
+            <Button variant="outline" onClick={() => scrollToSection("saude-sistema")}>Ir para Saúde do sistema</Button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <Button
               variant="ghost"
@@ -255,7 +260,7 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-            <Card>
+            <Card id="alertas-inteligentes">
               <CardHeader>
                 <CardTitle>Alertas inteligentes</CardTitle>
               </CardHeader>
