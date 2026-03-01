@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { hasPermission } from "@/lib/authorization";
 
 export async function POST(
   req: NextRequest,
@@ -15,12 +16,24 @@ export async function POST(
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    const userId = (session?.user as any)?.id;
+    const user = session.user as any;
+    const userId = user?.id;
+    const userRole = user?.role ?? "MEMBER";
+    const userPermissions = user?.permissions ?? [];
+
+    if (!hasPermission(userRole, "schedule.presence.confirm.self", userPermissions)) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { roleId, status } = body ?? {};
 
     if (!roleId || !status) {
       return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+    }
+
+    if (status !== "ACCEPTED" && status !== "DECLINED") {
+      return NextResponse.json({ error: "Status inválido" }, { status: 400 });
     }
 
     const role = await prisma.scheduleRole.findFirst({
@@ -33,8 +46,8 @@ export async function POST(
 
     if (!role) {
       return NextResponse.json(
-        { error: "Você não está escalado para esta função" },
-        { status: 403 }
+        { error: "Compromisso não encontrado" },
+        { status: 404 }
       );
     }
 
