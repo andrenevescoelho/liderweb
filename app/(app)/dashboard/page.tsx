@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<string | null>(null);
   const [confirmingNextCommitment, setConfirmingNextCommitment] = useState(false);
+  const [nextRehearsal, setNextRehearsal] = useState<any>(null);
+  const [confirmingRehearsal, setConfirmingRehearsal] = useState(false);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -75,10 +77,60 @@ export default function DashboardPage() {
       .catch(() => setLoading(false));
   };
 
+  const fetchNextRehearsal = () => {
+    fetch("/api/rehearsals/next")
+      .then((res) => res.json())
+      .then((d) => setNextRehearsal(d))
+      .catch(() => setNextRehearsal(null));
+  };
+
 
   useEffect(() => {
     fetchData();
+    fetchNextRehearsal();
   }, [canAccessReports]);
+
+  const handleConfirmNextRehearsal = async () => {
+    if (!nextRehearsal?.id || nextRehearsal?.attendanceStatus !== "PENDING") {
+      return;
+    }
+
+    setConfirmingRehearsal(true);
+    try {
+      const res = await fetch(`/api/rehearsals/${nextRehearsal.id}/attendance`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ACCEPTED" }),
+      });
+
+      if (!res.ok) {
+        toast({
+          title: "Não foi possível confirmar presença",
+          description: "Tente novamente em instantes.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Presença confirmada",
+        description: "Você confirmou presença no próximo ensaio.",
+      });
+
+      setNextRehearsal((prev: any) => (prev ? { ...prev, attendanceStatus: "ACCEPTED" } : prev));
+      fetchNextRehearsal();
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao confirmar presença",
+        description: "Não conseguimos confirmar sua presença agora.",
+        variant: "destructive",
+      });
+    } finally {
+      setConfirmingRehearsal(false);
+    }
+  };
 
   const handleRespond = async (scheduleId: string, roleId: string, status: "ACCEPTED" | "DECLINED") => {
     setResponding(roleId);
@@ -296,6 +348,8 @@ export default function DashboardPage() {
   ].filter(Boolean) as Array<{ key: string; href: string; label: string; icon: any }>;
 
   const showQuickActions = quickActions.length > 0;
+  const shouldShowRehearsalReminder =
+    userRole !== "SUPERADMIN" && !!nextRehearsal?.id && nextRehearsal?.attendanceStatus === "PENDING";
   const shouldShowNextCommitmentCard =
     userRole === "MEMBER" &&
     !!nextCommitment?.id &&
@@ -322,6 +376,39 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      )}
+
+      {shouldShowRehearsalReminder && (
+        <Card className="border-purple-200 bg-purple-50/70 dark:bg-purple-900/20 dark:border-purple-800">
+          <CardHeader>
+            <CardTitle className="text-base">Confirme sua presença no próximo ensaio</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="grid gap-1">
+              <p>
+                Data: <b>{format(new Date(nextRehearsal.dateTime), "dd/MM/yyyy", { locale: ptBR })}</b>
+              </p>
+              <p>
+                Horário: <b>{format(new Date(nextRehearsal.dateTime), "HH:mm", { locale: ptBR })}</b>
+              </p>
+              <p>
+                Local: <b>{nextRehearsal.location || "Não definido"}</b>
+              </p>
+              <p>
+                Status atual: <Badge variant="outline">PENDENTE</Badge>
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleConfirmNextRehearsal} disabled={confirmingRehearsal}>
+                {confirmingRehearsal && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirmar presença
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href={`/ensaios/${nextRehearsal.id}`}>Ver ensaio</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {userRole === "SUPERADMIN" && (
