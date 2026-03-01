@@ -74,7 +74,7 @@ const menuItems: MenuItem[] = [
     href: "/ensaios",
     icon: <NotebookPen className="w-5 h-5" />,
     roles: ["ADMIN", "LEADER"],
-    permissions: ["rehearsal.view"],
+    permissions: ["rehearsal.view", "rehearsal.attendance", "rehearsal.manage"],
   },
   {
     label: "Meu Plano",

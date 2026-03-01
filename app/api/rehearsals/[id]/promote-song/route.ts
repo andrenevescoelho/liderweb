@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { hasPermission } from "@/lib/authorization";
 
 const db = prisma as any;
 
@@ -12,7 +13,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const session = await getServerSession(authOptions);
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    if (!["SUPERADMIN", "ADMIN", "LEADER"].includes(user.role)) {
+    const canEdit =
+      user.role === "SUPERADMIN" ||
+      hasPermission(user.role, "rehearsal.edit", user.permissions) ||
+      hasPermission(user.role, "rehearsal.manage", user.permissions);
+
+    if (!canEdit) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 

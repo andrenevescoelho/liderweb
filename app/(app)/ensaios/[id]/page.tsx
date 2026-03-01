@@ -12,7 +12,9 @@ export default function EnsaioDetalhePage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userId = (session?.user as any)?.id;
-  const canManage = ["SUPERADMIN", "ADMIN", "LEADER"].includes(userRole);
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const canManage = userRole === "SUPERADMIN" || userPermissions.includes("rehearsal.manage");
+  const canTakeAttendance = canManage || userPermissions.includes("rehearsal.attendance");
 
   const [rehearsal, setRehearsal] = useState<any>(null);
   const [justification, setJustification] = useState("");
@@ -70,6 +72,7 @@ export default function EnsaioDetalhePage() {
         </CardContent>
       </Card>
 
+      {canTakeAttendance && (
       <Card>
         <CardHeader><CardTitle>Confirmar presença</CardTitle></CardHeader>
         <CardContent className="space-y-2">
@@ -82,6 +85,7 @@ export default function EnsaioDetalhePage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Repertório (lista vertical)</CardTitle></CardHeader>

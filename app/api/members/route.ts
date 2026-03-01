@@ -92,6 +92,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sem permissão para gerenciar membros" }, { status: 403 });
     }
 
+    const canManageMemberPermissions =
+      requester.role === "SUPERADMIN" ||
+      requester.role === "ADMIN" ||
+      hasPermission(requester.role as any, "permission.manage", requester.profile?.permissions);
+
     const body = await req.json();
     const { 
       // Campos para criar novo usuário
@@ -159,6 +164,10 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      if (permissions !== undefined && !canManageMemberPermissions) {
+        return NextResponse.json({ error: "Sem permissão para definir permissões do membro" }, { status: 403 });
+      }
+
       const hashedPassword = await bcrypt.hash(password, 10);
       const optionalProfileData = getOptionalMemberProfileData({
         memberFunction,
@@ -207,6 +216,10 @@ export async function POST(req: NextRequest) {
             { status: 403 }
           );
         }
+      }
+
+      if (permissions !== undefined && requester.id !== userId && !canManageMemberPermissions) {
+        return NextResponse.json({ error: "Sem permissão para alterar permissões de outros membros" }, { status: 403 });
       }
 
       const optionalProfileData = getOptionalMemberProfileData({
