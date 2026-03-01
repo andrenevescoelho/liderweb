@@ -3,17 +3,28 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { Music2, CalendarClock, AlertTriangle, Clock3, Plus, BellRing } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { hasPermission } from "@/lib/authorization";
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+const formatUtcDateTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Data inválida";
+  return `${pad(date.getUTCDate())}/${pad(date.getUTCMonth() + 1)}/${date.getUTCFullYear()} às ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+};
 
 export default function EnsaiosPage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
-  const canManage = userRole === "SUPERADMIN" || userRole === "ADMIN";
+  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const canManage =
+    userRole === "SUPERADMIN" ||
+    userRole === "ADMIN" ||
+    hasPermission(userRole, "rehearsal.manage", userPermissions);
   const canCreate = canManage;
   const canSendReminder = canManage;
 
@@ -48,6 +59,10 @@ export default function EnsaiosPage() {
   }, [nextRehearsal]);
 
   const songTotalMinutes = useMemo(() => {
+    if (Number(nextRehearsal?.estimatedMinutes) > 0) {
+      return Number(nextRehearsal.estimatedMinutes);
+    }
+
     const songs = nextRehearsal?.songs ?? [];
     const withBpm = songs.filter((song: any) => Number(song.bpm) > 0);
     if (withBpm.length === 0) return nextRehearsal?.estimatedMinutes ?? 0;
@@ -89,7 +104,7 @@ export default function EnsaiosPage() {
               <p className="text-gray-500">Nenhum ensaio agendado.</p>
             ) : (
               <div className="space-y-2">
-                <p className="font-medium">{format(new Date(nextRehearsal.dateTime), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                <p className="font-medium">{formatUtcDateTime(nextRehearsal.dateTime)}</p>
                 <p className="text-sm text-gray-500">Local: {nextRehearsal.location || "Não definido"}</p>
                 <Badge>{nextRehearsal.status}</Badge>
               </div>
@@ -113,15 +128,17 @@ export default function EnsaiosPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle>Presença confirmada</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>Aceitos: {attendanceStats.accepted}</p>
-            <p>Pendentes: {attendanceStats.pending}</p>
-            <p>Recusados: {attendanceStats.declined}</p>
-            <p className="font-semibold">Taxa de confirmação: {attendanceStats.confirmationRate}%</p>
-          </CardContent>
-        </Card>
+        {canManage && (
+          <Card>
+            <CardHeader><CardTitle>Presença confirmada</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>Aceitos: {attendanceStats.accepted}</p>
+              <p>Pendentes: {attendanceStats.pending}</p>
+              <p>Recusados: {attendanceStats.declined}</p>
+              <p className="font-semibold">Taxa de confirmação: {attendanceStats.confirmationRate}%</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="w-5 h-5 text-purple-600" /> Tempo estimado</CardTitle></CardHeader>

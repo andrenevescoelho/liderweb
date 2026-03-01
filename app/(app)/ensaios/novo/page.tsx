@@ -58,9 +58,16 @@ export default function NovoEnsaioPage() {
         if (!data?.id) return;
 
         const dateTime = data.dateTime ? new Date(data.dateTime) : null;
+        const dateValue = dateTime
+          ? `${dateTime.getUTCFullYear()}-${String(dateTime.getUTCMonth() + 1).padStart(2, "0")}-${String(dateTime.getUTCDate()).padStart(2, "0")}`
+          : "";
+        const timeValue = dateTime
+          ? `${String(dateTime.getUTCHours()).padStart(2, "0")}:${String(dateTime.getUTCMinutes()).padStart(2, "0")}`
+          : "19:30";
+
         setForm({
-          date: dateTime ? dateTime.toISOString().slice(0, 10) : "",
-          time: dateTime ? dateTime.toISOString().slice(11, 16) : "19:30",
+          date: dateValue,
+          time: timeValue,
           location: data.location || "",
           notes: data.notes || "",
           type: data.type || "GENERAL",
