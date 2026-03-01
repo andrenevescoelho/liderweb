@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -19,9 +18,9 @@ import {
   Headphones,
   Youtube,
   Play,
-  CreditCard,
-  ExternalLink,
   ServerCrash,
+  Plus,
+  Bell,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,13 +39,10 @@ import {
 } from "recharts";
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { data: session } = useSession() || {};
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<string | null>(null);
-  const [subscription, setSubscription] = useState<any>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -56,6 +52,8 @@ export default function DashboardPage() {
     userRole === "LEADER" ||
     userPermissions.includes("report.group.access") ||
     userPermissions.includes("report.minister.stats");
+  const canAccessAdminDashboard =
+    userRole === "ADMIN" || userPermissions.includes("report.group.access");
 
   const fetchData = () => {
     fetch("/api/dashboard")
@@ -67,29 +65,10 @@ export default function DashboardPage() {
       .catch(() => setLoading(false));
   };
 
-  const fetchSubscription = () => {
-    fetch("/api/subscription/status")
-      .then((res) => res.json())
-      .then((d) => setSubscription(d))
-      .catch(() => {});
-  };
 
   useEffect(() => {
     fetchData();
-    if (canAccessReports) {
-      fetchSubscription();
-    }
   }, [canAccessReports]);
-
-  const handleManageSubscription = async () => {
-    setPortalLoading(true);
-    try {
-      router.push("/meu-plano");
-    } finally {
-      // mantém o loading por alguns ms só para feedback
-      setTimeout(() => setPortalLoading(false), 300);
-    }
-  };
 
   const handleRespond = async (scheduleId: string, roleId: string, status: "ACCEPTED" | "DECLINED") => {
     setResponding(roleId);
@@ -125,9 +104,6 @@ export default function DashboardPage() {
   const myUpcomingSchedules = data?.myUpcomingSchedules ?? [];
   const pendingConfirmations = data?.pendingConfirmations ?? [];
   const songsToRehearse = data?.songsToRehearse ?? [];
-  const adminInsights = data?.adminInsights;
-  const monthlySchedules = adminInsights?.reports?.schedulesByMonth ?? [];
-
 
 
   return (
@@ -321,166 +297,6 @@ export default function DashboardPage() {
       )}
 
 
-      {(userRole === "ADMIN" || userRole === "LEADER") && adminInsights && (
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-white/10 bg-[#121A2C] p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">Dashboard</h1>
-                <p className="text-sm text-slate-300">Visão operacional do ministério</p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <select className="h-10 rounded-xl border border-white/10 bg-slate-900/70 px-4 text-sm text-slate-100 outline-none focus:border-violet-400">
-                  <option>{data?.groupName ? `Ministério: ${data.groupName}` : "Ministério atual"}</option>
-                </select>
-                <select className="h-10 rounded-xl border border-white/10 bg-slate-900/70 px-4 text-sm text-slate-100 outline-none focus:border-violet-400">
-                  <option>Últimos 30 dias</option>
-                  <option>Últimos 60 dias</option>
-                  <option>Últimos 90 dias</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Card className="h-full rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <p className="text-sm text-slate-300">Taxa de confirmação</p>
-              <p className="mt-3 text-3xl font-semibold text-white">{(adminInsights?.confirmationRate ?? 0).toFixed(1)}%</p>
-              <p className="mt-2 text-xs text-slate-400">Aceites no período</p>
-            </Card>
-            <Card className="h-full rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <p className="text-sm text-slate-300">Pendentes</p>
-              <p className="mt-3 text-3xl font-semibold text-white">{adminInsights?.pendingTasks ?? 0}</p>
-              <p className="mt-2 text-xs text-slate-400">Confirmações aguardando resposta</p>
-            </Card>
-            <Card className="h-full rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <p className="text-sm text-slate-300">Próximo culto</p>
-              <p className="mt-3 text-lg font-semibold text-white">{adminInsights?.nextSchedule?.setlist?.name ?? "Sem culto"}</p>
-              <p className="mt-2 text-xs text-slate-400">{adminInsights?.nextSchedule?.date ? format(new Date(adminInsights.nextSchedule.date), "dd MMM, HH:mm", { locale: ptBR }) : "Sem data definida"}</p>
-            </Card>
-            <Card className="h-full rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <p className="text-sm text-slate-300">Músicas para ensaio</p>
-              <p className="mt-3 text-3xl font-semibold text-white">{songsToRehearse?.length ?? 0}</p>
-              <p className="mt-2 text-xs text-slate-400">Repertório preparado para a semana</p>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <Card className="xl:col-span-2 rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Próxima escala</h2>
-                  <p className="text-sm text-slate-400">Membros escalados e status de resposta</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {(adminInsights?.nextSchedule?.roles ?? []).slice(0, 6).map((role: any) => (
-                  <div key={role.id} className="flex flex-col gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="font-medium text-slate-100">{role.member?.name ?? role.memberName ?? "Membro"}</p>
-                      <p className="text-xs text-slate-400">{role.role}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant={role.status === "ACCEPTED" ? "success" : role.status === "DECLINED" ? "danger" : "secondary"}>
-                        {role.status === "ACCEPTED" ? "Confirmado" : role.status === "DECLINED" ? "Recusado" : "Pendente"}
-                      </Badge>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">Ver</Button>
-                        <Button size="sm" variant="outline">Editar</Button>
-                        <Button size="sm" variant="outline">Lembrete</Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {(adminInsights?.nextSchedule?.roles ?? []).length === 0 && (
-                  <div className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">Nenhuma escala futura com membros encontrados.</div>
-                )}
-              </div>
-            </Card>
-
-            <Card className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <h2 className="text-lg font-semibold text-white">Confirmações últimos 6 cultos</h2>
-              <p className="mb-4 text-sm text-slate-400">Histórico recente de confirmações</p>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={(monthlySchedules ?? []).slice(-6)}>
-                    <CartesianGrid strokeDasharray="2 6" stroke="rgba(148,163,184,0.2)" vertical={false} />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12 }} />
-                    <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12 }} />
-                    <Tooltip cursor={{ fill: "rgba(148,163,184,0.1)" }} contentStyle={{ backgroundColor: "#0F172A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12 }} />
-                    <Bar dataKey="count" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <Card className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <h2 className="text-lg font-semibold text-white">Repertório</h2>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl border border-white/10 bg-slate-900/40 p-3">
-                  <p className="text-slate-400">Músicas novas (mês)</p>
-                  <p className="text-xl font-semibold text-white">{adminInsights?.repertoire?.newSongsInMonth ?? 0}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900/40 p-3">
-                  <p className="text-slate-400">Tom mais usado</p>
-                  <p className="text-xl font-semibold text-white">{adminInsights?.repertoire?.topKey ?? "N/A"}</p>
-                </div>
-              </div>
-              <div className="mt-5">
-                <p className="mb-2 text-sm font-medium text-slate-200">Top 5 músicas</p>
-                <div className="space-y-2">
-                  {(adminInsights?.repertoire?.mostUsedSongs ?? []).slice(0, 5).map((song: any, index: number) => (
-                    <div key={`${song.title}-${index}`} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/40 px-3 py-2 text-sm">
-                      <span className="text-slate-200">{index + 1}. {song.title}</span>
-                      <span className="text-slate-400">{song.uses}x</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#121A2C] p-6">
-              <h2 className="text-lg font-semibold text-white">Indicadores inteligentes</h2>
-              <p className="mt-1 text-sm text-slate-400">Alertas operacionais para ação rápida</p>
-              <div className="mt-4 space-y-3 text-sm">
-                {[
-                  {
-                    label: "Ministério sobrecarregado",
-                    value: adminInsights?.smartIndicators?.overloadedMinistry,
-                    reason: "Concentração alta das escalas em poucos membros.",
-                  },
-                  {
-                    label: "Membros repetidos",
-                    value: adminInsights?.smartIndicators?.repeatedMembers,
-                    reason: "Os mesmos membros aparecem com frequência elevada.",
-                  },
-                  {
-                    label: "Diversidade de instrumentos",
-                    value: adminInsights?.smartIndicators?.lowDiversity,
-                    reason: "Baixa cobertura em instrumentos críticos.",
-                  },
-                  {
-                    label: "Índice de ausência",
-                    value: adminInsights?.smartIndicators?.highAbsenceMember,
-                    reason: "Percentual de recusas acima do ideal.",
-                  },
-                ].map((indicator) => (
-                  <div key={indicator.label} className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-100">{indicator.label}</span>
-                      <Badge variant={indicator.value ? "secondary" : "success"}>{indicator.value ? "Atenção" : "OK"}</Badge>
-                    </div>
-                    <p className="text-xs text-slate-400">{indicator.reason}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
       {userRole === "MEMBER" && (
         <Card>
           <CardContent className="p-4 flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
@@ -496,118 +312,52 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {canAccessReports && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-purple-100">Membros</p>
-                  <p className="text-3xl font-bold">{stats?.totalMembers ?? 0}</p>
-                </div>
-                <Users className="w-12 h-12 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100">Músicas</p>
-                  <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
-                </div>
-                <Music className="w-12 h-12 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Seção de Assinatura para Admin/Leader */}
-      {canAccessReports && subscription && (
-        <Card className={`border ${subscription.isActive ? "border-green-500/40" : subscription.hasSubscription ? "border-yellow-500/40" : "border-gray-300/40"}`}>
-          <CardHeader className="py-3">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CreditCard className="w-4 h-4" />
-                Assinatura
-                {subscription.subscription?.status && (
-                  <Badge
-                    variant={
-                      subscription.subscription?.status === "ACTIVE" ? "success" :
-                      subscription.subscription?.status === "TRIALING" ? "info" :
-                      subscription.subscription?.status === "CANCELED" ? "danger" : "secondary"
-                    }
-                    className="ml-2"
-                  >
-                    {subscription.subscription?.status === "ACTIVE" ? "Ativa" :
-                     subscription.subscription?.status === "TRIALING" ? "Teste" :
-                     subscription.subscription?.status === "CANCELED" ? "Cancelada" :
-                     subscription.subscription?.status}
-                  </Badge>
-                )}
-              </CardTitle>
-
-              {userRole === "ADMIN" && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleManageSubscription}
-                  disabled={portalLoading}
-                >
-                  {portalLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Abrindo...
-                    </>
-                  ) : (
-                    <>
-                      Gerenciar
-                      <ExternalLink className="w-4 h-4 ml-2" />
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-
-          <CardContent className="pt-0 pb-3">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
-              <span>
-                Plano:{" "}
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {subscription.subscription?.planName ?? "Sem plano"}
-                </span>
-              </span>
-
-              {subscription.hasSubscription && (
-                <>
-                  <span>
-                    Usuários:{" "}
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {subscription.subscription?.userCount ?? 0}/{subscription.subscription?.userLimit === 0 ? "∞" : subscription.subscription?.userLimit}
-                    </span>
-                  </span>
-
-                  {subscription.subscription?.currentPeriodEnd && (
-                    <span>
-                      Próxima cobrança:{" "}
-                      <span className="font-semibold text-gray-900 dark:text-white">
-                        {format(new Date(subscription.subscription.currentPeriodEnd), "dd/MM/yyyy")}
-                      </span>
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {userRole !== "SUPERADMIN" && (
         <>
+          <Card className="rounded-xl border border-border/80">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Ações rápidas</p>
+                  <p className="text-base font-semibold">Acelere a rotina do ministério</p>
+                </div>
+                <div className="grid w-full gap-2 sm:grid-cols-3 md:w-auto">
+                  <Link href="/schedules">
+                    <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                      <Plus className="h-4 w-4" /> Criar escala
+                    </Button>
+                  </Link>
+                  <Link href="/songs">
+                    <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                      <Music className="h-4 w-4" /> Adicionar música
+                    </Button>
+                  </Link>
+                  <Link href={canAccessAdminDashboard ? "/dashboard/admin" : "/schedules"}>
+                    <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+                      <Bell className="h-4 w-4" /> Enviar lembrete
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {canAccessAdminDashboard && (
+            <Card className="rounded-xl border border-border/80">
+              <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Gestão e métricas</p>
+                  <p className="font-medium">Acesse análises no Dashboard de Administração</p>
+                </div>
+                <Link href="/dashboard/admin">
+                  <Button size="sm" variant="primary">Ir para Administração</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Minhas Próximas Escalas */}
-          <Card>
+          <Card className="rounded-xl border border-border/80">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-purple-600" />
@@ -720,7 +470,7 @@ export default function DashboardPage() {
 
           {/* Músicas para Ensaiar */}
           {(songsToRehearse?.length ?? 0) > 0 && (
-            <Card>
+            <Card className="rounded-xl border border-border/80">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Headphones className="w-5 h-5 text-green-600" />
@@ -731,11 +481,7 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {songsToRehearse?.map?.((song: any) => (
-                    <Link
-                      key={song?.id ?? ''}
-                      href={`/songs?songId=${song?.id ?? ""}`}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
-                    >
+                    <div key={song?.id ?? ''} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
                       <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center">
                         <Music className="w-5 h-5 text-green-600" />
                       </div>
@@ -760,7 +506,15 @@ export default function DashboardPage() {
                           </div>
                         )}
                       </div>
-                    </Link>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/songs?songId=${song?.id ?? ""}`}>
+                          <Button size="sm" variant="ghost">Ver música</Button>
+                        </Link>
+                        {song?.canMarkRehearsed && (
+                          <Button size="sm" variant="outline">Marcar como ensaiada</Button>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </CardContent>
@@ -769,7 +523,7 @@ export default function DashboardPage() {
 
           {/* Escalas do Grupo (apenas para Admin/Leader) */}
           {canAccessReports && (upcomingSchedules?.length ?? 0) > 0 && (
-            <Card>
+            <Card className="rounded-xl border border-border/80">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-blue-600" />
@@ -809,9 +563,41 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Pendências (Admin/Leader) */}
-          {canAccessReports && (pendingConfirmations?.length ?? 0) > 0 && (
-            <Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="rounded-xl border border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-600" />
+                  Membros
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-3xl font-bold">{stats?.totalMembers ?? 0}</p>
+                <Link href="/members">
+                  <Button size="sm" variant="outline">Gerenciar membros</Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-xl border border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Music className="w-5 h-5 text-blue-600" />
+                  Músicas
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
+                <Link href="/songs">
+                  <Button size="sm" variant="outline">Gerenciar repertório</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Pendências (mantidas só para membros sem gestão) */}
+          {!canAccessAdminDashboard && (pendingConfirmations?.length ?? 0) > 0 && (
+            <Card className="rounded-xl border border-border/80">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-yellow-600" />

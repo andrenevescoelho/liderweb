@@ -31,10 +31,17 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   {
-    label: "Dashboard",
+    label: "Início",
     href: "/dashboard",
     icon: <LayoutDashboard className="w-5 h-5" />,
     roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
+  },
+  {
+    label: "Administração",
+    href: "/dashboard/admin",
+    icon: <Shield className="w-5 h-5" />,
+    roles: ["ADMIN"],
+    permissions: ["report.group.access"],
   },
   {
     label: "Grupos",
