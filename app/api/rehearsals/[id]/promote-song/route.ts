@@ -15,10 +15,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const canEdit =
       user.role === "SUPERADMIN" ||
+      user.role === "ADMIN" ||
       hasPermission(user.role, "rehearsal.edit", user.permissions) ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
     if (!canEdit) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
+
+    const rehearsal = await db.rehearsal.findUnique({ where: { id: params.id }, select: { groupId: true } });
+    if (!rehearsal) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
+
+    if (user.role !== "SUPERADMIN" && rehearsal.groupId !== user.groupId) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 

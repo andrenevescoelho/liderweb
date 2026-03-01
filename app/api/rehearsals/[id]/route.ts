@@ -7,22 +7,13 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 
 const db = prisma as any;
+const isAdminRole = (role?: string) => role === "SUPERADMIN" || role === "ADMIN";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-    const canViewRehearsal =
-      user.role === "SUPERADMIN" ||
-      hasPermission(user.role, "rehearsal.view", user.permissions) ||
-      hasPermission(user.role, "rehearsal.attendance", user.permissions) ||
-      hasPermission(user.role, "rehearsal.manage", user.permissions);
-
-    if (!canViewRehearsal) {
-      return NextResponse.json({ error: "Sem permissão para visualizar ensaio" }, { status: 403 });
-    }
 
     if (!db?.rehearsal?.findUnique) {
       console.error("Get rehearsal error: Prisma delegate 'rehearsal' is not available");
@@ -42,6 +33,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
 
     if (!rehearsal) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
+
+    if (user.role !== "SUPERADMIN" && rehearsal.groupId !== user.groupId) {
+      return NextResponse.json({ error: "Sem permissão para visualizar ensaio" }, { status: 403 });
+    }
+
     return NextResponse.json(rehearsal);
   } catch (error) {
     console.error("Get rehearsal error:", error);
@@ -56,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
     const canEdit =
-      user.role === "SUPERADMIN" ||
+      isAdminRole(user.role) ||
       hasPermission(user.role, "rehearsal.edit", user.permissions) ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
@@ -67,7 +63,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const isPublishing = status === "PUBLISHED";
     const canPublish =
-      user.role === "SUPERADMIN" ||
+      isAdminRole(user.role) ||
       hasPermission(user.role, "rehearsal.publish", user.permissions) ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
@@ -79,8 +75,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
     }
 
-    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true } });
+    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true, groupId: true } });
     if (!current) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
+
+    if (user.role !== "SUPERADMIN" && current.groupId !== user.groupId) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
 
     if (Array.isArray(songs)) {
       await db.rehearsalSong.deleteMany({ where: { rehearsalId: params.id } });
@@ -146,7 +146,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
     const canDelete =
-      user.role === "SUPERADMIN" ||
+      isAdminRole(user.role) ||
       hasPermission(user.role, "rehearsal.delete", user.permissions) ||
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
@@ -156,8 +156,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
     }
 
-    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true } });
+    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true, groupId: true } });
     if (!current) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
+
+    if (user.role !== "SUPERADMIN" && current.groupId !== user.groupId) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
 
     await db.rehearsal.delete({ where: { id: params.id } });
 

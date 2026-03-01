@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +14,9 @@ const TAGS = ["🔁 Nova", "🎯 Ajuste técnico", "🎤 Treinar vocal", "🥁 F
 
 export default function NovoEnsaioPage() {
   const router = useRouter();
+  const { data: session } = useSession() || {};
+  const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const canManage = userRole === "SUPERADMIN" || userRole === "ADMIN";
   const [songsCatalog, setSongsCatalog] = useState<any[]>([]);
   const [form, setForm] = useState<any>({
     date: "",
@@ -28,11 +32,13 @@ export default function NovoEnsaioPage() {
   const [uploadProgress, setUploadProgress] = useState<string>("");
 
   useEffect(() => {
+    if (!canManage) return;
+
     fetch("/api/songs")
       .then((res) => res.json())
       .then((data) => setSongsCatalog(data ?? []))
       .catch(() => setSongsCatalog([]));
-  }, []);
+  }, [canManage]);
 
   const addExistingSong = (songId: string) => {
     const song = songsCatalog.find((item) => item.id === songId);
@@ -101,6 +107,15 @@ export default function NovoEnsaioPage() {
     const created = await res.json();
     router.push(`/ensaios/${created.id}`);
   };
+
+  if (!canManage) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Novo ensaio</h1>
+        <p className="text-sm text-gray-500">Somente administradores podem criar ensaios.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

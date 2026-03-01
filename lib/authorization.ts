@@ -31,7 +31,6 @@ const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, string[]> = {
     "schedule.edit",
     "report.group.access",
     "rehearsal.view",
-    "rehearsal.manage",
     "rehearsal.attendance",
   ],
   MEMBER: ["profile.self.edit", "schedule.future.view", "schedule.presence.confirm.self", "rehearsal.view", "rehearsal.attendance"],

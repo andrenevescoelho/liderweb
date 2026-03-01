@@ -550,7 +550,6 @@ function MemberModal({
   const [error, setError] = useState("");
 
   const rehearsalPermissions = [
-    { key: "rehearsal.view", label: "Ver ensaios" },
     { key: "rehearsal.attendance", label: "Confirmar presença" },
     { key: "rehearsal.create", label: "Criar ensaio" },
     { key: "rehearsal.edit", label: "Editar ensaio" },

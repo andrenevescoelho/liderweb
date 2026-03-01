@@ -6,8 +6,12 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMont
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSession } from "next-auth/react";
 
 export default function EnsaiosCalendarioPage() {
+  const { data: session } = useSession() || {};
+  const userRole = (session?.user as any)?.role ?? "MEMBER";
+  const canManage = userRole === "SUPERADMIN" || userRole === "ADMIN";
   const [month, setMonth] = useState(new Date());
   const [rehearsals, setRehearsals] = useState<any[]>([]);
 
@@ -26,7 +30,7 @@ export default function EnsaiosCalendarioPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Calendário de ensaios</h1>
-        <Link href="/ensaios/novo"><Button>Novo ensaio</Button></Link>
+        {canManage && <Link href="/ensaios/novo"><Button>Novo ensaio</Button></Link>}
       </div>
 
       <Card>
@@ -46,7 +50,7 @@ export default function EnsaiosCalendarioPage() {
             {days.map((day) => {
               const rehearsal = rehearsalForDay(day);
               return (
-                <Link key={day.toISOString()} href={rehearsal ? `/ensaios/${rehearsal.id}` : "/ensaios/novo"} className={`min-h-[86px] rounded-md border p-2 ${rehearsal ? "bg-purple-50" : "bg-white"}`}>
+                <Link key={day.toISOString()} href={rehearsal ? `/ensaios/${rehearsal.id}` : (canManage ? "/ensaios/novo" : "/ensaios")} className={`min-h-[86px] rounded-md border p-2 ${rehearsal ? "bg-purple-50" : "bg-white"}`}>
                   <p className="text-sm font-medium">{format(day, "d")}</p>
                   {rehearsal && (
                     <>
