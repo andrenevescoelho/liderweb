@@ -403,9 +403,12 @@ export default function DashboardPage() {
                 {confirmingRehearsal && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirmar presença
               </Button>
-              <Button variant="outline" asChild>
-                <Link href={`/ensaios/${nextRehearsal.id}`}>Ver ensaio</Link>
-              </Button>
+              <Link 
+                href={`/ensaios/${nextRehearsal.id}`}
+                className="inline-flex items-center justify-center rounded-lg font-medium transition-all px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Ver ensaio
+              </Link>
             </div>
           </CardContent>
         </Card>

@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
 
     if (members.length > 0) {
       await db.rehearsalAttendance.createMany({
-        data: members.map((member) => ({
+        data: members.map((member: { id: string }) => ({
           rehearsalId: created.id,
           memberId: member.id,
           status: "PENDING",
