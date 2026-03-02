@@ -5,10 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -24,17 +21,18 @@ export async function GET(
       return NextResponse.json({ error: "Música não encontrada" }, { status: 404 });
     }
 
-    return NextResponse.json(song);
+    return NextResponse.json({
+      ...song,
+      bpmEffective: song.bpmUserOverride ?? song.bpmDetected ?? song.bpm,
+      keyEffective: song.keyUserOverride ?? song.keyDetected ?? song.originalKey,
+    });
   } catch (error) {
     console.error("Get song error:", error);
     return NextResponse.json({ error: "Erro ao buscar música" }, { status: 500 });
   }
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     const userRole = (session?.user as any)?.role;
@@ -46,12 +44,14 @@ export async function PUT(
     const body = await req.json();
     const { title, artist, bpm, originalKey, timeSignature, tags, lyrics, chordPro, audioUrl, youtubeUrl } = body ?? {};
 
+    const parsedBpm = bpm ? parseInt(bpm) : null;
+
     const song = await prisma.song.update({
       where: { id: params?.id },
       data: {
         title,
         artist: artist ?? null,
-        bpm: bpm ? parseInt(bpm) : null,
+        bpm: parsedBpm,
         originalKey,
         timeSignature: timeSignature ?? "4/4",
         tags: tags ?? [],
@@ -59,6 +59,8 @@ export async function PUT(
         chordPro: chordPro ?? null,
         audioUrl: audioUrl ?? null,
         youtubeUrl: youtubeUrl ?? null,
+        bpmUserOverride: parsedBpm,
+        keyUserOverride: originalKey ?? null,
       },
     });
 
@@ -69,10 +71,7 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     const userRole = (session?.user as any)?.role;
