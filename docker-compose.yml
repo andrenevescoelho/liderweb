@@ -41,15 +41,20 @@ services:
       - liderweb_node_modules:/app/node_modules
     command: >-
       sh -lc '
-      APP_DIR="/app";
-      if [ ! -f "${APP_DIR}/package.json" ] && [ -f "/app/app/package.json" ]; then
-        APP_DIR="/app/app";
-      fi;
-      if [ ! -f "${APP_DIR}/package.json" ]; then
-        echo "[liderweb_app] package.json não encontrado em /app nem /app/app";
+      APP_DIR="";
+      for CANDIDATE in /app /app/app /workspace/liderweb /workspace/liderweb/app; do
+        if [ -f "${CANDIDATE}/package.json" ]; then
+          APP_DIR="${CANDIDATE}";
+          break;
+        fi;
+      done;
+      if [ -z "${APP_DIR}" ]; then
+        echo "[liderweb_app] package.json não encontrado.";
+        echo "[liderweb_app] caminhos tentados: /app, /app/app, /workspace/liderweb, /workspace/liderweb/app";
         echo "[liderweb_app] verifique o bind mount configurado em docker-compose.yml";
         sleep infinity;
       fi;
+      echo "[liderweb_app] usando APP_DIR=${APP_DIR}";
       cd "${APP_DIR}" &&
       npm install --legacy-peer-deps --no-audit --no-fund &&
       npx prisma generate &&
