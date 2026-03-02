@@ -371,6 +371,14 @@ function SongModal({
   const [communitySongs, setCommunitySongs] = useState<any[]>([]);
   const [loadingCommunitySongs, setLoadingCommunitySongs] = useState(false);
   const [addingSongId, setAddingSongId] = useState("");
+  const [analysisStatus, setAnalysisStatus] = useState<string>("FAILED");
+  const [analysisError, setAnalysisError] = useState<string>("");
+  const [bpmDetected, setBpmDetected] = useState<number | null>(null);
+  const [keyDetected, setKeyDetected] = useState<string>("");
+  const [modeDetected, setModeDetected] = useState<string>("");
+  const [confidenceBpm, setConfidenceBpm] = useState<number | null>(null);
+  const [confidenceKey, setConfidenceKey] = useState<number | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -386,6 +394,13 @@ function SongModal({
       setYoutubeUrl(song?.youtubeUrl ?? "");
       setAudioUrl(song?.audioUrl ?? "");
       setAudioMode("link");
+      setAnalysisStatus(song?.analysisStatus ?? "FAILED");
+      setAnalysisError(song?.analysisError ?? "");
+      setBpmDetected(song?.bpmDetected ?? null);
+      setKeyDetected(song?.keyDetected ?? "");
+      setModeDetected(song?.modeDetected ?? "");
+      setConfidenceBpm(song?.confidenceBpm ?? null);
+      setConfidenceKey(song?.confidenceKey ?? null);
     } else {
       setTitle("");
       setArtist("");
@@ -398,6 +413,13 @@ function SongModal({
       setYoutubeUrl("");
       setAudioUrl("");
       setAudioMode("link");
+      setAnalysisStatus("FAILED");
+      setAnalysisError("");
+      setBpmDetected(null);
+      setKeyDetected("");
+      setModeDetected("");
+      setConfidenceBpm(null);
+      setConfidenceKey(null);
     }
     setUploading(false);
     setUploadProgress("");
@@ -441,6 +463,47 @@ function SongModal({
       alert(error?.message || "Erro ao adicionar música existente");
     } finally {
       setAddingSongId("");
+    }
+  };
+
+  const refreshSongAnalysisData = async () => {
+    if (!song?.id) return;
+
+    const res = await fetch(`/api/songs/${song.id}`);
+    if (!res.ok) return;
+
+    const updatedSong = await res.json();
+    setBpm(updatedSong?.bpmUserOverride?.toString?.() ?? updatedSong?.bpm?.toString?.() ?? "");
+    setOriginalKey(updatedSong?.keyUserOverride ?? updatedSong?.originalKey ?? "C");
+    setAnalysisStatus(updatedSong?.analysisStatus ?? "FAILED");
+    setAnalysisError(updatedSong?.analysisError ?? "");
+    setBpmDetected(updatedSong?.bpmDetected ?? null);
+    setKeyDetected(updatedSong?.keyDetected ?? "");
+    setModeDetected(updatedSong?.modeDetected ?? "");
+    setConfidenceBpm(updatedSong?.confidenceBpm ?? null);
+    setConfidenceKey(updatedSong?.confidenceKey ?? null);
+  };
+
+  const handleAnalyzeSong = async () => {
+    if (!song?.id) return;
+
+    setAnalyzing(true);
+    try {
+      const res = await fetch(`/api/songs/${song.id}/analyze`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Não foi possível iniciar a análise automática.");
+      }
+
+      setAnalysisStatus("PENDING");
+      setAnalysisError("");
+      alert("Análise iniciada! Atualize em alguns segundos para ver BPM/Tom detectados.");
+      await refreshSongAnalysisData();
+    } catch (error: any) {
+      alert(error?.message || "Erro ao iniciar análise automática.");
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -647,13 +710,13 @@ function SongModal({
 
         <div className="grid grid-cols-3 gap-4">
           <Input
-            label="BPM"
+            label="BPM Manual"
             type="number"
             value={bpm}
             onChange={(e) => setBpm(e?.target?.value ?? '')}
           />
           <Select
-            label="Tom Original"
+            label="Tom Manual"
             value={originalKey}
             onChange={(e) => setOriginalKey(e?.target?.value ?? 'C')}
             options={MUSICAL_KEYS?.slice?.(0, 17)?.map?.((k) => ({ value: k, label: k })) ?? []}
@@ -670,6 +733,36 @@ function SongModal({
             ]}
           />
         </div>
+
+        {song && (
+          <div className="p-4 border rounded-lg space-y-3 bg-blue-50/40 dark:bg-blue-900/10">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-medium text-gray-800 dark:text-gray-100">Análise automática (BPM/Tom)</h4>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAnalyzeSong}
+                disabled={analyzing || uploading || (!audioUrl && !youtubeUrl)}
+              >
+                {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analisar música"}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <p><strong>Status:</strong> {analysisStatus}</p>
+              {analysisError && <p><strong>Erro:</strong> {analysisError}</p>}
+              <p><strong>BPM detectado:</strong> {bpmDetected ?? "-"}</p>
+              <p><strong>Tom detectado:</strong> {keyDetected ? `${keyDetected}${modeDetected ? ` (${modeDetected})` : ""}` : "-"}</p>
+              <p><strong>Confiança BPM:</strong> {confidenceBpm != null ? `${Math.round(confidenceBpm * 100)}%` : "-"}</p>
+              <p><strong>Confiança Tom:</strong> {confidenceKey != null ? `${Math.round(confidenceKey * 100)}%` : "-"}</p>
+            </div>
+            {!audioUrl && !youtubeUrl && (
+              <p className="text-xs text-amber-600">
+                Para analisar automaticamente, informe um link de áudio ou YouTube.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Seção de Mídia */}
         <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg space-y-4">
