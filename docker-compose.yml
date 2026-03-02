@@ -18,10 +18,11 @@ services:
       retries: 20
 
   app:
-    image: node:20-bookworm-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.app
     container_name: liderweb_app
     restart: unless-stopped
-    working_dir: /app
     ports:
       - "3000:3000"
     environment:
@@ -39,22 +40,7 @@ services:
     volumes:
       - ./:/app
       - liderweb_node_modules:/app/node_modules
-    command: >-
-      sh -lc '
-      APP_DIR="/app";
-      if [ ! -f "${APP_DIR}/package.json" ] && [ -f "/app/app/package.json" ]; then
-        APP_DIR="/app/app";
-      fi;
-      if [ ! -f "${APP_DIR}/package.json" ]; then
-        echo "[liderweb_app] package.json não encontrado em /app nem /app/app";
-        echo "[liderweb_app] verifique o bind mount configurado em docker-compose.yml";
-        sleep infinity;
-      fi;
-      cd "${APP_DIR}" &&
-      npm install --legacy-peer-deps --no-audit --no-fund &&
-      npx prisma generate &&
-      npx prisma db push &&
-      npm run dev'
+    command: sh -lc "npm install --legacy-peer-deps --no-audit --no-fund && npx prisma generate && npx prisma db push && npm run dev"
     depends_on:
       db:
         condition: service_healthy
