@@ -26,12 +26,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       );
     }
 
-    await enqueueSongAnalysis(song.id);
+    const enqueueResult = await enqueueSongAnalysis(song.id);
 
     return NextResponse.json({
-      ok: true,
+      ok: enqueueResult.analysisStatus === "PENDING",
       songId: song.id,
-      analysisStatus: "PENDING",
+      analysisStatus: enqueueResult.analysisStatus,
+      analysisError: enqueueResult.analysisError,
     });
   } catch (error) {
     console.error("Analyze song error:", error);
