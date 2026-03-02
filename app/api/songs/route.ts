@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
+import { enqueueSongAnalysis } from "@/lib/song-analysis";
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,7 +46,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(songs ?? []);
     }
 
-    // SuperAdmin vê todas, outros veem apenas do seu grupo
     if (user.role !== "SUPERADMIN") {
       if (!user.groupId) {
         return NextResponse.json([]);
@@ -98,7 +98,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sem permissão para criar músicas" }, { status: 403 });
     }
 
-    // Usuário precisa ter um grupo (exceto SuperAdmin)
     if (userRole !== "SUPERADMIN" && !user.groupId) {
       return NextResponse.json({ error: "Usuário não pertence a nenhum grupo" }, { status: 400 });
     }
@@ -119,9 +118,7 @@ export async function POST(req: NextRequest) {
     } = body ?? {};
 
     if (sourceSongId) {
-      const sourceSong = await prisma.song.findUnique({
-        where: { id: sourceSongId },
-      });
+      const sourceSong = await prisma.song.findUnique({ where: { id: sourceSongId } });
 
       if (!sourceSong) {
         return NextResponse.json({ error: "Música de origem não encontrada" }, { status: 404 });
@@ -158,6 +155,14 @@ export async function POST(req: NextRequest) {
           chordPro: sourceSong.chordPro,
           audioUrl: sourceSong.audioUrl,
           youtubeUrl: sourceSong.youtubeUrl,
+          sourceType: sourceSong.sourceType,
+          analysisStatus: sourceSong.analysisStatus,
+          analysisError: sourceSong.analysisError,
+          bpmDetected: sourceSong.bpmDetected,
+          keyDetected: sourceSong.keyDetected,
+          modeDetected: sourceSong.modeDetected,
+          confidenceBpm: sourceSong.confidenceBpm,
+          confidenceKey: sourceSong.confidenceKey,
           groupId: user.groupId ?? null,
         },
       });
@@ -165,28 +170,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(clonedSong);
     }
 
-    if (!title || !originalKey) {
-      return NextResponse.json(
-        { error: "Título e tom original são obrigatórios" },
-        { status: 400 }
-      );
+    if (!title) {
+      return NextResponse.json({ error: "Título é obrigatório" }, { status: 400 });
     }
+
+    const hasAnalysisSource = Boolean(audioUrl || youtubeUrl);
 
     const song = await prisma.song.create({
       data: {
         title,
         artist: artist ?? null,
         bpm: bpm ? parseInt(bpm) : null,
-        originalKey,
+        originalKey: originalKey ?? "C",
         timeSignature: timeSignature ?? "4/4",
         tags: tags ?? [],
         lyrics: lyrics ?? null,
         chordPro: chordPro ?? null,
         audioUrl: audioUrl ?? null,
         youtubeUrl: youtubeUrl ?? null,
+        sourceType: youtubeUrl ? "YOUTUBE" : audioUrl ? "UPLOAD" : null,
+        analysisStatus: hasAnalysisSource ? "PENDING" : "FAILED",
+        analysisError: hasAnalysisSource ? null : "Nenhuma fonte de áudio para análise automática.",
+        bpmUserOverride: bpm ? parseInt(bpm) : null,
+        keyUserOverride: originalKey ?? null,
         groupId: user.groupId ?? null,
       },
     });
+
+    if (hasAnalysisSource) {
+      await enqueueSongAnalysis(song.id);
+    }
 
     return NextResponse.json(song);
   } catch (error) {

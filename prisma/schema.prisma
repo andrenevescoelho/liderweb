@@ -62,6 +62,18 @@ enum SubscriptionStatus {
   INACTIVE
 }
 
+enum SongSourceType {
+  YOUTUBE
+  UPLOAD
+}
+
+enum SongAnalysisStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
 model Group {
   id          String   @id @default(cuid())
   name        String
@@ -173,24 +185,34 @@ model MemberProfile {
 }
 
 model Song {
-  id            String   @id @default(cuid())
-  title         String
-  artist        String?
-  bpm           Int?
-  originalKey   String
-  timeSignature String   @default("4/4")
-  tags          String[] @default([])
-  lyrics        String?  @db.Text
-  chordPro      String?  @db.Text
-  audioUrl      String?
-  youtubeUrl    String?
-  groupId       String?
-  group         Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  setlistItems  SetlistItem[]
-  attachments   Attachment[]
-  rehearsalSongs RehearsalSong[]
+  id               String             @id @default(cuid())
+  title            String
+  artist           String?
+  bpm              Int?
+  originalKey      String             @default("C")
+  timeSignature    String             @default("4/4")
+  tags             String[]           @default([])
+  lyrics           String?            @db.Text
+  chordPro         String?            @db.Text
+  audioUrl         String?
+  youtubeUrl       String?
+  sourceType       SongSourceType?
+  analysisStatus   SongAnalysisStatus @default(PENDING)
+  analysisError    String?            @db.Text
+  bpmDetected      Int?
+  keyDetected      String?
+  modeDetected     String?
+  confidenceBpm    Float?
+  confidenceKey    Float?
+  bpmUserOverride  Int?
+  keyUserOverride  String?
+  groupId          String?
+  group            Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  setlistItems     SetlistItem[]
+  attachments      Attachment[]
+  rehearsalSongs   RehearsalSong[]
 }
 
 model Attachment {
