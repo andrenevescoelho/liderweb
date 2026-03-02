@@ -21,7 +21,7 @@ services:
     image: node:20-bookworm-slim
     container_name: liderweb_app
     restart: unless-stopped
-    working_dir: /app
+    working_dir: /workspace/liderweb
     ports:
       - "3000:3000"
     environment:
@@ -38,11 +38,13 @@ services:
       AUDIO_ANALYSIS_CALLBACK_TOKEN: "dev-audio-callback-token"
     volumes:
       - ./:/app
+      - ./:/workspace/liderweb
       - liderweb_node_modules:/app/node_modules
+      - liderweb_node_modules_workspace:/workspace/liderweb/node_modules
     command: >-
       sh -lc '
       APP_DIR="";
-      for CANDIDATE in /app /app/app /workspace/liderweb /workspace/liderweb/app; do
+      for CANDIDATE in /workspace/liderweb /app /app/app /workspace/liderweb/app; do
         if [ -f "${CANDIDATE}/package.json" ]; then
           APP_DIR="${CANDIDATE}";
           break;
@@ -50,7 +52,7 @@ services:
       done;
       if [ -z "${APP_DIR}" ]; then
         echo "[liderweb_app] package.json não encontrado.";
-        echo "[liderweb_app] caminhos tentados: /app, /app/app, /workspace/liderweb, /workspace/liderweb/app";
+        echo "[liderweb_app] caminhos tentados: /workspace/liderweb, /app, /app/app, /workspace/liderweb/app";
         echo "[liderweb_app] verifique o bind mount configurado em docker-compose.yml";
         sleep infinity;
       fi;
@@ -88,3 +90,4 @@ services:
 volumes:
   liderweb_pgdata:
   liderweb_node_modules:
+  liderweb_node_modules_workspace:
