@@ -5,6 +5,22 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
+function sanitizeChordUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,9 +58,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     const body = await req.json();
-    const { title, artist, bpm, originalKey, timeSignature, tags, lyrics, chordPro, audioUrl, youtubeUrl } = body ?? {};
+    const { title, artist, bpm, originalKey, timeSignature, tags, lyrics, chordPro, chordUrl, audioUrl, youtubeUrl } = body ?? {};
 
     const parsedBpm = bpm ? parseInt(bpm) : null;
+    const sanitizedChordUrl = sanitizeChordUrl(chordUrl);
+
+    if (chordUrl && !sanitizedChordUrl) {
+      return NextResponse.json({ error: "Link da cifra inválido. Use URL com http:// ou https://" }, { status: 400 });
+    }
 
     const song = await prisma.song.update({
       where: { id: params?.id },
@@ -57,6 +78,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         tags: tags ?? [],
         lyrics: lyrics ?? null,
         chordPro: chordPro ?? null,
+        chordUrl: sanitizedChordUrl,
         audioUrl: audioUrl ?? null,
         youtubeUrl: youtubeUrl ?? null,
         bpmUserOverride: parsedBpm,
