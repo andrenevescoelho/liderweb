@@ -19,14 +19,9 @@ export default function LoginPage() {
   const resolveSession = async (attempts = 5) => {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const session = await getSession();
-
-      if (session?.user) {
-        return session;
-      }
-
+      if (session?.user) return session;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
-
     return null;
   };
 
@@ -36,52 +31,24 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-
+      const result = await signIn("credentials", { email, password, redirect: false });
       if (result?.error) {
         setError("Credenciais inválidas");
         return;
       }
-      
-      // Buscar sessão para verificar status da assinatura.
-      // Com callbacks JWT mais complexos (RBAC), a sessão pode demorar alguns ms para sincronizar.
+
       const session = await resolveSession();
-      
       if (session?.user) {
         const user = session.user as any;
-        
-        // SuperAdmin sempre pode acessar
-        if (user.role === "SUPERADMIN") {
-          router.replace("/dashboard");
-          return;
-        }
-        
-        // Verificar assinatura
+        if (user.role === "SUPERADMIN") return router.replace("/dashboard");
         if (user.hasActiveSubscription === false) {
-          // Admin vai para página de reativação
-          if (user.role === "ADMIN") {
-            router.replace("/reativar-assinatura");
-            return;
-          }
-          
-          // Membros vão para página informativa
-          router.replace("/sem-assinatura");
-          return;
+          if (user.role === "ADMIN") return router.replace("/reativar-assinatura");
+          return router.replace("/sem-assinatura");
         }
-        
-        // Assinatura ativa - ir para dashboard
-        router.replace("/dashboard");
-        return;
+        return router.replace("/dashboard");
       }
-
-      // Fallback: se autenticou mas a sessão ainda não propagou no cliente,
-      // redireciona para a rota raiz que já resolve sessão no servidor.
       router.replace("/");
-    } catch (err) {
+    } catch {
       setError("Erro ao fazer login");
     } finally {
       setLoading(false);
@@ -89,61 +56,40 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-purple-900 via-gray-900 to-gray-900">
-      <Card className="w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
-              <Music className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.2),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_42%)]" />
+      <Card className="relative w-full max-w-md p-8">
+        <div className="mb-8 text-center">
+          <div className="mb-4 flex justify-center">
+            <div className="rounded-xl border border-primary/25 bg-primary/15 p-3">
+              <Music className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">LiderWeb</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Entre na sua conta</p>
+          <h1 className="text-2xl font-semibold">LiderWeb</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Entre na sua conta</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e?.target?.value ?? '')}
-              className="pl-10"
-              required
-            />
+            <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e?.target?.value ?? "")} className="pl-10" required />
           </div>
 
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <Input
-              type="password"
-              placeholder="Senha"
-              value={password}
-              onChange={(e) => setPassword(e?.target?.value ?? '')}
-              className="pl-10"
-              required
-            />
+            <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+            <Input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e?.target?.value ?? "")} className="pl-10" required />
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              "Entrar"
-            )}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
           </Button>
         </form>
 
-        <p className="text-center mt-6 text-gray-600 dark:text-gray-400">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Não tem conta?{" "}
-          <Link href="/signup" className="text-purple-600 hover:underline">
+          <Link href="/signup" className="text-primary hover:underline">
             Cadastre-se
           </Link>
         </p>

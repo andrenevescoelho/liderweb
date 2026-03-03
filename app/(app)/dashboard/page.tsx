@@ -40,6 +40,7 @@ import {
   Line,
 } from "recharts";
 import { toast } from "@/hooks/use-toast";
+import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { can, canAny } from "@/lib/rbac";
 
 export default function DashboardPage() {
@@ -484,17 +485,17 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--accent) / 0.35)" }} />
                     <Area
                       type="monotone"
                       dataKey="setlistsCreated"
-                      fill="#60a5fa"
-                      stroke="#2563eb"
+                      fill="hsl(var(--chart-2))"
+                      stroke="hsl(var(--chart-2))"
                       fillOpacity={0.2}
                       name="Escalas criadas"
                     />
-                    <Bar dataKey="newGroups" fill="#7c3aed" name="Novas igrejas" radius={[6, 6, 0, 0]} barSize={26} />
-                    <Line type="monotone" dataKey="newGroups" stroke="#5b21b6" dot={{ r: 4 }} />
+                    <Bar dataKey="newGroups" fill="hsl(var(--chart-1))" name="Novas igrejas" radius={[6, 6, 0, 0]} barSize={26} />
+                    <Line type="monotone" dataKey="newGroups" stroke="hsl(var(--chart-3))" dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -525,8 +526,8 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" hide />
                     <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="usage" fill="#0ea5e9" name="Escalas" radius={[4, 4, 0, 0]} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--accent) / 0.35)" }} />
+                    <Bar dataKey="usage" fill="hsl(var(--chart-2))" name="Escalas" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>

@@ -102,11 +102,11 @@ export default function EnsaiosPage() {
   }, [nextRehearsal, attendanceStats.pending]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ensaios</h1>
-          <p className="text-gray-500">Planejamento, repertório e confirmações em um só lugar.</p>
+          <h1 className="text-2xl font-bold text-foreground">Ensaios</h1>
+          <p className="text-muted-foreground">Planejamento, repertório e confirmações em um só lugar.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/ensaios/calendario">
@@ -122,14 +122,14 @@ export default function EnsaiosPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="w-5 h-5 text-purple-600" /> Próximo ensaio</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="w-5 h-5 text-primary" /> Próximo ensaio</CardTitle></CardHeader>
           <CardContent>
             {!nextRehearsal ? (
-              <p className="text-gray-500">Nenhum ensaio agendado.</p>
+              <p className="text-muted-foreground">Nenhum ensaio agendado.</p>
             ) : (
               <div className="space-y-2">
                 <p className="font-medium">{formatUtcDateTime(nextRehearsal.dateTime)}</p>
-                <p className="text-sm text-gray-500">Local: {nextRehearsal.location || "Não definido"}</p>
+                <p className="text-sm text-muted-foreground">Local: {nextRehearsal.location || "Não definido"}</p>
                 {renderStatusBadge(nextRehearsal.status)}
               </div>
             )}
@@ -137,17 +137,17 @@ export default function EnsaiosPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Music2 className="w-5 h-5 text-purple-600" /> Repertório do próximo ensaio</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Music2 className="w-5 h-5 text-primary" /> Repertório do próximo ensaio</CardTitle></CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {(nextRehearsal?.songs ?? []).slice(0, 5).map((song: any) => (
-                <li key={song.id} className="text-sm border rounded-md p-2">
+                <li key={song.id} className="rounded-lg border border-border/70 bg-muted/20 p-2 text-sm text-foreground">
                   {song.title} {song.artist ? `- ${song.artist}` : ""}
                 </li>
               ))}
             </ul>
             {(nextRehearsal?.songs?.length ?? 0) > 5 && (
-              <p className="text-xs text-gray-500 mt-2">+{nextRehearsal.songs.length - 5} músicas</p>
+              <p className="text-xs text-muted-foreground mt-2">+{nextRehearsal.songs.length - 5} músicas</p>
             )}
           </CardContent>
         </Card>
@@ -165,10 +165,10 @@ export default function EnsaiosPage() {
         )}
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="w-5 h-5 text-purple-600" /> Tempo estimado</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="w-5 h-5 text-primary" /> Tempo estimado</CardTitle></CardHeader>
           <CardContent>
             <p className="font-semibold text-lg">{songTotalMinutes || 0} min</p>
-            <p className="text-xs text-gray-500">Baseado na quantidade de músicas (ou valor estimado manual).</p>
+            <p className="text-xs text-muted-foreground">Baseado na quantidade de músicas (ou valor estimado manual).</p>
           </CardContent>
         </Card>
       </div>
@@ -176,9 +176,9 @@ export default function EnsaiosPage() {
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-500" /> Pendências</CardTitle></CardHeader>
         <CardContent className="grid sm:grid-cols-3 gap-3 text-sm">
-          <div className="p-3 rounded border">Músicas novas: <b>{pendingItems.newSongs}</b></div>
-          <div className="p-3 rounded border">Sem resposta: <b>{pendingItems.pendingMembers}</b></div>
-          <div className="p-3 rounded border">Sem cifra/multitrack: <b>{pendingItems.missingMedia}</b></div>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">Músicas novas: <b>{pendingItems.newSongs}</b></div>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">Sem resposta: <b>{pendingItems.pendingMembers}</b></div>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">Sem cifra/multitrack: <b>{pendingItems.missingMedia}</b></div>
         </CardContent>
       </Card>
 

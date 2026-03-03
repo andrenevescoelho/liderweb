@@ -170,9 +170,9 @@ export default function EnsaioDetalhePage() {
   const accepted = rehearsal.attendance?.filter((a: any) => a.status === "ACCEPTED")?.length ?? 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Detalhe do ensaio</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Detalhe do ensaio</h1>
         {canManage && (
           <div className="flex flex-wrap gap-2">
             {canPublish && (
@@ -241,19 +241,19 @@ export default function EnsaioDetalhePage() {
         <CardHeader><CardTitle>Repertório (lista vertical)</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {(rehearsal.songs ?? []).map((song: any) => (
-            <div key={song.id} className="border rounded p-3 space-y-1">
+            <div key={song.id} className="space-y-1 rounded-lg border border-border/70 bg-muted/20 p-3">
               <p className="font-medium">{song.title} {song.artist ? `- ${song.artist}` : ""}</p>
-              <p className="text-xs text-gray-500">Tom: {song.key || "-"} | BPM: {song.bpm || "-"} | Tags: {(song.tags || []).join(", ") || "-"}</p>
+              <p className="text-xs text-muted-foreground">Tom: {song.key || "-"} | BPM: {song.bpm || "-"} | Tags: {(song.tags || []).join(", ") || "-"}</p>
               {song.notes && <p className="text-sm">{song.notes}</p>}
               {song.youtubeUrl && (
-                <a className="text-xs text-blue-600 underline" href={song.youtubeUrl} target="_blank" rel="noreferrer">YouTube</a>
+                <a className="text-xs text-primary underline" href={song.youtubeUrl} target="_blank" rel="noreferrer">YouTube</a>
               )}
               {song.audioUrl && (
                 <audio controls className="w-full h-10">
                   <source src={song.audioUrl} />
                 </audio>
               )}
-              <div className="text-xs text-gray-500">Arquivos: {(song.song?.attachments?.length ?? 0) > 0 ? `${song.song.attachments.length} anexos` : "Sem anexos"}</div>
+              <div className="text-xs text-muted-foreground">Arquivos: {(song.song?.attachments?.length ?? 0) > 0 ? `${song.song.attachments.length} anexos` : "Sem anexos"}</div>
               {(song.tasks ?? []).length > 0 && (
                 <div className="text-sm">
                   <p className="font-medium">Minha tarefa</p>
@@ -275,7 +275,7 @@ export default function EnsaioDetalhePage() {
           <CardHeader><CardTitle>Confirmações (admin)</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             {(rehearsal.attendance ?? []).map((item: any) => (
-              <div key={item.id} className="border rounded p-2 flex items-center justify-between">
+              <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/20 p-2">
                 <span>{item.member?.name}</span>
                 {renderStatusBadge(item.status)}
               </div>
