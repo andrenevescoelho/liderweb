@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const dynamic = "force-dynamic";
 
-const inter = Inter({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
 export const viewport: Viewport = {
   themeColor: "#7c3aed",
@@ -34,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning className="dark">
       <head>
         <script src="https://apps.abacus.ai/chatllm/appllm-lib.js"></script>
         <link rel="manifest" href="/manifest.json" />
@@ -42,7 +42,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className={`${inter?.className ?? ''} bg-gray-50 dark:bg-gray-950 min-h-screen`}>
+      <body className={`${geist?.className ?? ""} ${geist?.variable ?? ""} min-h-screen`}>
         <Providers>{children}</Providers>
       </body>
     </html>

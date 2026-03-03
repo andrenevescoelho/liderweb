@@ -9,13 +9,13 @@ export interface BadgeProps {
 }
 
 const variantClasses: Record<string, string> = {
-  default: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
-  secondary: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
-  success: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  warning: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  danger: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  info: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  outline: "border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300 bg-transparent",
+  default: "bg-muted text-muted-foreground",
+  secondary: "bg-secondary text-secondary-foreground",
+  success: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20",
+  warning: "bg-amber-500/15 text-amber-300 border border-amber-500/20",
+  danger: "bg-red-500/15 text-red-300 border border-red-500/20",
+  info: "bg-primary/15 text-primary border border-primary/20",
+  outline: "border border-border text-foreground bg-transparent",
 };
 
 export function Badge({ children, variant = "default", className, title }: BadgeProps) {
@@ -23,8 +23,8 @@ export function Badge({ children, variant = "default", className, title }: Badge
     <span
       title={title}
       className={cn(
-        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-        variantClasses?.[variant ?? "default"] ?? variantClasses["default"],
+        "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide",
+        variantClasses?.[variant ?? "default"] ?? variantClasses.default,
         className
       )}
     >
