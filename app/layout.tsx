@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const dynamic = "force-dynamic";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const geist = Inter({ subsets: ["latin"], variable: "--font-geist" });
 
 export const viewport: Viewport = {
   themeColor: "#7c3aed",
