@@ -5,8 +5,9 @@ import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
+import pkg from "../package.json";
 
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+const APP_VERSION = `Versão ${pkg.version}${process.env.NODE_ENV === "development" ? " (dev)" : ""}`;
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -52,7 +53,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </main>
           <footer className="px-4 md:px-6 pb-4 text-center text-xs text-gray-500 dark:text-gray-400">
-            Versão {APP_VERSION}
+            {APP_VERSION}
           </footer>
         </div>
       </div>
@@ -110,7 +111,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         </main>
         <footer className="px-4 md:px-6 pb-4 text-center text-xs text-gray-500 dark:text-gray-400">
-          Versão {APP_VERSION}
+          {APP_VERSION}
         </footer>
       </div>
     </div>
