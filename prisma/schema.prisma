@@ -196,6 +196,7 @@ model Song {
   tags             String[]           @default([])
   lyrics           String?            @db.Text
   chordPro         String?            @db.Text
+  chordUrl         String?            @db.Text
   audioUrl         String?
   youtubeUrl       String?
   sourceType       SongSourceType?
