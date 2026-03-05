@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useState, useRef, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, Sun, Moon, LogOut, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,28 @@ interface AppHeaderProps {
 
 export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
   const { data: session } = useSession() || {};
+  const router = useRouter();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSearch = () => {
+    const term = search.trim();
+    if (!term) {
+      router.push("/songs");
+      return;
+    }
+
+    router.push(`/songs?search=${encodeURIComponent(term)}`);
+  };
+
+  useEffect(() => {
+    if (pathname !== "/songs") {
+      setSearch("");
+    }
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -38,8 +58,26 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
             </button>
           )}
           <div className="relative hidden w-[280px] lg:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Pesquisar..." className="pl-9" />
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Pesquisar"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+            <Input
+              placeholder="Pesquisar músicas..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
+            />
           </div>
         </div>
 

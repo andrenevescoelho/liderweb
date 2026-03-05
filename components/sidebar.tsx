@@ -37,9 +37,9 @@ const menuItems: MenuItem[] = [
   { label: "Membros", href: "/members", icon: <Users className="h-5 w-5" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
   { label: "Músicas", href: "/songs", icon: <Music className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Escalas", href: "/schedules", icon: <Calendar className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
-  { label: "Ensaios", href: "/ensaios", icon: <NotebookPen className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
-  { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
-  { label: "Chat do Grupo", href: "/chat-grupo", icon: <MessageCircle className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { label: "Ensaios", href: "/ensaios", icon: <NotebookPen className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Chat do Grupo", href: "/chat-grupo", icon: <MessageCircle className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-5 w-5" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
 ];
 
