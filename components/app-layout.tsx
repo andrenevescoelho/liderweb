@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { X } from "lucide-react";
 import pkg from "../package.json";
 
-const APP_VERSION = `Versão ${pkg.version}${process.env.NODE_ENV === "development" ? " (dev)" : ""}`;
+const APP_VERSION = `Versão ${pkg.version}`;
 
 interface AppLayoutProps {
   children: React.ReactNode;
