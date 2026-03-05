@@ -18,6 +18,7 @@ import {
   Building2,
   CreditCard,
   Shield,
+  Cake,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/members", label: "Membros", icon: Users, roles: ["ADMIN", "LEADER"] },
   { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN"] },
   { href: "/songs", label: "Músicas", icon: Music, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { href: "/aniversariantes", label: "Aniversariantes", icon: Cake, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
   { href: "/schedules", label: "Escalas", icon: Calendar, roles: ["ADMIN", "LEADER", "MEMBER"] },
 ];
 
