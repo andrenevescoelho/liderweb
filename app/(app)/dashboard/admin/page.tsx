@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Gift, Loader2, ShieldCheck } from "lucide-react";
 import {
   ResponsiveContainer,
   CartesianGrid,
@@ -48,6 +48,8 @@ export default function AdminDashboardPage() {
 
   const adminInsights = data?.adminInsights;
   const monthlySchedules = adminInsights?.reports?.schedulesByMonth ?? [];
+  const birthdaysToday = data?.birthdaysToday ?? [];
+  const birthdaysMonth = data?.birthdaysMonth ?? [];
 
   const smartIndicators = useMemo(
     () => [
@@ -141,6 +143,22 @@ export default function AdminDashboardPage() {
           </Link>
         )}
       </div>
+
+
+      {(birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
+        <Card className="rounded-xl border border-border/80">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5 text-pink-500" />
+              Aniversariantes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p><span className="font-medium">Hoje:</span> {birthdaysToday.length > 0 ? birthdaysToday.map((m: any) => m.name).join(", ") : "Nenhum"}</p>
+            <p><span className="font-medium">No mês:</span> {birthdaysMonth.length}</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="rounded-xl border border-border/80">
