@@ -7,6 +7,20 @@ import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
 
+const parseBirthDate = (birthDate?: string | null) => {
+  if (!birthDate) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+    return new Date(`${birthDate}T12:00:00.000Z`);
+  }
+
+  const parsedDate = new Date(birthDate);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const hasRequestedPermissions = (permissions?: string[]) => {
+  return Array.isArray(permissions) && permissions.length > 0;
+};
+
 const isGroupAdminProtected = (
   requester: { role: string },
   targetUser: { role: string }
@@ -101,15 +115,13 @@ export async function PUT(
       );
     }
 
-    if (permissions !== undefined && requester.id !== targetUser.id) {
-      const canManagePermissions =
-        requester.role === "SUPERADMIN" ||
-        requester.role === "ADMIN" ||
-        hasPermission(requester.role as any, "permission.manage", requester.profile?.permissions);
+    const canManagePermissions =
+      requester.role === "SUPERADMIN" ||
+      requester.role === "ADMIN" ||
+      hasPermission(requester.role as any, "permission.manage", requester.profile?.permissions);
 
-      if (!canManagePermissions) {
-        return NextResponse.json({ error: "Sem permissão para alterar permissões de outros membros" }, { status: 403 });
-      }
+    if (hasRequestedPermissions(permissions) && requester.id !== targetUser.id && !canManagePermissions) {
+      return NextResponse.json({ error: "Sem permissão para alterar permissões de outros membros" }, { status: 403 });
     }
 
     await prisma.user.update({
@@ -126,11 +138,11 @@ export async function PUT(
         comfortableKeys: comfortableKeys ?? [],
         availability: availability ?? [],
         phone: phone ?? null,
-        birthDate: birthDate ? new Date(birthDate) : null,
+        birthDate: parseBirthDate(birthDate),
         active: active ?? true,
         memberFunction: memberFunction ?? null,
         leadershipRole: leadershipRole ?? null,
-        permissions: permissions ?? [],
+        ...(canManagePermissions ? { permissions: permissions ?? [] } : {}),
       },
       create: {
         userId: params?.id,
@@ -140,11 +152,11 @@ export async function PUT(
         comfortableKeys: comfortableKeys ?? [],
         availability: availability ?? [],
         phone: phone ?? null,
-        birthDate: birthDate ? new Date(birthDate) : null,
+        birthDate: parseBirthDate(birthDate),
         active: active ?? true,
         memberFunction: memberFunction ?? null,
         leadershipRole: leadershipRole ?? null,
-        permissions: permissions ?? [],
+        ...(canManagePermissions ? { permissions: permissions ?? [] } : {}),
       },
     });
 

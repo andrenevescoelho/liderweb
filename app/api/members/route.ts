@@ -20,8 +20,23 @@ const getOptionalMemberProfileData = ({
   return {
     memberFunction: memberFunction ?? null,
     leadershipRole: leadershipRole ?? null,
-    permissions: permissions ?? [],
+    ...(permissions !== undefined ? { permissions } : {}),
   };
+};
+
+const parseBirthDate = (birthDate?: string | null) => {
+  if (!birthDate) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+    return new Date(`${birthDate}T12:00:00.000Z`);
+  }
+
+  const parsedDate = new Date(birthDate);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+
+const hasRequestedPermissions = (permissions?: string[]) => {
+  return Array.isArray(permissions) && permissions.length > 0;
 };
 
 export async function GET(req: NextRequest) {
@@ -165,7 +180,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (permissions !== undefined && !canManageMemberPermissions) {
+      if (hasRequestedPermissions(permissions) && !canManageMemberPermissions) {
         return NextResponse.json({ error: "Sem permissão para definir permissões do membro" }, { status: 403 });
       }
 
@@ -173,7 +188,7 @@ export async function POST(req: NextRequest) {
       const optionalProfileData = getOptionalMemberProfileData({
         memberFunction,
         leadershipRole,
-        permissions,
+        permissions: canManageMemberPermissions ? permissions : undefined,
       });
 
       const newUser = await prisma.user.create({
@@ -191,7 +206,7 @@ export async function POST(req: NextRequest) {
               comfortableKeys: comfortableKeys ?? [],
               availability: availability ?? [],
               phone: phone ?? null,
-              birthDate: birthDate ? new Date(birthDate) : null,
+              birthDate: parseBirthDate(birthDate),
               active: active ?? true,
               ...optionalProfileData,
             },
@@ -220,14 +235,14 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (permissions !== undefined && requester.id !== userId && !canManageMemberPermissions) {
+      if (hasRequestedPermissions(permissions) && requester.id !== userId && !canManageMemberPermissions) {
         return NextResponse.json({ error: "Sem permissão para alterar permissões de outros membros" }, { status: 403 });
       }
 
       const optionalProfileData = getOptionalMemberProfileData({
         memberFunction,
         leadershipRole,
-        permissions,
+        permissions: canManageMemberPermissions ? permissions : undefined,
       });
 
       const profile = await prisma.memberProfile.upsert({
@@ -239,7 +254,7 @@ export async function POST(req: NextRequest) {
           comfortableKeys: comfortableKeys ?? [],
           availability: availability ?? [],
           phone: phone ?? null,
-          birthDate: birthDate ? new Date(birthDate) : null,
+          birthDate: parseBirthDate(birthDate),
           active: active ?? true,
           ...optionalProfileData,
         },
@@ -251,7 +266,7 @@ export async function POST(req: NextRequest) {
           comfortableKeys: comfortableKeys ?? [],
           availability: availability ?? [],
           phone: phone ?? null,
-          birthDate: birthDate ? new Date(birthDate) : null,
+          birthDate: parseBirthDate(birthDate),
           active: active ?? true,
           ...optionalProfileData,
         },
