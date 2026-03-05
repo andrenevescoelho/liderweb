@@ -638,7 +638,7 @@ function MemberModal({
         }
       } else {
         // Update existing member
-        await fetch(`/api/members/${member?.id}`, {
+        const res = await fetch(`/api/members/${member?.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -656,6 +656,11 @@ function MemberModal({
             permissions,
           }),
         });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Erro ao atualizar membro");
+        }
       }
       onSave();
     } catch (e: any) {
