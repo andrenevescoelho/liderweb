@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, role, instruments, voiceType, vocalRange, comfortableKeys, availability, phone, active, memberFunction, leadershipRole, permissions } = body ?? {};
+    const { name, role, instruments, voiceType, vocalRange, comfortableKeys, availability, phone, birthDate, active, memberFunction, leadershipRole, permissions } = body ?? {};
 
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -126,6 +126,7 @@ export async function PUT(
         comfortableKeys: comfortableKeys ?? [],
         availability: availability ?? [],
         phone: phone ?? null,
+        birthDate: birthDate ? new Date(birthDate) : null,
         active: active ?? true,
         memberFunction: memberFunction ?? null,
         leadershipRole: leadershipRole ?? null,
@@ -139,6 +140,7 @@ export async function PUT(
         comfortableKeys: comfortableKeys ?? [],
         availability: availability ?? [],
         phone: phone ?? null,
+        birthDate: birthDate ? new Date(birthDate) : null,
         active: active ?? true,
         memberFunction: memberFunction ?? null,
         leadershipRole: leadershipRole ?? null,

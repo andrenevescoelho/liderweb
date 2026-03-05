@@ -181,6 +181,7 @@ model MemberProfile {
   comfortableKeys String[] @default([])
   availability    String[] @default([])
   phone           String?
+  birthDate       DateTime?
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

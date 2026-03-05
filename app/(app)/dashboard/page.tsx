@@ -22,6 +22,7 @@ import {
   ServerCrash,
   Plus,
   Bell,
+  Gift,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -315,6 +316,8 @@ export default function DashboardPage() {
   const myUpcomingSchedules = data?.myUpcomingSchedules ?? [];
   const pendingConfirmations = data?.pendingConfirmations ?? [];
   const songsToRehearse = data?.songsToRehearse ?? [];
+  const birthdaysToday = data?.birthdaysToday ?? [];
+  const birthdaysMonth = data?.birthdaysMonth ?? [];
   const nextCommitment = myUpcomingSchedules?.[0] ?? null;
   const canConfirmPresence = can(sessionUser, "schedule.presence.confirm.self");
   const canViewMembersCard = canAny(sessionUser, ["member.view", "member.manage"]);
@@ -377,6 +380,46 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      )}
+
+
+      {userRole !== "SUPERADMIN" && (birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
+        <Card className="rounded-xl border border-border/80">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-pink-600" />
+              Aniversariantes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Hoje</p>
+              {birthdaysToday.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhum aniversariante hoje.</p>
+              ) : (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {birthdaysToday.map((member: any) => (
+                    <Badge key={member.id} variant="success">{member.name}</Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Neste mês</p>
+              <div className="mt-1 space-y-1">
+                {birthdaysMonth.slice(0, 6).map((member: any) => (
+                  <p key={member.id} className="text-sm text-gray-600 dark:text-gray-300">
+                    {member.name} • {member.birthDate ? format(new Date(member.birthDate), "dd/MM") : "--/--"}
+                  </p>
+                ))}
+                {birthdaysMonth.length === 0 && (
+                  <p className="text-sm text-gray-500">Nenhum aniversariante neste mês.</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {shouldShowRehearsalReminder && (

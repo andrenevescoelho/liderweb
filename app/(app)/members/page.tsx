@@ -537,6 +537,7 @@ function MemberModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [instruments, setInstruments] = useState<string[]>([]);
   const [voiceType, setVoiceType] = useState("");
   const [vocalRange, setVocalRange] = useState("");
@@ -565,6 +566,7 @@ function MemberModal({
       setName(member?.name ?? "");
       setEmail(member?.email ?? "");
       setPhone(member?.profile?.phone ?? "");
+      setBirthDate(member?.profile?.birthDate ? String(member.profile.birthDate).slice(0, 10) : "");
       setInstruments(member?.profile?.instruments ?? []);
       setVoiceType(member?.profile?.voiceType ?? "");
       setVocalRange(member?.profile?.vocalRange ?? "");
@@ -581,6 +583,7 @@ function MemberModal({
       setEmail("");
       setPassword("");
       setPhone("");
+      setBirthDate("");
       setInstruments([]);
       setVoiceType("");
       setVocalRange("");
@@ -616,6 +619,7 @@ function MemberModal({
             email,
             password,
             phone,
+            birthDate: birthDate || null,
             instruments,
             voiceType: voiceType || null,
             vocalRange,
@@ -640,6 +644,7 @@ function MemberModal({
           body: JSON.stringify({
             name,
             phone,
+            birthDate: birthDate || null,
             instruments,
             voiceType: voiceType || null,
             vocalRange,
@@ -758,6 +763,13 @@ function MemberModal({
           label="Telefone/WhatsApp"
           value={phone}
           onChange={(e) => setPhone(e?.target?.value ?? '')}
+        />
+
+        <Input
+          label="Data de aniversário"
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e?.target?.value ?? '')}
         />
 
         <Select

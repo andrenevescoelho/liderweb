@@ -225,6 +225,8 @@ export async function GET() {
         myUpcomingSchedules: [],
         pendingConfirmations: [],
         songsToRehearse: [],
+        birthdaysToday: [],
+        birthdaysMonth: [],
         stats: {
           totalGroups,
           totalMembers,
@@ -415,11 +417,37 @@ export async function GET() {
     const songWhere: any = groupId ? { groupId } : {};
     const setlistWhere: any = groupId ? { groupId } : {};
 
-    const [totalMembers, totalSongs, totalSetlists] = await Promise.all([
+    const [totalMembers, totalSongs, totalSetlists, birthdayCandidates] = await Promise.all([
       prisma.user.count({ where: memberWhere }),
       prisma.song.count({ where: songWhere }),
       prisma.setlist.count({ where: setlistWhere }),
+      prisma.user.findMany({
+        where: {
+          ...memberWhere,
+          profile: { is: { active: true, birthDate: { not: null } } },
+        },
+        select: { id: true, name: true, profile: { select: { birthDate: true } } },
+        orderBy: { name: "asc" },
+      }),
     ]);
+
+
+    const birthdaysToday = birthdayCandidates.filter((member) => {
+      const birthday = member.profile?.birthDate;
+      return birthday && birthday.getDate() === now.getDate() && birthday.getMonth() === now.getMonth();
+    });
+
+    const birthdaysMonth = birthdayCandidates
+      .filter((member) => {
+        const birthday = member.profile?.birthDate;
+        return birthday && birthday.getMonth() === now.getMonth();
+      })
+      .sort((a, b) => {
+        const dayA = a.profile?.birthDate?.getDate() ?? 0;
+        const dayB = b.profile?.birthDate?.getDate() ?? 0;
+        if (dayA !== dayB) return dayA - dayB;
+        return a.name.localeCompare(b.name, "pt-BR");
+      });
 
     const [setlistsCurrentMonth, setlistsPreviousMonth, confirmationsCurrentMonth, totalInvitesCurrentMonth] = await Promise.all([
       prisma.setlist.count({
@@ -689,6 +717,16 @@ export async function GET() {
       myUpcomingSchedules: myUpcomingSchedules ?? [],
       pendingConfirmations: pendingConfirmations ?? [],
       songsToRehearse: songsToRehearse ?? [],
+      birthdaysToday: birthdaysToday.map((member) => ({
+        id: member.id,
+        name: member.name,
+        birthDate: member.profile?.birthDate,
+      })),
+      birthdaysMonth: birthdaysMonth.map((member) => ({
+        id: member.id,
+        name: member.name,
+        birthDate: member.profile?.birthDate,
+      })),
       adminInsights,
       stats: {
         totalMembers,
