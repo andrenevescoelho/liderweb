@@ -75,6 +75,11 @@ export default function SongsPage() {
   const [viewSong, setViewSong] = useState<any>(null);
   const openedSongIdFromQueryRef = useRef<string | null>(null);
   const songIdFromQuery = searchParams?.get("songId") ?? "";
+  const searchFromQuery = searchParams?.get("search") ?? "";
+
+  useEffect(() => {
+    setSearch(searchFromQuery);
+  }, [searchFromQuery]);
 
   const fetchSongs = async () => {
     try {
