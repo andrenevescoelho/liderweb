@@ -22,7 +22,7 @@ enum VoiceType {
   LEAD
 }
 
-enum MemberFunction {
+enum MemberFunctionLegacy {
   VOCAL
   TECLADO
   VIOLAO
@@ -114,6 +114,7 @@ model Group {
   rehearsals   Rehearsal[]
   messages     GroupMessage[]
   broadcasts   GroupBroadcast[]
+  roleFunctions RoleFunction[]
 }
 
 model SubscriptionPlan {
@@ -162,6 +163,9 @@ model User {
   rehearsalTasks RehearsalTask[]
   sentGroupMessages GroupMessage[] @relation("GroupMessageSender")
   sentGroupBroadcasts GroupBroadcast[] @relation("GroupBroadcastSender")
+  memberFunctions MemberFunction[] @relation("UserMemberFunctions")
+  scheduleMemberRoles ScaleMemberRole[] @relation("ScaleMemberRolesByMember")
+  rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
 }
 
 model GroupMessage {
@@ -193,6 +197,7 @@ model MemberProfile {
   id              String   @id @default(cuid())
   userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
   memberFunction  String?
   leadershipRole  String?
   permissions     String[] @default([])
@@ -214,10 +219,39 @@ model MemberProfile {
   repertoirePrefs String? @db.Text
   instagram       String?
   youtube         String?
-  memberFunctions MemberFunction[] @default([])
+  // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
+  memberFunctions MemberFunctionLegacy[] @default([])
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model RoleFunction {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  groupId     String?
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     MemberFunction[] @relation("RoleFunctionMembers")
+  scheduleAssignments ScaleMemberRole[] @relation("ScaleMemberRolesByFunction")
+  rehearsalAssignments RehearsalMemberRole[] @relation("RehearsalMemberRolesByFunction")
+
+  @@unique([groupId, name])
+  @@index([groupId])
+}
+
+model MemberFunction {
+  id             String       @id @default(cuid())
+  memberId       String
+  member         User         @relation("UserMemberFunctions", fields: [memberId], references: [id], onDelete: Cascade)
+  roleFunctionId String
+  roleFunction   RoleFunction @relation("RoleFunctionMembers", fields: [roleFunctionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([memberId, roleFunctionId])
+  @@index([roleFunctionId])
 }
 
 model Song {
@@ -295,16 +329,35 @@ model Schedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   roles     ScheduleRole[]
+  memberRoles ScaleMemberRole[] @relation("ScaleMemberRolesBySchedule")
 }
 
 model ScheduleRole {
   id         String       @id @default(cuid())
   scheduleId String
   schedule   Schedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  // DEPRECATED: manter temporariamente enquanto dados migram para ScaleMemberRole.
   role       String
   memberId   String?
   member     User?        @relation(fields: [memberId], references: [id], onDelete: SetNull)
   status     InviteStatus @default(PENDING)
+}
+
+model ScaleMemberRole {
+  id             String       @id @default(cuid())
+  scaleId        String
+  scale          Schedule     @relation("ScaleMemberRolesBySchedule", fields: [scaleId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         User         @relation("ScaleMemberRolesByMember", fields: [memberId], references: [id], onDelete: Cascade)
+  roleFunctionId String
+  roleFunction   RoleFunction @relation("ScaleMemberRolesByFunction", fields: [roleFunctionId], references: [id], onDelete: Restrict)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([scaleId, memberId, roleFunctionId])
+  @@index([scaleId, roleFunctionId])
+  @@index([memberId, roleFunctionId])
 }
 
 // Token de convite para membros
@@ -336,8 +389,26 @@ model Rehearsal {
   songs       RehearsalSong[]
   attendance  RehearsalAttendance[]
   checklist   RehearsalChecklistItem[]
+  memberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByRehearsal")
 
   @@index([groupId, dateTime])
+}
+
+model RehearsalMemberRole {
+  id             String       @id @default(cuid())
+  rehearsalId    String
+  rehearsal      Rehearsal    @relation("RehearsalMemberRolesByRehearsal", fields: [rehearsalId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         User         @relation("RehearsalMemberRolesByMember", fields: [memberId], references: [id], onDelete: Cascade)
+  roleFunctionId String
+  roleFunction   RoleFunction @relation("RehearsalMemberRolesByFunction", fields: [roleFunctionId], references: [id], onDelete: Restrict)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([rehearsalId, memberId, roleFunctionId])
+  @@index([rehearsalId, roleFunctionId])
+  @@index([memberId, roleFunctionId])
 }
 
 model RehearsalSong {
