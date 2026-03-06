@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
 
 export async function GET(
   req: NextRequest,
@@ -71,6 +72,38 @@ export async function PUT(
     if (date) {
       const [year, month, day] = date.split("-").map(Number);
       scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
+    }
+
+    const assignedRoles = (roles ?? []).filter((role: any) => role?.memberId);
+    const assignedMemberIds = [...new Set(assignedRoles.map((role: any) => String(role.memberId)))];
+
+    if (scheduleDate && assignedMemberIds.length > 0) {
+      const members = await prisma.user.findMany({
+        where: { id: { in: assignedMemberIds } },
+        select: {
+          id: true,
+          name: true,
+          profile: {
+            select: { availability: true },
+          },
+        },
+      });
+
+      const conflicts = findScheduleAvailabilityConflicts({
+        date: scheduleDate,
+        roles: assignedRoles,
+        members,
+      });
+
+      if (conflicts.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Há membros escalados em dias sem disponibilidade.",
+            conflicts,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const existingSchedule = await prisma.schedule.findUnique({
