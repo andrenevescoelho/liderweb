@@ -40,7 +40,7 @@ services:
     volumes:
       - ./:/app
       - liderweb_node_modules:/app/node_modules
-    command: sh -lc "npm install --legacy-peer-deps --no-audit --no-fund && npx prisma generate && npx prisma db push --accept-data-loss && npm run dev"
+    command: sh -lc "npm install --legacy-peer-deps --no-audit --no-fund && npx prisma generate && npx prisma migrate deploy && npm run dev"
     depends_on:
       db:
         condition: service_healthy
