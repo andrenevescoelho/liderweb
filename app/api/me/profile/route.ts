@@ -55,12 +55,22 @@ export async function GET() {
     }
 
     const user = session.user as SessionUser;
-    const profile = await prisma.memberProfile.findUnique({ where: { userId: user.id } });
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { profile: true },
+    });
+
+    if (!dbUser) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+
+    const profile = dbUser.profile;
 
     return NextResponse.json({
-      displayName: user.name,
+      displayName: dbUser.name,
       birthDate: profile?.birthDate ? profile.birthDate.toISOString().slice(0, 10) : "",
       memberFunctions: profile?.memberFunctions ?? [],
+      availability: profile?.availability ?? [],
       phone: profile?.phone ?? "",
       city: profile?.city ?? "",
       state: profile?.state ?? "",
@@ -156,6 +166,9 @@ export async function PATCH(req: NextRequest) {
           profileVoiceType,
           vocalRangeKey: normalizeOptionalText(body?.vocalRangeKey, 10),
           skillLevel: skillLevel as any,
+          availability: Array.isArray(body?.availability)
+            ? body.availability.filter((value: unknown) => typeof value === "string")
+            : [],
           availabilityNotes: normalizeOptionalText(body?.availabilityNotes, MAX_NOTES_LENGTH),
           repertoirePrefs: normalizeOptionalText(body?.repertoirePrefs, MAX_NOTES_LENGTH),
           instagram: instagramCheck.value,
@@ -172,6 +185,9 @@ export async function PATCH(req: NextRequest) {
           profileVoiceType,
           vocalRangeKey: normalizeOptionalText(body?.vocalRangeKey, 10),
           skillLevel: skillLevel as any,
+          availability: Array.isArray(body?.availability)
+            ? body.availability.filter((value: unknown) => typeof value === "string")
+            : [],
           availabilityNotes: normalizeOptionalText(body?.availabilityNotes, MAX_NOTES_LENGTH),
           repertoirePrefs: normalizeOptionalText(body?.repertoirePrefs, MAX_NOTES_LENGTH),
           instagram: instagramCheck.value,

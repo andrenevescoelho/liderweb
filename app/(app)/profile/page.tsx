@@ -21,6 +21,7 @@ type ProfileForm = {
   profileVoiceType: string;
   vocalRangeKey: string;
   skillLevel: string;
+  availability: string[];
   availabilityNotes: string;
   repertoirePrefs: string;
   avatarUrl: string;
@@ -39,12 +40,23 @@ const initialForm: ProfileForm = {
   profileVoiceType: "",
   vocalRangeKey: "",
   skillLevel: "",
+  availability: [],
   availabilityNotes: "",
   repertoirePrefs: "",
   avatarUrl: "",
   instagram: "",
   youtube: "",
 };
+
+const AVAILABILITY_DAY_OPTIONS = [
+  { value: "monday", label: "Segunda" },
+  { value: "tuesday", label: "Terça" },
+  { value: "wednesday", label: "Quarta" },
+  { value: "thursday", label: "Quinta" },
+  { value: "friday", label: "Sexta" },
+  { value: "saturday", label: "Sábado" },
+  { value: "sunday", label: "Domingo" },
+] as const;
 
 export default function ProfilePage() {
   const [form, setForm] = useState<ProfileForm>(initialForm);
@@ -57,7 +69,11 @@ export default function ProfilePage() {
         const res = await fetch("/api/me/profile", { cache: "no-store" });
         if (!res.ok) throw new Error("Falha ao carregar perfil");
         const data = await res.json();
-        setForm({ ...initialForm, ...data });
+        setForm({
+          ...initialForm,
+          ...data,
+          availability: Array.isArray(data?.availability) ? data.availability : [],
+        });
       } catch (error: any) {
         toast({ title: "Erro ao carregar perfil", description: error?.message ?? "Tente novamente." });
       } finally {
@@ -79,6 +95,13 @@ export default function ProfilePage() {
     }));
   };
 
+  const toggleAvailabilityDay = (value: string, checked: boolean) => {
+    setForm((prev) => ({
+      ...prev,
+      availability: checked ? [...prev.availability, value] : prev.availability.filter((item) => item !== value),
+    }));
+  };
+
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -87,7 +110,9 @@ export default function ProfilePage() {
       const res = await fetch("/api/me/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+        }),
       });
       const data = await res.json();
 
@@ -203,8 +228,29 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="availabilityNotes">Disponibilidade</Label>
-              <Textarea id="availabilityNotes" maxLength={1000} value={form.availabilityNotes} onChange={(e) => updateField("availabilityNotes", e.target.value)} />
+              <Label>Disponibilidade</Label>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {AVAILABILITY_DAY_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={form.availability.includes(option.value)}
+                      onCheckedChange={(checked) => toggleAvailabilityDay(option.value, checked === true)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Selecione os dias que você geralmente está disponível.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="availabilityNotes">Observações de disponibilidade</Label>
+              <Textarea
+                id="availabilityNotes"
+                maxLength={1000}
+                value={form.availabilityNotes}
+                onChange={(e) => updateField("availabilityNotes", e.target.value)}
+                placeholder="Ex.: após 19h, domingos alternados, etc."
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="repertoirePrefs">Preferência de repertório</Label>
