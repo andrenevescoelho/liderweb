@@ -23,7 +23,7 @@ const normalizeOptionalText = (value: unknown, maxLength = MAX_TEXT_LENGTH) => {
 };
 
 const parseBirthDate = (value: unknown) => {
-  if (typeof value !== "string" || !value) return { error: "Data de aniversário é obrigatória" } as const;
+  if (typeof value !== "string" || !value) return { date: null } as const;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return { error: "Data de aniversário inválida" } as const;
 
   const date = new Date(`${value}T12:00:00.000Z`);
@@ -113,10 +113,6 @@ export async function PATCH(req: NextRequest) {
     const functions = Array.isArray(body?.memberFunctions)
       ? body.memberFunctions.filter((value: unknown) => typeof value === "string")
       : [];
-
-    if (!functions.length) {
-      return NextResponse.json({ error: "Selecione ao menos uma função no ministério" }, { status: 400 });
-    }
 
     const invalidFunction = functions.find((value: string) => !memberFunctionValues.has(value as any));
     if (invalidFunction) {
