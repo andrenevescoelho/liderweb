@@ -104,6 +104,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        token.name = user.name;
         token.role = (user as any).role;
         token.id = user.id;
         token.groupId = (user as any).groupId;
@@ -125,6 +126,7 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (dbUser) {
+          token.name = dbUser.name;
           token.role = dbUser.role;
           token.groupId = dbUser.groupId;
           token.permissions = dbUser.profile?.permissions ?? [];
@@ -135,6 +137,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session?.user) {
+        session.user.name = token.name ?? session.user.name;
         (session.user as any).role = token.role;
         (session.user as any).id = token.id;
         (session.user as any).groupId = token.groupId;
