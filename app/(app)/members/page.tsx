@@ -679,6 +679,15 @@ function MemberModal({
     items: PERMISSIONS.filter((permission) => permission.category === key && !permission.key.startsWith("rehearsal.")),
   }));
 
+  const permissionSections = [
+    {
+      key: "rehearsals",
+      label: "Ensaios",
+      items: [...rehearsalPermissions, { key: "rehearsal.manage", label: "Admin de ensaios" }],
+    },
+    ...groupedPermissions,
+  ];
+
   const applyPreset = (presetKey: string) => {
     const preset = PERMISSION_PRESETS.find((item) => item.key === presetKey);
     if (preset) {
@@ -903,30 +912,8 @@ function MemberModal({
             ]}
           />
 
-          <div className="space-y-2 rounded-lg border p-3 dark:border-gray-700">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Ensaios
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[...rehearsalPermissions, { key: "rehearsal.manage", label: "Admin de ensaios" }].map((permission) => (
-                <button
-                  key={permission.key}
-                  type="button"
-                  onClick={() => toggleRehearsalPermission(permission.key)}
-                  className={`px-2 py-1 rounded-full text-xs border transition-colors ${
-                    permissions.includes(permission.key)
-                      ? "bg-purple-600 text-white border-purple-600"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
-                  }`}
-                >
-                  {permission.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3 max-h-72 overflow-auto pr-1">
-            {groupedPermissions.map((group) => (
+          <div className="space-y-3">
+            {permissionSections.map((group) => (
               <div key={group.key} className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   {group.label}
@@ -936,7 +923,11 @@ function MemberModal({
                     <button
                       key={permission.key}
                       type="button"
-                      onClick={() => toggleItem(permissions, permission.key, setPermissions)}
+                      onClick={() =>
+                        permission.key.startsWith("rehearsal.")
+                          ? toggleRehearsalPermission(permission.key)
+                          : toggleItem(permissions, permission.key, setPermissions)
+                      }
                       className={`px-2 py-1 rounded-full text-xs border transition-colors ${
                         permissions.includes(permission.key)
                           ? "bg-purple-600 text-white border-purple-600"
