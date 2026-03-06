@@ -4,7 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, Sun, Moon, LogOut, ChevronDown, Search } from "lucide-react";
+import { Menu, Sun, Moon, LogOut, ChevronDown, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
@@ -111,8 +111,18 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
                   <p className="truncate text-xs text-muted-foreground">{session?.user?.email}</p>
                 </div>
                 <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    router.push("/profile");
+                  }}
+                  className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-popover-foreground hover:bg-accent"
+                >
+                  <User className="h-4 w-4" />
+                  Perfil
+                </button>
+                <button
                   onClick={() => signOut({ callbackUrl: "/login" })}
-                  className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-destructive hover:bg-destructive/10"
+                  className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-destructive hover:bg-destructive/10"
                 >
                   <LogOut className="h-4 w-4" />
                   Sair
