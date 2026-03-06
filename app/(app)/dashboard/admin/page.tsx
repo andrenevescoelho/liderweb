@@ -145,7 +145,7 @@ export default function AdminDashboardPage() {
       </div>
 
 
-      {(birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
+      {userRole !== "SUPERADMIN" && (birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
         <Card className="rounded-xl border border-border/80">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
