@@ -18,6 +18,7 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -148,6 +149,22 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
           })}
         </ul>
       </nav>
+
+      <div className={cn("border-t border-white/10 p-3", collapsed ? "px-2" : "px-4")}>
+        <Link
+          href="/profile"
+          onClick={handleLinkClick}
+          className={cn(
+            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-all hover:bg-white/10 hover:text-white",
+            pathname === "/profile" && "bg-primary text-primary-foreground",
+            collapsed && "justify-center px-2"
+          )}
+          title={collapsed ? "Perfil" : undefined}
+        >
+          <Settings className="h-5 w-5" />
+          {!collapsed && <span className="font-medium">Perfil</span>}
+        </Link>
+      </div>
 
       {!collapsed && (
         <div className="border-t border-white/10 p-4">

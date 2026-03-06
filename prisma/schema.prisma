@@ -22,6 +22,28 @@ enum VoiceType {
   LEAD
 }
 
+enum MemberFunction {
+  VOCAL
+  TECLADO
+  VIOLAO
+  GUITARRA
+  BAIXO
+  BATERIA
+  PERCUSSAO
+  BACKING_VOCAL
+  SOPRO
+  MIDIA
+  SOM
+  LIDER
+  OUTRO
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
 enum InviteStatus {
   PENDING
   ACCEPTED
@@ -181,6 +203,18 @@ model MemberProfile {
   availability    String[] @default([])
   phone           String?
   birthDate       DateTime?
+  city            String?
+  state           String?
+  bio             String? @db.Text
+  avatarUrl       String?
+  profileVoiceType String?
+  vocalRangeKey   String?
+  skillLevel      SkillLevel?
+  availabilityNotes String? @db.Text
+  repertoirePrefs String? @db.Text
+  instagram       String?
+  youtube         String?
+  memberFunctions MemberFunction[] @default([])
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
