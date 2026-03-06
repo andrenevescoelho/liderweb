@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { signIn, getSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Music, Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,17 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const oauthErrorMessage = useMemo(() => {
+    const errorParam = searchParams.get("error");
+    if (errorParam === "google_email_required") {
+      return "Não foi possível entrar com Google sem email verificado.";
+    }
+    if (errorParam === "OAuthSignin" || errorParam === "OAuthCallback") {
+      return "Erro ao autenticar com Google. Tente novamente.";
+    }
+    return "";
+  }, [searchParams]);
 
   const resolveSession = async (attempts = 5) => {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -23,6 +34,19 @@ export default function LoginPage() {
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
     return null;
+  };
+
+
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await signIn("google", { callbackUrl: "/dashboard" });
+    } catch {
+      setError("Erro ao iniciar login com Google");
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,7 +94,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+          {(error || oauthErrorMessage) && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error || oauthErrorMessage}</div>}
 
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -84,6 +108,10 @@ export default function LoginPage() {
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
+          </Button>
+
+          <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleGoogleLogin}>
+            Entrar com Google
           </Button>
         </form>
 
