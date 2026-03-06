@@ -1,10 +1,15 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
-async function verifyPassword(password: string, storedPassword: string, userId: string) {
+async function verifyPassword(password: string, storedPassword: string | null, userId: string) {
+  if (!storedPassword) {
+    return false;
+  }
+
   try {
     return await bcrypt.compare(password, storedPassword);
   } catch {
@@ -26,6 +31,11 @@ async function verifyPassword(password: string, storedPassword: string, userId: 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      allowDangerousEmailAccountLinking: true,
+    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -102,6 +112,43 @@ export const authOptions: NextAuthOptions = {
   ],
   session: { strategy: "jwt" },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "google") {
+        return true;
+      }
+
+      const rawEmail = user.email ?? (typeof profile?.email === "string" ? profile.email : null);
+      const normalizedEmail = rawEmail?.trim().toLowerCase();
+      const isEmailVerified = Boolean((profile as { email_verified?: boolean } | undefined)?.email_verified);
+
+      if (!normalizedEmail || !isEmailVerified) {
+        console.error("[auth][google] Login recusado: email ausente ou não verificado.", {
+          hasEmail: Boolean(normalizedEmail),
+          isEmailVerified,
+          providerAccountId: account.providerAccountId,
+        });
+        return "/login?error=google_email_required";
+      }
+
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: "insensitive",
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      console.info("[auth][google] Tentativa de login OAuth.", {
+        providerAccountId: account.providerAccountId,
+        matchedExistingUser: Boolean(existingUser),
+      });
+
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.name = user.name;
