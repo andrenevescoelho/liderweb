@@ -14,7 +14,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const searchParams = useSearchParams();
   const oauthErrorMessage = useMemo(() => {
     const errorParam = searchParams.get("error");
@@ -40,19 +41,19 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError("");
-    setLoading(true);
+    setGoogleLoading(true);
     try {
       await signIn("google", { callbackUrl: "/dashboard" });
     } catch {
       setError("Erro ao iniciar login com Google");
-      setLoading(false);
+      setGoogleLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e?.preventDefault?.();
     setError("");
-    setLoading(true);
+    setCredentialsLoading(true);
 
     try {
       const result = await signIn("credentials", { email, password, redirect: false });
@@ -75,7 +76,7 @@ export default function LoginPage() {
     } catch {
       setError("Erro ao fazer login");
     } finally {
-      setLoading(false);
+      setCredentialsLoading(false);
     }
   };
 
@@ -106,12 +107,21 @@ export default function LoginPage() {
             <Input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e?.target?.value ?? "")} className="pl-10" required />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
+          <Button type="submit" className="w-full" disabled={credentialsLoading || googleLoading}>
+            {credentialsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
           </Button>
 
-          <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleGoogleLogin}>
-            Entrar com Google
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Acesso SSO</span>
+            </div>
+          </div>
+
+          <Button type="button" variant="outline" className="w-full" disabled={credentialsLoading || googleLoading} onClick={handleGoogleLogin}>
+            {googleLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar com Google"}
           </Button>
         </form>
 
