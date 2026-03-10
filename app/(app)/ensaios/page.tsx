@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Music2, CalendarClock, AlertTriangle, Clock3, Plus, BellRing } from "lucide-react";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,15 @@ export default function EnsaiosPage() {
     };
   }, [nextRehearsal]);
 
+  const attendanceChartData = useMemo(
+    () => [
+      { name: "Aceitos", value: attendanceStats.accepted, color: "hsl(var(--chart-1))" },
+      { name: "Pendentes", value: attendanceStats.pending, color: "hsl(var(--chart-4))" },
+      { name: "Recusados", value: attendanceStats.declined, color: "hsl(var(--chart-5))" },
+    ],
+    [attendanceStats],
+  );
+
   const songTotalMinutes = useMemo(() => {
     if (Number(nextRehearsal?.estimatedMinutes) > 0) {
       return Number(nextRehearsal.estimatedMinutes);
@@ -93,6 +103,28 @@ export default function EnsaiosPage() {
     return withBpm.length * 5;
   }, [nextRehearsal]);
 
+  const estimatedTimeChartData = useMemo(() => {
+    const safeMinutes = Math.max(0, Number(songTotalMinutes) || 0);
+    const hours = Math.floor(safeMinutes / 60);
+    const minutes = safeMinutes % 60;
+    const data = [] as Array<{ name: string; value: number; color: string }>;
+
+    if (hours > 0) data.push({ name: "Horas", value: hours * 60, color: "hsl(var(--chart-2))" });
+    if (minutes > 0) data.push({ name: "Minutos", value: minutes, color: "hsl(var(--chart-3))" });
+    if (data.length === 0) data.push({ name: "Sem tempo", value: 1, color: "hsl(var(--muted-foreground))" });
+
+    return data;
+  }, [songTotalMinutes]);
+
+  const formattedDuration = useMemo(() => {
+    const safeMinutes = Math.max(0, Number(songTotalMinutes) || 0);
+    const hours = Math.floor(safeMinutes / 60);
+    const minutes = safeMinutes % 60;
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}min`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes} min`;
+  }, [songTotalMinutes]);
+
   const pendingItems = useMemo(() => {
     const songs = nextRehearsal?.songs ?? [];
     const newSongs = songs.filter((song: any) => song.status === "REHEARSAL_ONLY").length;
@@ -102,11 +134,11 @@ export default function EnsaiosPage() {
   }, [nextRehearsal, attendanceStats.pending]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ensaios</h1>
-          <p className="text-gray-500">Planejamento, repertório e confirmações em um só lugar.</p>
+          <h1 className="text-2xl font-bold text-foreground">Ensaios</h1>
+          <p className="text-muted-foreground">Planejamento, repertório e confirmações em um só lugar.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/ensaios/calendario">
@@ -122,14 +154,14 @@ export default function EnsaiosPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="w-5 h-5 text-purple-600" /> Próximo ensaio</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><CalendarClock className="w-5 h-5 text-primary" /> Próximo ensaio</CardTitle></CardHeader>
           <CardContent>
             {!nextRehearsal ? (
-              <p className="text-gray-500">Nenhum ensaio agendado.</p>
+              <p className="text-muted-foreground">Nenhum ensaio agendado.</p>
             ) : (
               <div className="space-y-2">
                 <p className="font-medium">{formatUtcDateTime(nextRehearsal.dateTime)}</p>
-                <p className="text-sm text-gray-500">Local: {nextRehearsal.location || "Não definido"}</p>
+                <p className="text-sm text-muted-foreground">Local: {nextRehearsal.location || "Não definido"}</p>
                 {renderStatusBadge(nextRehearsal.status)}
               </div>
             )}
@@ -137,17 +169,17 @@ export default function EnsaiosPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Music2 className="w-5 h-5 text-purple-600" /> Repertório do próximo ensaio</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Music2 className="w-5 h-5 text-primary" /> Repertório do próximo ensaio</CardTitle></CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {(nextRehearsal?.songs ?? []).slice(0, 5).map((song: any) => (
-                <li key={song.id} className="text-sm border rounded-md p-2">
+                <li key={song.id} className="rounded-lg border border-border/70 bg-muted/20 p-2 text-sm text-foreground">
                   {song.title} {song.artist ? `- ${song.artist}` : ""}
                 </li>
               ))}
             </ul>
             {(nextRehearsal?.songs?.length ?? 0) > 5 && (
-              <p className="text-xs text-gray-500 mt-2">+{nextRehearsal.songs.length - 5} músicas</p>
+              <p className="text-xs text-muted-foreground mt-2">+{nextRehearsal.songs.length - 5} músicas</p>
             )}
           </CardContent>
         </Card>
@@ -155,20 +187,60 @@ export default function EnsaiosPage() {
         {canManage && (
           <Card>
             <CardHeader><CardTitle>Presença confirmada</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>Aceitos: {attendanceStats.accepted}</p>
-              <p>Pendentes: {attendanceStats.pending}</p>
-              <p>Recusados: {attendanceStats.declined}</p>
+            <CardContent className="space-y-3">
+              <div className="h-44">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={attendanceChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={45}
+                      outerRadius={72}
+                      paddingAngle={2}
+                    >
+                      {attendanceChartData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value, "Pessoas"]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 text-sm">
+                <p>Aceitos: {attendanceStats.accepted}</p>
+                <p>Pendentes: {attendanceStats.pending}</p>
+                <p>Recusados: {attendanceStats.declined}</p>
+              </div>
               <p className="font-semibold">Taxa de confirmação: {attendanceStats.confirmationRate}%</p>
             </CardContent>
           </Card>
         )}
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="w-5 h-5 text-purple-600" /> Tempo estimado</CardTitle></CardHeader>
-          <CardContent>
-            <p className="font-semibold text-lg">{songTotalMinutes || 0} min</p>
-            <p className="text-xs text-gray-500">Baseado na quantidade de músicas (ou valor estimado manual).</p>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="w-5 h-5 text-primary" /> Tempo estimado</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={estimatedTimeChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={45}
+                    outerRadius={72}
+                    paddingAngle={2}
+                  >
+                    {estimatedTimeChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value} min`, "Tempo"]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="font-semibold text-lg">{formattedDuration}</p>
+            <p className="text-xs text-muted-foreground">Baseado na quantidade de músicas (ou valor estimado manual).</p>
           </CardContent>
         </Card>
       </div>
@@ -176,9 +248,9 @@ export default function EnsaiosPage() {
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-500" /> Pendências</CardTitle></CardHeader>
         <CardContent className="grid sm:grid-cols-3 gap-3 text-sm">
-          <div className="p-3 rounded border">Músicas novas: <b>{pendingItems.newSongs}</b></div>
-          <div className="p-3 rounded border">Sem resposta: <b>{pendingItems.pendingMembers}</b></div>
-          <div className="p-3 rounded border">Sem cifra/multitrack: <b>{pendingItems.missingMedia}</b></div>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">Músicas novas: <b>{pendingItems.newSongs}</b></div>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">Sem resposta: <b>{pendingItems.pendingMembers}</b></div>
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3">Sem cifra/multitrack: <b>{pendingItems.missingMedia}</b></div>
         </CardContent>
       </Card>
 

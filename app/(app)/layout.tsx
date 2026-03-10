@@ -16,3 +16,5 @@ export default async function AppLayoutWrapper({
 
   return <AppLayout>{children}</AppLayout>;
 }
+
+// Force checkpoint update - profile and aniversariantes pages added

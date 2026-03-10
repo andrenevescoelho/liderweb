@@ -7,6 +7,22 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 import { enqueueSongAnalysis } from "@/lib/song-analysis";
 
+function sanitizeChordUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -115,7 +131,14 @@ export async function POST(req: NextRequest) {
       audioUrl,
       youtubeUrl,
       sourceSongId,
+      chordUrl,
     } = body ?? {};
+
+    const sanitizedChordUrl = sanitizeChordUrl(chordUrl);
+
+    if (chordUrl && !sanitizedChordUrl) {
+      return NextResponse.json({ error: "Link da cifra inválido. Use URL com http:// ou https://" }, { status: 400 });
+    }
 
     if (sourceSongId) {
       const sourceSong = await prisma.song.findUnique({ where: { id: sourceSongId } });
@@ -153,6 +176,7 @@ export async function POST(req: NextRequest) {
           tags: sourceSong.tags,
           lyrics: sourceSong.lyrics,
           chordPro: sourceSong.chordPro,
+          chordUrl: sourceSong.chordUrl,
           audioUrl: sourceSong.audioUrl,
           youtubeUrl: sourceSong.youtubeUrl,
           sourceType: sourceSong.sourceType,
@@ -186,6 +210,7 @@ export async function POST(req: NextRequest) {
         tags: tags ?? [],
         lyrics: lyrics ?? null,
         chordPro: chordPro ?? null,
+        chordUrl: sanitizedChordUrl,
         audioUrl: audioUrl ?? null,
         youtubeUrl: youtubeUrl ?? null,
         sourceType: youtubeUrl ? "YOUTUBE" : audioUrl ? "UPLOAD" : null,

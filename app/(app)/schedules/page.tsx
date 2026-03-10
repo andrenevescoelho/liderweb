@@ -705,7 +705,7 @@ function ScheduleModal({
       const url = schedule ? `/api/schedules/${schedule?.id}` : "/api/schedules";
       const method = schedule ? "PUT" : "POST";
 
-      await fetch(url, {
+      const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -721,6 +721,24 @@ function ScheduleModal({
           })),
         }),
       });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        const conflicts = errorBody?.conflicts ?? [];
+
+        if (Array.isArray(conflicts) && conflicts.length > 0) {
+          const details = conflicts
+            .map((conflict: any) => `• ${conflict?.memberName ?? "Membro"} (${conflict?.role ?? "Sem papel"}) não tem disponibilidade na ${conflict?.weekday ?? "data selecionada"}.`)
+            .join("\n");
+
+          alert(`Não foi possível salvar a escala.\n${details}`);
+          return;
+        }
+
+        alert(errorBody?.error ?? "Não foi possível salvar a escala.");
+        return;
+      }
+
       onSave();
     } catch (e) {
       console.error(e);

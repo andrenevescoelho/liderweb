@@ -22,6 +22,7 @@ import {
   ServerCrash,
   Plus,
   Bell,
+  Gift,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ import {
   Line,
 } from "recharts";
 import { toast } from "@/hooks/use-toast";
+import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { can, canAny } from "@/lib/rbac";
 
 export default function DashboardPage() {
@@ -314,6 +316,8 @@ export default function DashboardPage() {
   const myUpcomingSchedules = data?.myUpcomingSchedules ?? [];
   const pendingConfirmations = data?.pendingConfirmations ?? [];
   const songsToRehearse = data?.songsToRehearse ?? [];
+  const birthdaysToday = data?.birthdaysToday ?? [];
+  const birthdaysMonth = data?.birthdaysMonth ?? [];
   const nextCommitment = myUpcomingSchedules?.[0] ?? null;
   const canConfirmPresence = can(sessionUser, "schedule.presence.confirm.self");
   const canViewMembersCard = canAny(sessionUser, ["member.view", "member.manage"]);
@@ -376,6 +380,46 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      )}
+
+
+      {userRole !== "SUPERADMIN" && (birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
+        <Card className="rounded-xl border border-border/80">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-pink-600" />
+              Aniversariantes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Hoje</p>
+              {birthdaysToday.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhum aniversariante hoje.</p>
+              ) : (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {birthdaysToday.map((member: any) => (
+                    <Badge key={member.id} variant="success">{member.name}</Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Neste mês</p>
+              <div className="mt-1 space-y-1">
+                {birthdaysMonth.slice(0, 6).map((member: any) => (
+                  <p key={member.id} className="text-sm text-gray-600 dark:text-gray-300">
+                    {member.name} • {member.birthDate ? format(new Date(member.birthDate), "dd/MM") : "--/--"}
+                  </p>
+                ))}
+                {birthdaysMonth.length === 0 && (
+                  <p className="text-sm text-gray-500">Nenhum aniversariante neste mês.</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {shouldShowRehearsalReminder && (
@@ -484,17 +528,17 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--accent) / 0.35)" }} />
                     <Area
                       type="monotone"
                       dataKey="setlistsCreated"
-                      fill="#60a5fa"
-                      stroke="#2563eb"
+                      fill="hsl(var(--chart-2))"
+                      stroke="hsl(var(--chart-2))"
                       fillOpacity={0.2}
                       name="Escalas criadas"
                     />
-                    <Bar dataKey="newGroups" fill="#7c3aed" name="Novas igrejas" radius={[6, 6, 0, 0]} barSize={26} />
-                    <Line type="monotone" dataKey="newGroups" stroke="#5b21b6" dot={{ r: 4 }} />
+                    <Bar dataKey="newGroups" fill="hsl(var(--chart-1))" name="Novas igrejas" radius={[6, 6, 0, 0]} barSize={26} />
+                    <Line type="monotone" dataKey="newGroups" stroke="hsl(var(--chart-3))" dot={{ r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -525,8 +569,8 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" hide />
                     <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="usage" fill="#0ea5e9" name="Escalas" radius={[4, 4, 0, 0]} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--accent) / 0.35)" }} />
+                    <Bar dataKey="usage" fill="hsl(var(--chart-2))" name="Escalas" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>

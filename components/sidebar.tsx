@@ -13,14 +13,14 @@ import {
   CreditCard,
   Megaphone,
   MessageCircle,
+  Cake,
   Building2,
-  Settings,
   Shield,
   ChevronLeft,
   ChevronRight,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
 import { SessionUser } from "@/lib/types";
 import { PERMISSIONS, PERMISSION_PRESETS } from "@/lib/permissions";
 
@@ -33,69 +33,17 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  {
-    label: "Início",
-    href: "/dashboard",
-    icon: <LayoutDashboard className="w-5 h-5" />,
-    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Administração",
-    href: "/dashboard/admin",
-    icon: <Shield className="w-5 h-5" />,
-    roles: ["ADMIN"],
-    permissions: ["report.group.access"],
-  },
-  {
-    label: "Grupos",
-    href: "/admin",
-    icon: <Building2 className="w-5 h-5" />,
-    roles: ["SUPERADMIN"],
-  },
-  {
-    label: "Membros",
-    href: "/members",
-    icon: <Users className="w-5 h-5" />,
-    roles: ["ADMIN", "LEADER"],
-    permissions: ["member.manage"],
-  },
-  {
-    label: "Músicas",
-    href: "/songs",
-    icon: <Music className="w-5 h-5" />,
-    roles: ["ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Escalas",
-    href: "/schedules",
-    icon: <Calendar className="w-5 h-5" />,
-    roles: ["ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Ensaios",
-    href: "/ensaios",
-    icon: <NotebookPen className="w-5 h-5" />,
-    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Comunicados",
-    href: "/comunicados",
-    icon: <Megaphone className="w-5 h-5" />,
-    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Chat do Grupo",
-    href: "/chat-grupo",
-    icon: <MessageCircle className="w-5 h-5" />,
-    roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
-  },
-  {
-    label: "Meu Plano",
-    href: "/meu-plano",
-    icon: <CreditCard className="w-5 h-5" />,
-    roles: ["ADMIN"],
-    permissions: ["subscription.manage"],
-  },
+  { label: "Início", href: "/dashboard", icon: <LayoutDashboard className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { label: "Administração", href: "/dashboard/admin", icon: <Shield className="h-5 w-5" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
+  { label: "Grupos", href: "/admin", icon: <Building2 className="h-5 w-5" />, roles: ["SUPERADMIN"] },
+  { label: "Membros", href: "/members", icon: <Users className="h-5 w-5" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
+  { label: "Músicas", href: "/songs", icon: <Music className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Aniversariantes", href: "/aniversariantes", icon: <Cake className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { label: "Escalas", href: "/schedules", icon: <Calendar className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Ensaios", href: "/ensaios", icon: <NotebookPen className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Chat do Grupo", href: "/chat-grupo", icon: <MessageCircle className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-5 w-5" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
 ];
 
 interface SidebarProps {
@@ -133,98 +81,51 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       return a.missingCount - b.missingCount;
     })[0];
 
-  const permissionPresetName = bestPresetMatch?.preset?.label
-    ?.replace(/^[^A-Za-zÀ-ÿ0-9]+/, "")
-    ?.trim();
-
-  const isPresetCustomized = Boolean(
-    bestPresetMatch && (bestPresetMatch.missingCount > 0 || bestPresetMatch.extraCount > 0)
-  );
-
+  const permissionPresetName = bestPresetMatch?.preset?.label?.replace(/^[^A-Za-zÀ-ÿ0-9]+/, "")?.trim();
+  const isPresetCustomized = Boolean(bestPresetMatch && (bestPresetMatch.missingCount > 0 || bestPresetMatch.extraCount > 0));
   const hidePermissionSummary = pathname?.startsWith("/admin") || userRole === "ADMIN";
 
   const filteredMenuItems = menuItems.filter((item) => {
-    if (item.href === "/meu-plano" && userRole === "SUPERADMIN") {
-      return false;
-    }
-
-    if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) {
-      return false;
-    }
-
-    if (item.roles.includes(userRole)) {
-      return true;
-    }
-
-    if (!item.permissions?.length) {
-      return false;
-    }
-
+    if (item.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
+    if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) return false;
+    if (item.roles.includes(userRole)) return true;
+    if (!item.permissions?.length) return false;
     return item.permissions.some((permission) => userPermissions.includes(permission));
   });
 
   const handleLinkClick = () => {
-    if (isMobile && onMobileClose) {
-      onMobileClose();
-    }
+    if (isMobile && onMobileClose) onMobileClose();
   };
 
   return (
-    <aside
-      className={cn(
-        "flex flex-col h-full bg-slate-900 text-white transition-all duration-300",
-        collapsed ? "w-[70px]" : "w-[260px]"
-      )}
-    >
-      {/* Logo */}
-      <div className={cn(
-        "flex items-center h-16 px-4 border-b border-slate-800",
-        collapsed ? "justify-center" : "justify-between"
-      )}>
-        {!collapsed && (
+    <aside className={cn("flex h-full flex-col border-r border-border bg-[#0f1728] text-foreground transition-all duration-300", collapsed ? "w-[78px]" : "w-[272px]")}>
+      <div className={cn("flex h-16 items-center border-b border-white/10 px-4", collapsed ? "justify-center" : "justify-between")}>
+        {!collapsed ? (
           <Link href="/dashboard" className="flex items-center gap-3" onClick={handleLinkClick}>
-            <div className="relative w-8 h-8">
-              <Image
-                src="/logo.png"
-                alt="Líder Web"
-                fill
-                className="object-contain"
-              />
+            <div className="relative h-8 w-8 overflow-hidden rounded-md ring-1 ring-white/20">
+              <Image src="/logo.png" alt="Líder Web" fill className="object-contain" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-bold text-white">Líder Web</span>
-              <span className="text-[10px] text-slate-400 -mt-1">By Multitrack Gospel</span>
+              <span className="text-base font-semibold text-white">Líder Web</span>
+              <span className="-mt-0.5 text-[10px] text-slate-400">by multitrackgospel.com</span>
             </div>
           </Link>
-        )}
-        {collapsed && (
+        ) : (
           <Link href="/dashboard" onClick={handleLinkClick}>
-            <div className="relative w-8 h-8">
-              <Image
-                src="/logo.png"
-                alt="Líder Web"
-                fill
-                className="object-contain"
-              />
+            <div className="relative h-8 w-8 overflow-hidden rounded-md ring-1 ring-white/20">
+              <Image src="/logo.png" alt="Líder Web" fill className="object-contain" />
             </div>
           </Link>
         )}
+
         {!isMobile && (
-          <button
-            onClick={onToggle}
-            className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
-          >
-            {collapsed ? (
-              <ChevronRight className="w-5 h-5 text-slate-400" />
-            ) : (
-              <ChevronLeft className="w-5 h-5 text-slate-400" />
-            )}
+          <button onClick={onToggle} className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white">
+            {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>
         )}
       </div>
 
-      {/* Menu */}
-      <nav className="flex-1 py-4 px-3 overflow-y-auto">
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
           {filteredMenuItems.map((item) => {
             const isActive = pathname === item.href;
@@ -234,50 +135,55 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
                   href={item.href}
                   onClick={handleLinkClick}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                    isActive
-                      ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all",
+                    isActive ? "bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_rgba(20,184,166,0.95)]" : "text-slate-300 hover:bg-white/10 hover:text-white",
                     collapsed && "justify-center px-2"
                   )}
                   title={collapsed ? item.label : undefined}
                 >
                   {item.icon}
-                  {!collapsed && (
-                    <span className="font-medium">{item.label}</span>
-                  )}
+                  {!collapsed && <span className="font-medium">{item.label}</span>}
                 </Link>
               </li>
             );
-          })}        </ul>
+          })}
+        </ul>
       </nav>
 
-      {/* Role Badge */}
+      <div className={cn("border-t border-white/10 p-3", collapsed ? "px-2" : "px-4")}>
+        <Link
+          href="/profile"
+          onClick={handleLinkClick}
+          className={cn(
+            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-all hover:bg-white/10 hover:text-white",
+            pathname === "/profile" && "bg-primary text-primary-foreground",
+            collapsed && "justify-center px-2"
+          )}
+          title={collapsed ? "Perfil" : undefined}
+        >
+          <Settings className="h-5 w-5" />
+          {!collapsed && <span className="font-medium">Perfil</span>}
+        </Link>
+      </div>
+
       {!collapsed && (
-        <div className="p-4 border-t border-slate-800">
-          <div className="px-3 py-2 rounded-lg bg-slate-800/50 space-y-1.5">
+        <div className="border-t border-white/10 p-4">
+          <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-purple-400" />
-              <span className="text-sm text-slate-300">
-                {userRole === "SUPERADMIN" ? "Super Admin" :
-                 userRole === "ADMIN" ? "Administrador" :
-                 userRole === "LEADER" ? "Líder" : "Membro"}
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="text-sm text-slate-200">
+                {userRole === "SUPERADMIN" ? "Super Admin" : userRole === "ADMIN" ? "Administrador" : userRole === "LEADER" ? "Líder" : "Membro"}
               </span>
             </div>
             {!hidePermissionSummary && (
               <>
                 {permissionPresetName ? (
-                  <p className="text-xs text-slate-400">
-                    Permissão: {permissionPresetName}
-                    {isPresetCustomized ? " (customizada)" : ""}
-                  </p>
+                  <p className="text-xs text-slate-400">Permissão: {permissionPresetName}{isPresetCustomized ? " (customizada)" : ""}</p>
                 ) : (
-                  <p className="text-xs text-slate-400">
-                    RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}
-                  </p>
+                  <p className="text-xs text-slate-400">RBAC: {userPermissions.length} permiss{userPermissions.length === 1 ? "ão" : "ões"}</p>
                 )}
                 {!permissionPresetName && permissionLabels.length > 0 && (
-                  <p className="text-xs text-slate-500 truncate" title={permissionLabels.join(", ")}>
+                  <p className="truncate text-xs text-slate-500" title={permissionLabels.join(", ")}>
                     {permissionLabels.join(" • ")}
                     {userPermissions.length > permissionLabels.length ? " • ..." : ""}
                   </p>

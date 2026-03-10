@@ -32,6 +32,17 @@ import { Modal } from "@/components/ui/modal";
 import { ChordProViewer } from "@/components/chord-pro-viewer";
 import { SONG_TAGS, MUSICAL_KEYS } from "@/lib/types";
 
+function isValidExternalUrl(url: string): boolean {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // Função para extrair o ID do vídeo do YouTube
 function getYoutubeEmbedUrl(url: string): string | null {
   if (!url) return null;
@@ -64,6 +75,11 @@ export default function SongsPage() {
   const [viewSong, setViewSong] = useState<any>(null);
   const openedSongIdFromQueryRef = useRef<string | null>(null);
   const songIdFromQuery = searchParams?.get("songId") ?? "";
+  const searchFromQuery = searchParams?.get("search") ?? "";
+
+  useEffect(() => {
+    setSearch(searchFromQuery);
+  }, [searchFromQuery]);
 
   const fetchSongs = async () => {
     try {
@@ -364,6 +380,7 @@ function SongModal({
   const [chordPro, setChordPro] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
+  const [chordUrl, setChordUrl] = useState("");
   const [audioMode, setAudioMode] = useState<"link" | "upload">("link");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
@@ -385,6 +402,7 @@ function SongModal({
       setChordPro(song?.chordPro ?? "");
       setYoutubeUrl(song?.youtubeUrl ?? "");
       setAudioUrl(song?.audioUrl ?? "");
+      setChordUrl(song?.chordUrl ?? "");
       setAudioMode("link");
     } else {
       setTitle("");
@@ -397,6 +415,7 @@ function SongModal({
       setChordPro("");
       setYoutubeUrl("");
       setAudioUrl("");
+      setChordUrl("");
       setAudioMode("link");
     }
     setUploading(false);
@@ -542,6 +561,7 @@ function SongModal({
           chordPro,
           youtubeUrl: youtubeUrl || null,
           audioUrl: audioUrl || null,
+          chordUrl: chordUrl || null,
         }),
       });
       onSave();
@@ -797,6 +817,26 @@ function SongModal({
               </div>
             )}
           </div>
+        </div>
+
+        <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg space-y-3">
+          <h4 className="font-medium text-gray-700 dark:text-gray-300">Cifra</h4>
+          <Input
+            label="Link da cifra"
+            type="url"
+            value={chordUrl}
+            onChange={(e) => setChordUrl(e?.target?.value ?? "")}
+            placeholder="https://www.cifraclub.com.br/..."
+          />
+          {isValidExternalUrl(chordUrl) && (
+            <div>
+              <a href={chordUrl} target="_blank" rel="noopener noreferrer">
+                <Button type="button" variant="outline" size="sm">
+                  <LinkIcon className="w-4 h-4 mr-2" /> Abrir cifra
+                </Button>
+              </a>
+            </div>
+          )}
         </div>
 
         <div>

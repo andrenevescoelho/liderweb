@@ -3,16 +3,10 @@
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useState, useRef, useEffect } from "react";
-import {
-  Menu,
-  Sun,
-  Moon,
-  LogOut,
-  User,
-  ChevronDown,
-  Bell,
-} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, Sun, Moon, LogOut, ChevronDown, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 interface AppHeaderProps {
   onMenuClick: () => void;
@@ -21,9 +15,28 @@ interface AppHeaderProps {
 
 export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
   const { data: session } = useSession() || {};
+  const router = useRouter();
+  const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSearch = () => {
+    const term = search.trim();
+    if (!term) {
+      router.push("/songs");
+      return;
+    }
+
+    router.push(`/songs?search=${encodeURIComponent(term)}`);
+  };
+
+  useEffect(() => {
+    if (pathname !== "/songs") {
+      setSearch("");
+    }
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -35,82 +48,88 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/login" });
-  };
-
   return (
-    <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 flex items-center justify-between">
-      {/* Left side */}
-      <div className="flex items-center gap-4">
-        {isMobile && (
-          <button
-            onClick={onMenuClick}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Menu className="w-6 h-6 text-gray-600 dark:text-slate-300" />
-          </button>
-        )}
-      </div>
-
-      {/* Right side */}
-      <div className="flex items-center gap-2">
-        {/* Theme Toggle */}
-        <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-          title={theme === "dark" ? "Modo claro" : "Modo escuro"}
-        >
-          {theme === "dark" ? (
-            <Sun className="w-5 h-5 text-yellow-500" />
-          ) : (
-            <Moon className="w-5 h-5 text-gray-600" />
+    <header className="h-16 border-b border-border/80 bg-background/85 px-4 backdrop-blur md:px-6">
+      <div className="flex h-full items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {isMobile && (
+            <button onClick={onMenuClick} className="rounded-lg border border-border p-2 text-muted-foreground hover:text-foreground">
+              <Menu className="h-5 w-5" />
+            </button>
           )}
-        </button>
+          <div className="relative hidden w-[280px] lg:block">
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Pesquisar"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+            <Input
+              placeholder="Pesquisar músicas..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
+            />
+          </div>
+        </div>
 
-        {/* User Dropdown */}
-        <div className="relative" ref={dropdownRef}>
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="rounded-lg border border-border p-2 text-muted-foreground hover:text-foreground"
+            title={theme === "dark" ? "Modo claro" : "Modo escuro"}
           >
-            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white font-semibold">
-              {session?.user?.name?.charAt(0).toUpperCase() || "U"}
-            </div>
-            <div className="hidden md:flex flex-col items-start">
-              <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {session?.user?.name || "Usuário"}
-              </span>
-              <span className="text-xs text-gray-500 dark:text-slate-400">
-                {session?.user?.email}
-              </span>
-            </div>
-            <ChevronDown className={cn(
-              "w-4 h-4 text-gray-500 transition-transform",
-              dropdownOpen && "rotate-180"
-            )} />
+            {theme === "dark" ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5" />}
           </button>
 
-          {/* Dropdown Menu */}
-          {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-2 z-50">
-              <div className="px-4 py-2 border-b border-gray-200 dark:border-slate-700">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {session?.user?.name}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                  {session?.user?.email}
-                </p>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 hover:bg-accent"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                {session?.user?.name?.charAt(0).toUpperCase() || "U"}
               </div>
-              <button
-                onClick={handleSignOut}
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Sair
-              </button>
-            </div>
-          )}
+              <div className="hidden md:flex flex-col items-start">
+                <span className="text-sm font-medium text-foreground">{session?.user?.name || "Usuário"}</span>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", dropdownOpen && "rotate-180")} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-border bg-popover p-2 shadow-2xl">
+                <div className="border-b border-border px-2 pb-2">
+                  <p className="text-sm font-medium text-popover-foreground">{session?.user?.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{session?.user?.email}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    router.push("/profile");
+                  }}
+                  className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-popover-foreground hover:bg-accent"
+                >
+                  <User className="h-4 w-4" />
+                  Perfil
+                </button>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-destructive hover:bg-destructive/10"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sair
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

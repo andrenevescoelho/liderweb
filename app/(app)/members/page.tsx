@@ -537,6 +537,7 @@ function MemberModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [instruments, setInstruments] = useState<string[]>([]);
   const [voiceType, setVoiceType] = useState("");
   const [vocalRange, setVocalRange] = useState("");
@@ -565,6 +566,7 @@ function MemberModal({
       setName(member?.name ?? "");
       setEmail(member?.email ?? "");
       setPhone(member?.profile?.phone ?? "");
+      setBirthDate(member?.profile?.birthDate ? String(member.profile.birthDate).slice(0, 10) : "");
       setInstruments(member?.profile?.instruments ?? []);
       setVoiceType(member?.profile?.voiceType ?? "");
       setVocalRange(member?.profile?.vocalRange ?? "");
@@ -581,6 +583,7 @@ function MemberModal({
       setEmail("");
       setPassword("");
       setPhone("");
+      setBirthDate("");
       setInstruments([]);
       setVoiceType("");
       setVocalRange("");
@@ -616,6 +619,7 @@ function MemberModal({
             email,
             password,
             phone,
+            birthDate: birthDate || null,
             instruments,
             voiceType: voiceType || null,
             vocalRange,
@@ -634,12 +638,13 @@ function MemberModal({
         }
       } else {
         // Update existing member
-        await fetch(`/api/members/${member?.id}`, {
+        const res = await fetch(`/api/members/${member?.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name,
             phone,
+            birthDate: birthDate || null,
             instruments,
             voiceType: voiceType || null,
             vocalRange,
@@ -651,6 +656,11 @@ function MemberModal({
             permissions,
           }),
         });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Erro ao atualizar membro");
+        }
       }
       onSave();
     } catch (e: any) {
@@ -668,6 +678,15 @@ function MemberModal({
     label,
     items: PERMISSIONS.filter((permission) => permission.category === key && !permission.key.startsWith("rehearsal.")),
   }));
+
+  const permissionSections = [
+    {
+      key: "rehearsals",
+      label: "Ensaios",
+      items: [...rehearsalPermissions, { key: "rehearsal.manage", label: "Admin de ensaios" }],
+    },
+    ...groupedPermissions,
+  ];
 
   const applyPreset = (presetKey: string) => {
     const preset = PERMISSION_PRESETS.find((item) => item.key === presetKey);
@@ -758,6 +777,13 @@ function MemberModal({
           label="Telefone/WhatsApp"
           value={phone}
           onChange={(e) => setPhone(e?.target?.value ?? '')}
+        />
+
+        <Input
+          label="Data de aniversário"
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e?.target?.value ?? '')}
         />
 
         <Select
@@ -886,30 +912,8 @@ function MemberModal({
             ]}
           />
 
-          <div className="space-y-2 rounded-lg border p-3 dark:border-gray-700">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Ensaios
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[...rehearsalPermissions, { key: "rehearsal.manage", label: "Admin de ensaios" }].map((permission) => (
-                <button
-                  key={permission.key}
-                  type="button"
-                  onClick={() => toggleRehearsalPermission(permission.key)}
-                  className={`px-2 py-1 rounded-full text-xs border transition-colors ${
-                    permissions.includes(permission.key)
-                      ? "bg-purple-600 text-white border-purple-600"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
-                  }`}
-                >
-                  {permission.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3 max-h-72 overflow-auto pr-1">
-            {groupedPermissions.map((group) => (
+          <div className="space-y-3">
+            {permissionSections.map((group) => (
               <div key={group.key} className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   {group.label}
@@ -919,17 +923,21 @@ function MemberModal({
                     <button
                       key={permission.key}
                       type="button"
-                      onClick={() => toggleItem(permissions, permission.key, setPermissions)}
+                      onClick={() =>
+                        permission.key.startsWith("rehearsal.")
+                          ? toggleRehearsalPermission(permission.key)
+                          : toggleItem(permissions, permission.key, setPermissions)
+                      }
                       className={`px-2 py-1 rounded-full text-xs border transition-colors ${
                         permissions.includes(permission.key)
                           ? "bg-purple-600 text-white border-purple-600"
                           : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
                       }`}
-                      title={permission.description || permission.label}
+                      title={(permission as any).description || permission.label}
                     >
                       {permission.label}
-                      {permission.future ? " (futuro)" : ""}
-                      {permission.premium ? " • premium" : ""}
+                      {(permission as any).future ? " (futuro)" : ""}
+                      {(permission as any).premium ? " • premium" : ""}
                     </button>
                   ))}
                 </div>

@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
+import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
 
 export async function GET(req: NextRequest) {
   try {
@@ -113,6 +114,44 @@ export async function POST(req: NextRequest) {
     // Criar data ao meio-dia para evitar problemas de timezone
     const [year, month, day] = date.split("-").map(Number);
     const scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
+
+    const assignedRoles = (roles ?? []).filter((role: any) => role?.memberId);
+    const assignedMemberIds = [...new Set(assignedRoles.map((role: any) => String(role.memberId)))];
+
+    if (assignedMemberIds.length > 0) {
+      const membersRaw = await prisma.user.findMany({
+        where: { id: { in: assignedMemberIds as string[] } },
+        select: {
+          id: true,
+          name: true,
+          profile: {
+            select: { availability: true },
+          },
+        },
+      }) as any[];
+
+      const members = membersRaw.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        profile: m.profile ? { availability: m.profile.availability as string[] } : null,
+      }));
+
+      const conflicts = findScheduleAvailabilityConflicts({
+        date: scheduleDate,
+        roles: assignedRoles,
+        members,
+      });
+
+      if (conflicts.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Há membros escalados em dias sem disponibilidade.",
+            conflicts,
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const createdSetlist = await prisma.setlist.create({
       data: {
