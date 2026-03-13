@@ -44,11 +44,43 @@ function isValidExternalUrl(url: string): boolean {
 }
 
 // Função para extrair o ID do vídeo do YouTube
-function getYoutubeEmbedUrl(url: string): string | null {
+function getYoutubeVideoId(url: string): string | null {
   if (!url) return null;
+
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.replace("www.", "");
+
+    if (hostname === "youtu.be") {
+      const pathId = parsedUrl.pathname.split("/").filter(Boolean)[0];
+      return pathId && pathId.length === 11 ? pathId : null;
+    }
+
+    if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+      const videoId = parsedUrl.searchParams.get("v");
+      if (videoId && videoId.length === 11) return videoId;
+
+      const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+      const lastPathPart = pathParts[pathParts.length - 1];
+      if (lastPathPart && lastPathPart.length === 11) return lastPathPart;
+    }
+  } catch {
+    // fallback regex para links não padronizados
+  }
+
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
-  return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : null;
+  return match && match[2].length === 11 ? match[2] : null;
+}
+
+function getYoutubeEmbedUrl(url: string): string | null {
+  const videoId = getYoutubeVideoId(url);
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+}
+
+function getYoutubeThumbnailUrl(url: string): string | null {
+  const videoId = getYoutubeVideoId(url);
+  return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
 }
 
 export default function SongsPage() {
@@ -183,9 +215,14 @@ export default function SongsPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {songs?.map?.((song) => (
-            <Card key={song?.id ?? ''} className="hover:shadow-xl transition-shadow">
-              <CardContent className="p-4">
+          {songs?.map?.((song) => {
+            const youtubeThumbnailUrl = song?.youtubeUrl
+              ? getYoutubeThumbnailUrl(song.youtubeUrl)
+              : null;
+
+            return (
+              <Card key={song?.id ?? ''} className="hover:shadow-xl transition-shadow">
+                <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white">
@@ -206,6 +243,17 @@ export default function SongsPage() {
                   )}
                   <span>{song?.timeSignature ?? '4/4'}</span>
                 </div>
+
+                {youtubeThumbnailUrl && (
+                  <div className="mb-3">
+                    <img
+                      src={youtubeThumbnailUrl}
+                      alt={`Miniatura do vídeo de ${song?.title ?? 'YouTube'}`}
+                      className="w-full h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
 
                 {/* Indicadores de mídia */}
                 <div className="flex items-center gap-2 mb-3">
@@ -231,42 +279,43 @@ export default function SongsPage() {
                   </div>
                 )}
 
-                <div className="flex gap-2 pt-3 border-t dark:border-gray-700">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setViewSong(song);
-                      setViewModalOpen(true);
-                    }}
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                  {canEdit && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditSong(song);
-                          setModalOpen(true);
-                        }}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDelete(song?.id ?? '')}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="flex gap-2 pt-3 border-t dark:border-gray-700">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setViewSong(song);
+                        setViewModalOpen(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    {canEdit && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditSong(song);
+                            setModalOpen(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDelete(song?.id ?? '')}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
