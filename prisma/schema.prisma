@@ -119,6 +119,7 @@ enum AuditEntityType {
   AUTH
   USER
   GROUP
+  ANNOUNCEMENT
   REHEARSAL
   SCALE
   SONG
@@ -126,6 +127,31 @@ enum AuditEntityType {
   SUBSCRIPTION
   RBAC
   OTHER
+}
+
+enum AnnouncementType {
+  INFO
+  FEATURE
+  PROMOTION
+  ALERT
+  MAINTENANCE
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum AnnouncementTargetScope {
+  ALL_PLATFORM
+  SELECTED_GROUPS
+}
+
+enum AnnouncementTargetAudience {
+  ADMINS_ONLY
+  ALL_USERS
 }
 
 enum ImportType {
@@ -165,6 +191,7 @@ model Group {
   roleFunctions RoleFunction[]
   auditLogs    AuditLog[]
   importJobs   ImportJob[]
+  announcementTargets AnnouncementGroup[]
 }
 
 model SubscriptionPlan {
@@ -267,6 +294,63 @@ model User {
   sessions      Session[]
   auditLogs     AuditLog[]
   importJobs    ImportJob[]
+  createdAnnouncements Announcement[] @relation("AnnouncementCreator")
+  announcementReceipts AnnouncementReceipt[]
+}
+
+model Announcement {
+  id             String                     @id @default(cuid())
+  title          String
+  message        String                     @db.Text
+  type           AnnouncementType           @default(INFO)
+  status         AnnouncementStatus         @default(DRAFT)
+  targetScope    AnnouncementTargetScope    @default(ALL_PLATFORM)
+  targetAudience AnnouncementTargetAudience @default(ALL_USERS)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean                    @default(true)
+  ctaLabel       String?
+  ctaUrl         String?
+  priority       Int                        @default(0)
+  metadata       Json?
+  createdBy      String
+  createdByUser  User                       @relation("AnnouncementCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  targetGroups   AnnouncementGroup[]
+  receipts       AnnouncementReceipt[]
+
+  @@index([status, isActive])
+  @@index([startsAt, expiresAt])
+  @@index([targetScope, targetAudience])
+  @@index([priority, createdAt])
+}
+
+model AnnouncementGroup {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  groupId        String
+  group          Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([announcementId, groupId])
+  @@index([groupId])
+}
+
+model AnnouncementReceipt {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveredAt    DateTime?
+  viewedAt       DateTime?
+  dismissedAt    DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([announcementId, userId])
+  @@index([userId, viewedAt])
 }
 
 model ImportJob {

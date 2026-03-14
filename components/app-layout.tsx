@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { X } from "lucide-react";
 import pkg from "../package.json";
+import { PendingAnnouncementModal } from "@/components/pending-announcement-modal";
 
 const APP_VERSION = `Versão ${pkg.version}`;
 
@@ -78,6 +79,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="mx-auto w-full max-w-[1400px]">{children}</div>
         </main>
         <footer className="px-4 pb-4 text-center text-xs text-muted-foreground md:px-6">{APP_VERSION}</footer>
+        <PendingAnnouncementModal />
       </div>
     </div>
   );
