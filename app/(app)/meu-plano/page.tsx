@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, Crown, CreditCard, ExternalLink, Loader2, AlertCircle } from "lucide-react";
+import { Check, Crown, CreditCard, ExternalLink, Loader2, AlertCircle, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 const PLANS = [
   {
@@ -111,6 +112,9 @@ export default function MeuPlanoPage() {
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
 
   const canManage = useMemo(() => ["ADMIN", "SUPERADMIN"].includes(userRole) || userPermissions.includes("subscription.manage"), [userPermissions, userRole]);
 
@@ -160,6 +164,39 @@ export default function MeuPlanoPage() {
       alert("Erro ao abrir o portal do Stripe.");
     } finally {
       setPortalLoading(false);
+    }
+  };
+
+
+  const handleApplyCoupon = async () => {
+    setCouponFeedback(null);
+    if (!couponCode.trim()) {
+      setCouponFeedback("Informe um cupom para aplicar.");
+      return;
+    }
+
+    setCouponLoading(true);
+    try {
+      const res = await fetch("/api/subscription/coupon/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCouponFeedback(data.error || "Não foi possível aplicar o cupom.");
+      } else {
+        setCouponFeedback(`Cupom aplicado com sucesso: ${data.summary}`);
+        setCouponCode("");
+        const statusRes = await fetch("/api/subscription/status");
+        const statusData = await statusRes.json();
+        setStatus(statusData);
+      }
+    } catch (error) {
+      console.error(error);
+      setCouponFeedback("Erro ao aplicar cupom.");
+    } finally {
+      setCouponLoading(false);
     }
   };
 
@@ -262,6 +299,30 @@ export default function MeuPlanoPage() {
                 Usuários: {status?.subscription?.userCount} /{" "}
                 {status?.subscription?.userLimit === 0 ? "ilimitado" : status?.subscription?.userLimit}
               </div>
+
+              {typeof status?.subscription?.originalPrice === "number" ? (
+                <div className="text-muted-foreground">
+                  Valor do plano: <strong>{formatPlanPrice(status.subscription.originalPrice)}</strong>
+                  {status.subscription.effectivePrice !== status.subscription.originalPrice ? (
+                    <>
+                      {" "}→ Valor com benefício: <strong>{formatPlanPrice(status.subscription.effectivePrice)}</strong>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {status?.subscription?.activeCoupon ? (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs space-y-1">
+                  <p className="font-medium text-emerald-200">Cupom ativo: {status.subscription.activeCoupon.code}</p>
+                  <p className="text-emerald-100">{status.subscription.activeCoupon.benefitSummary}</p>
+                  <p className="text-emerald-100">
+                    Início: {new Date(status.subscription.activeCoupon.benefitStartAt).toLocaleDateString("pt-BR")}
+                    {status.subscription.activeCoupon.benefitEndAt
+                      ? ` • Fim: ${new Date(status.subscription.activeCoupon.benefitEndAt).toLocaleDateString("pt-BR")}`
+                      : ""}
+                  </p>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="text-muted-foreground">
@@ -270,6 +331,34 @@ export default function MeuPlanoPage() {
           )}
         </CardContent>
       </Card>
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ticket className="w-5 h-5 text-purple-600" />
+            Cupom de desconto
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Digite o código do cupom"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+            />
+            <Button onClick={handleApplyCoupon} disabled={couponLoading || !status?.hasSubscription}>
+              {couponLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Aplicar cupom
+            </Button>
+          </div>
+          {couponFeedback ? <p className="text-xs text-muted-foreground">{couponFeedback}</p> : null}
+          {!status?.hasSubscription ? (
+            <p className="text-xs text-muted-foreground">Você precisa de uma assinatura ativa para aplicar cupons.</p>
+          ) : null}
+        </CardContent>
+      </Card>
+
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {PLANS.map((plan) => {

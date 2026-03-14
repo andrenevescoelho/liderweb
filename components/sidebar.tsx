@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
+  TicketPercent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -36,6 +37,7 @@ const menuItems: MenuItem[] = [
   { label: "Início", href: "/dashboard", icon: <LayoutDashboard className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
   { label: "Administração", href: "/dashboard/admin", icon: <Shield className="h-5 w-5" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
   { label: "Grupos", href: "/admin", icon: <Building2 className="h-5 w-5" />, roles: ["SUPERADMIN"] },
+  { label: "Cupons", href: "/cupons", icon: <TicketPercent className="h-5 w-5" />, roles: ["SUPERADMIN"], permissions: ["manage_coupons", "view_coupons"] },
   { label: "Membros", href: "/members", icon: <Users className="h-5 w-5" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
   { label: "Músicas", href: "/songs", icon: <Music className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Aniversariantes", href: "/aniversariantes", icon: <Cake className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
