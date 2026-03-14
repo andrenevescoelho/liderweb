@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import {
+  confirmImportJob,
   createImportJob,
   logImportStarted,
   markImportFailed,
@@ -58,8 +59,20 @@ export async function POST(req: NextRequest) {
       groupId: scope.groupId,
     });
 
+    if (mode === "validate") {
+      return NextResponse.json({
+        jobId,
+        jobStatus: "VALIDATED",
+        ...preview,
+      });
+    }
+
+    const execution = await confirmImportJob({ jobId, user });
+
     return NextResponse.json({
       jobId,
+      jobStatus: "COMPLETED",
+      execution,
       ...preview,
     });
   } catch (error) {

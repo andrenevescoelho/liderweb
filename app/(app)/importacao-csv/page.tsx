@@ -21,6 +21,14 @@ interface PreviewRow {
 
 interface PreviewResponse {
   jobId: string;
+  jobStatus?: "VALIDATED" | "COMPLETED";
+  execution?: {
+    totalRows: number;
+    successRows: number;
+    updatedRows: number;
+    ignoredRows: number;
+    errorRows: number;
+  };
   importType: ImportType;
   mode: ImportMode;
   filename: string;
@@ -106,6 +114,16 @@ export default function CsvImportPage() {
       }
 
       setPreview(data);
+
+      if (data?.jobStatus === "COMPLETED" && data?.execution) {
+        setMessage(
+          `Importação concluída automaticamente. Processado: ${data.execution.totalRows}, criados: ${data.execution.successRows}, atualizados: ${data.execution.updatedRows}, ignorados: ${data.execution.ignoredRows}, erros: ${data.execution.errorRows}.`
+        );
+        fetch("/api/imports/history")
+          .then((historyResponse) => historyResponse.json())
+          .then((historyData) => setHistory(Array.isArray(historyData) ? historyData : []))
+          .catch(() => undefined);
+      }
     } catch (error) {
       setMessage("Erro inesperado ao validar importação.");
     } finally {
@@ -199,7 +217,7 @@ export default function CsvImportPage() {
             <Button
               variant="secondary"
               onClick={handleConfirmImport}
-              disabled={confirming || !preview || mode === "validate" || preview.validRows === 0}
+              disabled={confirming || !preview || mode === "validate" || preview.validRows === 0 || preview.jobStatus === "COMPLETED"}
             >
               {confirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Confirmar importação
