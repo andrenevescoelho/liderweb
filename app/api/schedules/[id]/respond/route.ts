@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export async function POST(
   req: NextRequest,
@@ -26,6 +28,7 @@ export async function POST(
     }
 
     const body = await req.json();
+    const context = extractRequestContext(req);
     const { roleId, status } = body ?? {};
 
     if (!roleId || !status) {
@@ -54,6 +57,19 @@ export async function POST(
     const updatedRole = await prisma.scheduleRole.update({
       where: { id: roleId },
       data: { status },
+    });
+
+    await logUserAction({
+      userId: userId,
+      groupId: user.groupId ?? null,
+      action: status === "ACCEPTED" ? AUDIT_ACTIONS.SCALE_CONFIRMED : AUDIT_ACTIONS.SCALE_DECLINED,
+      entityType: AuditEntityType.SCALE,
+      entityId: params?.id,
+      entityName: `Escala ${params?.id}`,
+      description: `Usuário ${user.name} ${status === "ACCEPTED" ? "confirmou" : "recusou"} participação em escala`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: { roleId, status },
     });
 
     return NextResponse.json(updatedRole);

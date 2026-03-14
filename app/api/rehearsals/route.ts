@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 const db = prisma as any;
 
@@ -82,6 +84,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const context = extractRequestContext(req);
     const {
       date,
       time,
@@ -159,6 +162,19 @@ export async function POST(req: NextRequest) {
         skipDuplicates: true,
       });
     }
+
+    await logUserAction({
+      userId: user.id,
+      groupId: created.groupId ?? user.groupId ?? null,
+      action: AUDIT_ACTIONS.REHEARSAL_CREATED,
+      entityType: AuditEntityType.REHEARSAL,
+      entityId: created.id,
+      entityName: `Ensaio ${created.dateTime.toISOString()}`,
+      description: `Usuário ${user.name} criou um ensaio`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: { status: created.status, songsCount: created.songs.length },
+    });
 
     return NextResponse.json({
       ...created,

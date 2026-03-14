@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 function sanitizeChordUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -58,6 +60,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     const body = await req.json();
+    const context = extractRequestContext(req);
+
+    const before = await prisma.song.findUnique({ where: { id: params?.id } });
+    if (!before) {
+      return NextResponse.json({ error: "Música não encontrada" }, { status: 404 });
+    }
     const { title, artist, bpm, originalKey, timeSignature, tags, lyrics, chordPro, chordUrl, audioUrl, youtubeUrl } = body ?? {};
 
     const parsedBpm = bpm ? parseInt(bpm) : null;
@@ -86,6 +94,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       },
     });
 
+    await logUserAction({
+      userId: (session?.user as any)?.id,
+      groupId: song.groupId ?? (session?.user as any)?.groupId ?? null,
+      action: AUDIT_ACTIONS.SONG_UPDATED,
+      entityType: AuditEntityType.SONG,
+      entityId: song.id,
+      entityName: song.title,
+      description: `Música ${song.title} foi atualizada`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: { title: before.title, artist: before.artist, bpm: before.bpm, originalKey: before.originalKey },
+      newValues: { title: song.title, artist: song.artist, bpm: song.bpm, originalKey: song.originalKey },
+    });
+
     return NextResponse.json(song);
   } catch (error) {
     console.error("Update song error:", error);
@@ -102,8 +124,27 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
+    const context = extractRequestContext(req);
+    const before = await prisma.song.findUnique({ where: { id: params?.id } });
+    if (!before) {
+      return NextResponse.json({ error: "Música não encontrada" }, { status: 404 });
+    }
+
     await prisma.song.delete({
       where: { id: params?.id },
+    });
+
+    await logUserAction({
+      userId: (session?.user as any)?.id,
+      groupId: before.groupId ?? (session?.user as any)?.groupId ?? null,
+      action: AUDIT_ACTIONS.SONG_DELETED,
+      entityType: AuditEntityType.SONG,
+      entityId: before.id,
+      entityName: before.title,
+      description: `Música ${before.title} foi excluída`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: { title: before.title, artist: before.artist, bpm: before.bpm, originalKey: before.originalKey },
     });
 
     return NextResponse.json({ success: true });

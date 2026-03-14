@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 const db = prisma as any;
 
@@ -26,6 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const { status, justification, memberId } = await req.json();
+    const context = extractRequestContext(req);
 
     const canManageAttendance =
       user.role === "SUPERADMIN" ||
@@ -33,6 +36,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       hasPermission(user.role, "rehearsal.manage", user.permissions);
 
     const targetMemberId = canManageAttendance ? memberId || user.id : user.id;
+
+    const previousAttendance = await db.rehearsalAttendance.findUnique({
+      where: { rehearsalId_memberId: { rehearsalId: params.id, memberId: targetMemberId } },
+    });
 
     const attendance = await db.rehearsalAttendance.upsert({
       where: {
@@ -51,6 +58,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         status: status || "PENDING",
         justification: justification || null,
       },
+    });
+
+    await logUserAction({
+      userId: user.id,
+      groupId: rehearsal.groupId ?? user.groupId ?? null,
+      action: AUDIT_ACTIONS.REHEARSAL_ATTENDANCE_UPDATED,
+      entityType: AuditEntityType.REHEARSAL,
+      entityId: rehearsal.id,
+      entityName: `Ensaio ${rehearsal.id}`,
+      description: `Presença de ensaio atualizada por ${user.name}`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: { targetMemberId },
+      oldValues: { status: previousAttendance?.status, justification: previousAttendance?.justification },
+      newValues: { status: attendance.status, justification: attendance.justification },
     });
 
     return NextResponse.json(attendance);

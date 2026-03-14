@@ -4,10 +4,11 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { SessionUser } from "@/lib/types";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// GET single user
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -15,7 +16,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     const currentUser = session?.user as SessionUser | undefined;
-    
+
     if (!currentUser) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
@@ -43,23 +44,16 @@ export async function GET(
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
     return NextResponse.json(user);
   } catch (error) {
     console.error("Erro ao buscar usuário:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar usuário" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro ao buscar usuário" }, { status: 500 });
   }
 }
 
-// PUT update user (SUPERADMIN only)
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -67,7 +61,7 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions);
     const currentUser = session?.user as SessionUser | undefined;
-    
+
     if (!currentUser) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
@@ -78,26 +72,21 @@ export async function PUT(
 
     const body = await request.json();
     const { name, email, password, role, groupId } = body;
+    const context = extractRequestContext(request);
 
     const existingUser = await prisma.user.findUnique({
       where: { id: params.id },
+      select: { id: true, name: true, email: true, role: true, groupId: true },
     });
 
     if (!existingUser) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
-    // Check if email is being changed and if it's already in use
     if (email && email !== existingUser.email) {
       const emailInUse = await prisma.user.findUnique({ where: { email } });
       if (emailInUse) {
-        return NextResponse.json(
-          { error: "Email já está em uso" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Email já está em uso" }, { status: 400 });
       }
     }
 
@@ -106,8 +95,7 @@ export async function PUT(
     if (email) updateData.email = email;
     if (password) updateData.password = await bcrypt.hash(password, 10);
     if (role) updateData.role = role;
-    
-    // SUPERADMIN não pertence a nenhum grupo
+
     if (role === "SUPERADMIN") {
       updateData.groupId = null;
     } else if (groupId !== undefined) {
@@ -132,17 +120,28 @@ export async function PUT(
       },
     });
 
+    await logUserAction({
+      userId: currentUser.id,
+      groupId: user.groupId ?? currentUser.groupId ?? null,
+      action: role && role !== existingUser.role ? AUDIT_ACTIONS.USER_ROLE_CHANGED : AUDIT_ACTIONS.USER_UPDATED,
+      entityType: AuditEntityType.USER,
+      entityId: user.id,
+      entityName: user.name,
+      description: `Usuário ${currentUser.name} atualizou o usuário ${user.name}`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: { name: existingUser.name, email: existingUser.email, role: existingUser.role, groupId: existingUser.groupId },
+      newValues: { name: user.name, email: user.email, role: user.role, groupId: user.groupId },
+      metadata: { passwordChanged: Boolean(password) },
+    });
+
     return NextResponse.json(user);
   } catch (error) {
     console.error("Erro ao atualizar usuário:", error);
-    return NextResponse.json(
-      { error: "Erro ao atualizar usuário" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro ao atualizar usuário" }, { status: 500 });
   }
 }
 
-// DELETE user (SUPERADMIN only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -150,7 +149,7 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions);
     const currentUser = session?.user as SessionUser | undefined;
-    
+
     if (!currentUser) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
@@ -159,40 +158,36 @@ export async function DELETE(
       return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
     }
 
-    // Prevent deleting self
     if (params.id === currentUser.id) {
-      return NextResponse.json(
-        { error: "Você não pode excluir sua própria conta" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Você não pode excluir sua própria conta" }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: params.id },
-    });
+    const user = await prisma.user.findUnique({ where: { id: params.id } });
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Usuário não encontrado" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
 
-    // Delete profile first if exists
-    await prisma.memberProfile.deleteMany({
-      where: { userId: params.id },
-    });
+    await prisma.memberProfile.deleteMany({ where: { userId: params.id } });
+    await prisma.user.delete({ where: { id: params.id } });
 
-    await prisma.user.delete({
-      where: { id: params.id },
+    const context = extractRequestContext(request);
+    await logUserAction({
+      userId: currentUser.id,
+      groupId: user.groupId ?? currentUser.groupId ?? null,
+      action: AUDIT_ACTIONS.USER_DELETED,
+      entityType: AuditEntityType.USER,
+      entityId: user.id,
+      entityName: user.name,
+      description: `Usuário ${currentUser.name} removeu o usuário ${user.name}`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: { name: user.name, email: user.email, role: user.role, groupId: user.groupId },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Erro ao excluir usuário:", error);
-    return NextResponse.json(
-      { error: "Erro ao excluir usuário" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro ao excluir usuário" }, { status: 500 });
   }
 }

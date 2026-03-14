@@ -4,6 +4,8 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { AUDIT_ACTIONS, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 async function verifyPassword(password: string, storedPassword: string | null, userId: string) {
   if (!storedPassword) {
@@ -72,10 +74,37 @@ export const authOptions: NextAuthOptions = {
           },
         });
         
-        if (!user) return null;
+        if (!user) {
+          await logUserAction({
+            action: AUDIT_ACTIONS.LOGIN_FAILED,
+            entityType: AuditEntityType.AUTH,
+            description: `Tentativa de login inválida para ${normalizedEmail}`,
+            metadata: { email: normalizedEmail, reason: "user_not_found" },
+          });
+          return null;
+        }
         
         const isValid = await verifyPassword(credentials.password, user.password, user.id);
-        if (!isValid) return null;
+        if (!isValid) {
+          await logUserAction({
+            userId: user.id,
+            groupId: user.groupId,
+            action: AUDIT_ACTIONS.LOGIN_FAILED,
+            entityType: AuditEntityType.AUTH,
+            description: `Tentativa de login inválida para ${user.email}`,
+            metadata: { email: user.email, reason: "invalid_password" },
+          });
+          return null;
+        }
+
+        await logUserAction({
+          userId: user.id,
+          groupId: user.groupId,
+          action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+          entityType: AuditEntityType.AUTH,
+          description: `Login realizado com sucesso por ${user.name}`,
+          metadata: { provider: "credentials" },
+        });
         
         // Verificar status da assinatura do grupo
         let subscriptionStatus = null;
@@ -193,6 +222,21 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).subscriptionStatus = token.subscriptionStatus;
       }
       return session;
+    },
+  },
+
+  events: {
+    async signOut({ token }) {
+      const userId = typeof token?.id === "string" ? token.id : null;
+      const groupId = typeof token?.groupId === "string" ? token.groupId : null;
+
+      await logUserAction({
+        userId,
+        groupId,
+        action: AUDIT_ACTIONS.LOGOUT,
+        entityType: AuditEntityType.AUTH,
+        description: "Logout realizado no sistema",
+      });
     },
   },
   pages: {

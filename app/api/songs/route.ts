@@ -6,6 +6,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 import { enqueueSongAnalysis } from "@/lib/song-analysis";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 function sanitizeChordUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -119,6 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const context = extractRequestContext(req);
     const {
       title,
       artist,
@@ -191,6 +194,19 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      await logUserAction({
+        userId: user.id,
+        groupId: user.groupId ?? null,
+        action: AUDIT_ACTIONS.SONG_CREATED,
+        entityType: AuditEntityType.SONG,
+        entityId: clonedSong.id,
+        entityName: clonedSong.title,
+        description: `Usuário ${user.name} importou a música ${clonedSong.title}`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { sourceSongId },
+      });
+
       return NextResponse.json(clonedSong);
     }
 
@@ -225,6 +241,19 @@ export async function POST(req: NextRequest) {
     if (hasAnalysisSource) {
       await enqueueSongAnalysis(song.id);
     }
+
+    await logUserAction({
+      userId: user.id,
+      groupId: user.groupId ?? null,
+      action: AUDIT_ACTIONS.SONG_CREATED,
+      entityType: AuditEntityType.SONG,
+      entityId: song.id,
+      entityName: song.title,
+      description: `Usuário ${user.name} criou a música ${song.title}`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      newValues: { title: song.title, artist: song.artist, bpm: song.bpm, originalKey: song.originalKey },
+    });
 
     return NextResponse.json(song);
   } catch (error) {

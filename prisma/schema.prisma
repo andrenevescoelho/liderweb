@@ -115,6 +115,18 @@ enum SongAnalysisStatus {
   FAILED
 }
 
+enum AuditEntityType {
+  AUTH
+  USER
+  GROUP
+  REHEARSAL
+  SCALE
+  SONG
+  SUBSCRIPTION
+  RBAC
+  OTHER
+}
+
 model Group {
   id          String   @id @default(cuid())
   name        String
@@ -133,6 +145,7 @@ model Group {
   messages     GroupMessage[]
   broadcasts   GroupBroadcast[]
   roleFunctions RoleFunction[]
+  auditLogs    AuditLog[]
 }
 
 model SubscriptionPlan {
@@ -233,6 +246,32 @@ model User {
   redeemedCoupons CouponRedemption[] @relation("CouponRedeemer")
   accounts      Account[]
   sessions      Session[]
+  auditLogs     AuditLog[]
+}
+
+model AuditLog {
+  id          String          @id @default(cuid())
+  createdAt   DateTime        @default(now())
+  userId      String?
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  groupId     String?
+  group       Group?          @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  AuditEntityType @default(OTHER)
+  entityId    String?
+  entityName  String?
+  description String
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  oldValues   Json?
+  newValues   Json?
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([groupId])
+  @@index([action])
+  @@index([entityType])
 }
 
 model GroupMessage {
