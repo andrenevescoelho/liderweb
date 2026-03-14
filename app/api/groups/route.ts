@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +63,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  const context = extractRequestContext(req);
   const { name, description, adminName, adminEmail, adminPassword } = body;
 
   if (!name) {
@@ -104,6 +107,19 @@ export async function POST(req: NextRequest) {
       },
     });
   }
+
+  await logUserAction({
+    userId: user.id,
+    groupId: group.id,
+    action: AUDIT_ACTIONS.GROUP_CREATED,
+    entityType: AuditEntityType.GROUP,
+    entityId: group.id,
+    entityName: group.name,
+    description: `Usuário ${user.name} criou o grupo ${group.name}`,
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
+    newValues: { name: group.name, description: group.description, active: group.active },
+  });
 
   return NextResponse.json(group, { status: 201 });
 }

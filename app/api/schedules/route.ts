@@ -6,6 +6,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -105,6 +107,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const context = extractRequestContext(req);
     const { date, roles, setlistItems } = body ?? {};
 
     if (!date) {
@@ -192,6 +195,19 @@ export async function POST(req: NextRequest) {
           },
         },
       },
+    });
+
+    await logUserAction({
+      userId: user.id,
+      groupId: user.groupId ?? null,
+      action: AUDIT_ACTIONS.SCALE_CREATED,
+      entityType: AuditEntityType.SCALE,
+      entityId: schedule.id,
+      entityName: `Escala ${date}`,
+      description: `Usuário ${user.name} criou uma nova escala`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: { date, rolesCount: (roles ?? []).length, setlistItemsCount: (setlistItems ?? []).length },
     });
 
     return NextResponse.json(schedule);

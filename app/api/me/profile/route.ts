@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { MEMBER_FUNCTION_OPTIONS, PROFILE_VOICE_TYPE_OPTIONS, SKILL_LEVEL_OPTIONS } from "@/lib/member-profile";
 import { SessionUser } from "@/lib/types";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 const MAX_BIO_LENGTH = 2000;
 const MAX_NOTES_LENGTH = 1000;
@@ -99,6 +101,12 @@ export async function PATCH(req: NextRequest) {
 
     const user = session.user as SessionUser;
     const body = await req.json();
+    const context = extractRequestContext(req);
+
+    const before = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { profile: true },
+    });
 
     const displayName = normalizeOptionalText(body?.displayName);
     if (!displayName) {
@@ -192,6 +200,35 @@ export async function PATCH(req: NextRequest) {
         },
       }),
     ]);
+
+    const after = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { profile: true },
+    });
+
+    await logUserAction({
+      userId: user.id,
+      groupId: user.groupId ?? null,
+      action: AUDIT_ACTIONS.PROFILE_UPDATED,
+      entityType: AuditEntityType.USER,
+      entityId: user.id,
+      entityName: displayName,
+      description: `Usuário ${displayName} atualizou o próprio perfil`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: {
+        name: before?.name,
+        phone: before?.profile?.phone,
+        city: before?.profile?.city,
+        state: before?.profile?.state,
+      },
+      newValues: {
+        name: after?.name,
+        phone: after?.profile?.phone,
+        city: after?.profile?.city,
+        state: after?.profile?.state,
+      },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

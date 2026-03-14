@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Settings,
   TicketPercent,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -46,6 +47,7 @@ const menuItems: MenuItem[] = [
   { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Chat do Grupo", href: "/chat-grupo", icon: <MessageCircle className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-5 w-5" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
+  { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN"] },
 ];
 
 interface SidebarProps {

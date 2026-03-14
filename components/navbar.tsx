@@ -19,6 +19,7 @@ import {
   CreditCard,
   Shield,
   Cake,
+  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/songs", label: "Músicas", icon: Music, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { href: "/aniversariantes", label: "Aniversariantes", icon: Cake, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { href: "/schedules", label: "Escalas", icon: Calendar, roles: ["ADMIN", "LEADER", "MEMBER"] },
+  { href: "/auditoria", label: "Auditoria", icon: ClipboardList, roles: ["SUPERADMIN", "ADMIN"] },
 ];
 
 export function Navbar() {

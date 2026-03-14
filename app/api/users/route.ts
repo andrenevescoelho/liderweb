@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { SessionUser } from "@/lib/types";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +95,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, email, password, role, groupId } = body;
+    const context = extractRequestContext(request);
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -140,6 +143,19 @@ export async function POST(request: NextRequest) {
           },
         },
       },
+    });
+
+    await logUserAction({
+      userId: user.id,
+      groupId: finalGroupId ?? user.groupId ?? null,
+      action: AUDIT_ACTIONS.USER_CREATED,
+      entityType: AuditEntityType.USER,
+      entityId: newUser.id,
+      entityName: newUser.name,
+      description: `Usuário ${user.name} criou o usuário ${newUser.name}`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      newValues: { name: newUser.name, email: newUser.email, role: newUser.role, groupId: newUser.groupId },
     });
 
     return NextResponse.json(newUser, { status: 201 });

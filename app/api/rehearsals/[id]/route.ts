@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
+import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 const db = prisma as any;
 const isAdminRole = (role?: string) => role === "SUPERADMIN" || role === "ADMIN";
@@ -59,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!canEdit) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
     const body = await req.json();
+    const context = extractRequestContext(req);
     const { date, time, location, notes, type, status, estimatedMinutes, songs, checklist } = body ?? {};
 
     const isPublishing = status === "PUBLISHED";
@@ -75,7 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
     }
 
-    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true, groupId: true } });
+    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true, groupId: true, dateTime: true, status: true, location: true } });
     if (!current) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
 
     if (user.role !== "SUPERADMIN" && current.groupId !== user.groupId) {
@@ -128,6 +131,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       },
     });
 
+    await logUserAction({
+      userId: user.id,
+      groupId: updated.groupId ?? user.groupId ?? null,
+      action: AUDIT_ACTIONS.REHEARSAL_UPDATED,
+      entityType: AuditEntityType.REHEARSAL,
+      entityId: updated.id,
+      entityName: `Ensaio ${updated.dateTime.toISOString()}`,
+      description: `Usuário ${user.name} atualizou um ensaio`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: { dateTime: current.dateTime, status: current.status, location: current.location },
+      newValues: { dateTime: updated.dateTime, status: updated.status, location: updated.location },
+      metadata: { songsCount: updated.songs.length, checklistCount: updated.checklist.length },
+    });
+
     return NextResponse.json({
       ...updated,
       notificationStub: status === "PUBLISHED" ? "TODO: notificar membros por email" : null,
@@ -156,14 +174,29 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "Módulo de ensaios indisponível no momento" }, { status: 503 });
     }
 
-    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true, groupId: true } });
+    const current = await db.rehearsal.findUnique({ where: { id: params.id }, select: { id: true, groupId: true, dateTime: true, status: true, location: true } });
     if (!current) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
 
     if (user.role !== "SUPERADMIN" && current.groupId !== user.groupId) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
+    const context = extractRequestContext(req);
+
     await db.rehearsal.delete({ where: { id: params.id } });
+
+    await logUserAction({
+      userId: user.id,
+      groupId: current.groupId ?? user.groupId ?? null,
+      action: AUDIT_ACTIONS.REHEARSAL_DELETED,
+      entityType: AuditEntityType.REHEARSAL,
+      entityId: current.id,
+      entityName: `Ensaio ${current.dateTime.toISOString()}`,
+      description: `Usuário ${user.name} removeu um ensaio`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      oldValues: { dateTime: current.dateTime, status: current.status, location: current.location },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
