@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { buildCouponBenefitSummary, computeSubscriptionPriceWithCoupon, redemptionIsActive } from "@/lib/coupons";
 
 export async function GET() {
   try {
@@ -16,7 +17,15 @@ export async function GET() {
 
     const subscription = await prisma.subscription.findUnique({
       where: { groupId: user.groupId },
-      include: { plan: true },
+      include: {
+        plan: true,
+        couponRedemptions: {
+          where: { status: "ACTIVE" },
+          orderBy: { redeemedAt: "desc" },
+          take: 1,
+          include: { coupon: true },
+        },
+      },
     });
 
     if (!subscription) {
@@ -30,6 +39,23 @@ export async function GET() {
       where: { groupId: user.groupId },
     });
 
+    const activeRedemption = subscription.couponRedemptions[0];
+    const hasActiveCoupon = activeRedemption ? redemptionIsActive(activeRedemption) : false;
+    const pricing = computeSubscriptionPriceWithCoupon(
+      subscription.plan,
+      hasActiveCoupon && activeRedemption
+        ? {
+            status: activeRedemption.status,
+            benefitStartAt: activeRedemption.benefitStartAt,
+            benefitEndAt: activeRedemption.benefitEndAt,
+            coupon: {
+              type: activeRedemption.coupon.type,
+              discountPercent: activeRedemption.coupon.discountPercent,
+            },
+          }
+        : null
+    );
+
     return NextResponse.json({
       hasSubscription: true,
       isActive,
@@ -42,6 +68,19 @@ export async function GET() {
         trialEndsAt: subscription.trialEndsAt,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         hasStripeCustomer: Boolean(subscription.stripeCustomerId),
+        originalPrice: pricing.originalPrice,
+        effectivePrice: pricing.effectivePrice,
+        discountPercent: pricing.discountPercent,
+        activeCoupon: hasActiveCoupon && activeRedemption
+          ? {
+              code: activeRedemption.coupon.code,
+              name: activeRedemption.coupon.name,
+              type: activeRedemption.coupon.type,
+              benefitSummary: buildCouponBenefitSummary(activeRedemption.coupon),
+              benefitStartAt: activeRedemption.benefitStartAt,
+              benefitEndAt: activeRedemption.benefitEndAt,
+            }
+          : null,
       },
     });
   } catch (error: any) {

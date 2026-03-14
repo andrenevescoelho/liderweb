@@ -85,6 +85,24 @@ enum SubscriptionStatus {
   INACTIVE
 }
 
+enum CouponType {
+  PERCENTAGE_DISCOUNT
+  FREE_PLAN
+}
+
+enum PlanTier {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  ENTERPRISE
+}
+
+enum CouponRedemptionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
 enum SongSourceType {
   YOUTUBE
   UPLOAD
@@ -143,8 +161,53 @@ model Subscription {
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean            @default(false)
   trialEndsAt          DateTime?
+  couponRedemptions    CouponRedemption[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+}
+
+model Coupon {
+  id                   String             @id @default(cuid())
+  code                 String             @unique
+  name                 String
+  description          String?
+  type                 CouponType
+  discountPercent      Int?
+  freePlanTier         PlanTier?
+  freePlanDurationDays Int?
+  allowedPlanTiers     PlanTier[]         @default([])
+  isActive             Boolean            @default(true)
+  maxUses              Int?
+  usedCount            Int                @default(0)
+  validFrom            DateTime?
+  validUntil           DateTime?
+  createdByUserId      String
+  createdByUser        User               @relation("CouponCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  redemptions          CouponRedemption[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([code])
+}
+
+model CouponRedemption {
+  id               String                 @id @default(cuid())
+  couponId         String
+  coupon           Coupon                 @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  subscriptionId   String
+  subscription     Subscription           @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  redeemedByUserId String
+  redeemedByUser   User                   @relation("CouponRedeemer", fields: [redeemedByUserId], references: [id], onDelete: Restrict)
+  redeemedAt       DateTime               @default(now())
+  benefitStartAt   DateTime
+  benefitEndAt     DateTime?
+  status           CouponRedemptionStatus @default(ACTIVE)
+  snapshotJson     Json?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([subscriptionId, status])
+  @@index([couponId])
 }
 
 model User {
@@ -166,6 +229,8 @@ model User {
   memberFunctions MemberFunction[] @relation("UserMemberFunctions")
   scheduleMemberRoles ScaleMemberRole[] @relation("ScaleMemberRolesByMember")
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
+  createdCoupons Coupon[] @relation("CouponCreator")
+  redeemedCoupons CouponRedemption[] @relation("CouponRedeemer")
   accounts      Account[]
   sessions      Session[]
 }

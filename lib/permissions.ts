@@ -46,6 +46,12 @@ export const PERMISSIONS: PermissionDefinition[] = [
   { key: "schedule.delete", label: "Excluir escalas", category: "administrative" },
   { key: "report.group.access", label: "Acessar relatórios do grupo", category: "administrative" },
   { key: "subscription.manage", label: "Gerenciar plano e assinatura", category: "administrative" },
+  { key: "manage_coupons", label: "Gerenciar cupons", category: "administrative" },
+  { key: "create_coupon", label: "Criar cupons", category: "administrative" },
+  { key: "edit_coupon", label: "Editar cupons", category: "administrative" },
+  { key: "disable_coupon", label: "Ativar/desativar cupons", category: "administrative" },
+  { key: "view_coupons", label: "Visualizar cupons", category: "administrative" },
+  { key: "apply_coupon_to_subscription", label: "Aplicar cupom na assinatura", category: "administrative" },
 
   { key: "music.rehearsal.send", label: "Enviar música para ensaio", category: "musical" },
   { key: "music.submitted.edit", label: "Editar música enviada", category: "musical" },
