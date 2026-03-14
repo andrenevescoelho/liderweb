@@ -30,7 +30,7 @@ const navItems = [
   { href: "/members", label: "Membros", icon: Users, roles: ["ADMIN", "LEADER"] },
   { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN"] },
   { href: "/songs", label: "Músicas", icon: Music, roles: ["ADMIN", "LEADER", "MEMBER"] },
-  { href: "/aniversariantes", label: "Aniversariantes", icon: Cake, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { href: "/aniversariantes", label: "Aniversariantes", icon: Cake, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { href: "/schedules", label: "Escalas", icon: Calendar, roles: ["ADMIN", "LEADER", "MEMBER"] },
 ];
 
@@ -45,6 +45,7 @@ export function Navbar() {
 
   const filteredNav = navItems?.filter((item) => {
     if (item?.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
+    if (item?.href === "/aniversariantes" && userRole === "SUPERADMIN") return false;
     if (item?.roles?.includes(userRole)) return true;
     if (item?.href === "/meu-plano") return userPermissions.includes("subscription.manage");
     if (item?.href === "/dashboard/admin") return userPermissions.includes("report.group.access");

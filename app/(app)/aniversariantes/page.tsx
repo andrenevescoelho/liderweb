@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -32,6 +34,9 @@ const MONTH_OPTIONS = [
 ];
 
 export default function AniversariantesPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [days, setDays] = useState<number>(14);
@@ -39,6 +44,13 @@ export default function AniversariantesPage() {
   const [upcomingBirthdays, setUpcomingBirthdays] = useState<BirthdayMember[]>([]);
   const [loadingMonth, setLoadingMonth] = useState<boolean>(true);
   const [loadingUpcoming, setLoadingUpcoming] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    if (userRole === "SUPERADMIN") {
+      router.replace("/dashboard");
+    }
+  }, [router, status, userRole]);
 
   useEffect(() => {
     const loadMonthBirthdays = async () => {
@@ -71,6 +83,10 @@ export default function AniversariantesPage() {
   }, [days]);
 
   const monthLabel = useMemo(() => MONTH_OPTIONS[month - 1], [month]);
+
+  if (status === "loading" || userRole === "SUPERADMIN") {
+    return null;
+  }
 
   return (
     <div className="space-y-6">

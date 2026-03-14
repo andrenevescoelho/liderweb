@@ -40,7 +40,7 @@ const menuItems: MenuItem[] = [
   { label: "Cupons", href: "/cupons", icon: <TicketPercent className="h-5 w-5" />, roles: ["SUPERADMIN"], permissions: ["manage_coupons", "view_coupons"] },
   { label: "Membros", href: "/members", icon: <Users className="h-5 w-5" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
   { label: "Músicas", href: "/songs", icon: <Music className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
-  { label: "Aniversariantes", href: "/aniversariantes", icon: <Cake className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+  { label: "Aniversariantes", href: "/aniversariantes", icon: <Cake className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Escalas", href: "/schedules", icon: <Calendar className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Ensaios", href: "/ensaios", icon: <NotebookPen className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-5 w-5" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
@@ -89,6 +89,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
 
   const filteredMenuItems = menuItems.filter((item) => {
     if (item.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
+    if (item.href === "/aniversariantes" && userRole === "SUPERADMIN") return false;
     if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) return false;
     if (item.roles.includes(userRole)) return true;
     if (!item.permissions?.length) return false;
