@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { CheckCircle, Loader2, PlusCircle, Search, Ticket, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, PlusCircle, Search, Ticket, Trash2, XCircle } from "lucide-react";
 
 const PLAN_OPTIONS = [
   { value: "BASIC", label: "Básico" },
@@ -58,6 +58,7 @@ export default function CuponsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const isSuperadmin = userRole === "SUPERADMIN";
 
@@ -158,6 +159,32 @@ export default function CuponsPage() {
       return;
     }
     await loadCoupons();
+  };
+
+  const deleteCoupon = async (coupon: any) => {
+    const confirmed = window.confirm(`Tem certeza que deseja excluir o cupom ${coupon.code}?`);
+    if (!confirmed) return;
+
+    setDeletingId(coupon.id);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`/api/coupons/${coupon.id}`, { method: "DELETE" });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir cupom");
+
+      if (editingId === coupon.id) {
+        resetForm();
+      }
+
+      setFeedback("Cupom excluído com sucesso");
+      await loadCoupons();
+    } catch (error: any) {
+      setFeedback(error.message);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (!isSuperadmin) return null;
@@ -262,6 +289,15 @@ export default function CuponsPage() {
                         <Button size="sm" variant="outline" onClick={() => handleEdit(coupon)}>Editar</Button>
                         <Button size="sm" variant="outline" onClick={() => toggleCoupon(coupon.id, coupon.isActive)}>
                           {coupon.isActive ? <><XCircle className="w-4 h-4 mr-1" />Desativar</> : <><CheckCircle className="w-4 h-4 mr-1" />Ativar</>}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={deletingId === coupon.id}
+                          onClick={() => deleteCoupon(coupon)}
+                        >
+                          {deletingId === coupon.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                          Excluir
                         </Button>
                       </div>
                     </div>
