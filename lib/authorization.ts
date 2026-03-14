@@ -15,6 +15,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, string[]> = {
     "member.manage",
     "permission.manage",
     "leadership.manage",
+    "schedule.presence.confirm.self",
     "schedule.create",
     "schedule.edit",
     "schedule.delete",
@@ -27,6 +28,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, string[]> = {
   ],
   LEADER: [
     "member.manage",
+    "schedule.presence.confirm.self",
     "schedule.create",
     "schedule.edit",
     "report.group.access",
