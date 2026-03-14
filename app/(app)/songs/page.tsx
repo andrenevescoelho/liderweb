@@ -392,6 +392,22 @@ export default function SongsPage() {
               </div>
             )}
 
+            {viewSong?.chordUrl && (
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                  <LinkIcon className="w-5 h-5 text-blue-500" /> Cifra
+                </h4>
+                <a
+                  href={viewSong.chordUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-blue-600 hover:underline"
+                >
+                  <LinkIcon className="w-4 h-4" /> Abrir link da cifra
+                </a>
+              </div>
+            )}
+
             {viewSong?.chordPro ? (
               <ChordProViewer chordPro={viewSong?.chordPro} initialKey={viewSong?.originalKey} />
             ) : viewSong?.lyrics ? (
