@@ -122,9 +122,27 @@ enum AuditEntityType {
   REHEARSAL
   SCALE
   SONG
+  IMPORT
   SUBSCRIPTION
   RBAC
   OTHER
+}
+
+enum ImportType {
+  MEMBERS
+  SONGS
+}
+
+enum ImportMode {
+  VALIDATE_ONLY
+  CREATE_ONLY
+  CREATE_OR_UPDATE
+}
+
+enum ImportJobStatus {
+  VALIDATED
+  COMPLETED
+  FAILED
 }
 
 model Group {
@@ -247,6 +265,33 @@ model User {
   accounts      Account[]
   sessions      Session[]
   auditLogs     AuditLog[]
+  importJobs    ImportJob[]
+}
+
+model ImportJob {
+  id          String          @id @default(cuid())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       Group?          @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  importType  ImportType
+  mode        ImportMode
+  filename    String
+  totalRows   Int             @default(0)
+  successRows Int             @default(0)
+  updatedRows Int             @default(0)
+  ignoredRows Int             @default(0)
+  errorRows   Int             @default(0)
+  status      ImportJobStatus @default(VALIDATED)
+  summary     String?
+  detailsJson Json?
+
+  @@index([userId, createdAt])
+  @@index([groupId, createdAt])
+  @@index([importType, createdAt])
+  @@index([status, createdAt])
 }
 
 model AuditLog {
