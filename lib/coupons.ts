@@ -10,6 +10,13 @@ export const PLAN_NAME_TO_TIER: Record<string, PlanTier> = {
   enterprise: "ENTERPRISE",
 };
 
+const PLAN_TIER_METADATA: Record<PlanTier, { name: string; userLimit: number }> = {
+  BASIC: { name: "Básico", userLimit: 15 },
+  INTERMEDIATE: { name: "Intermediário", userLimit: 30 },
+  ADVANCED: { name: "Avançado", userLimit: 100 },
+  ENTERPRISE: { name: "Enterprise", userLimit: 0 },
+};
+
 export function getPlanTierFromPlanName(name?: string | null): PlanTier | null {
   if (!name) return null;
   const normalized = name.trim().toLowerCase();
@@ -67,4 +74,33 @@ export function redemptionIsActive(redemption: Pick<CouponRedemption, "status" |
   if (redemption.benefitStartAt > now) return false;
   if (redemption.benefitEndAt && redemption.benefitEndAt < now) return false;
   return true;
+}
+
+type EffectivePlanSource = Pick<SubscriptionPlan, "name" | "userLimit">;
+type EffectiveRedemptionSource = Pick<CouponRedemption, "status" | "benefitStartAt" | "benefitEndAt"> & {
+  coupon: Pick<Coupon, "type" | "freePlanTier">;
+};
+
+export function getEffectivePlanFromCoupon(
+  plan: EffectivePlanSource,
+  redemption?: EffectiveRedemptionSource | null,
+  now = new Date()
+) {
+  if (!redemption || !redemptionIsActive(redemption, now)) {
+    return plan;
+  }
+
+  if (redemption.coupon.type !== CouponType.FREE_PLAN || !redemption.coupon.freePlanTier) {
+    return plan;
+  }
+
+  const couponPlan = PLAN_TIER_METADATA[redemption.coupon.freePlanTier];
+  if (!couponPlan) {
+    return plan;
+  }
+
+  return {
+    name: couponPlan.name,
+    userLimit: couponPlan.userLimit,
+  };
 }
