@@ -66,3 +66,32 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   return NextResponse.json({ coupon });
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  const user = session?.user as any;
+
+  if (!session || user?.role !== "SUPERADMIN") {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
+  }
+
+  const coupon = await prisma.coupon.findUnique({
+    where: { id: params.id },
+    select: { id: true, _count: { select: { redemptions: true } } },
+  });
+
+  if (!coupon) {
+    return NextResponse.json({ error: "Cupom não encontrado" }, { status: 404 });
+  }
+
+  if (coupon._count.redemptions > 0) {
+    return NextResponse.json(
+      { error: "Não é possível excluir cupons já utilizados." },
+      { status: 409 },
+    );
+  }
+
+  await prisma.coupon.delete({ where: { id: params.id } });
+
+  return NextResponse.json({ success: true });
+}
