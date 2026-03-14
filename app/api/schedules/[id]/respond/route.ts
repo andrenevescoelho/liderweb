@@ -20,7 +20,11 @@ export async function POST(
 
     const user = session.user as any;
     const userId = user?.id;
-    const userRole = user?.role ?? "MEMBER";
+    const role = user?.role;
+    const userRole =
+      role === "SUPERADMIN" || role === "ADMIN" || role === "LEADER" || role === "MEMBER"
+        ? role
+        : "MEMBER";
     const userPermissions = user?.permissions ?? [];
 
     if (!hasPermission(userRole, "schedule.presence.confirm.self", userPermissions)) {
@@ -39,7 +43,7 @@ export async function POST(
       return NextResponse.json({ error: "Status inválido" }, { status: 400 });
     }
 
-    const role = await prisma.scheduleRole.findFirst({
+    const scheduleRole = await prisma.scheduleRole.findFirst({
       where: {
         id: roleId,
         scheduleId: params?.id,
@@ -47,7 +51,7 @@ export async function POST(
       },
     });
 
-    if (!role) {
+    if (!scheduleRole) {
       return NextResponse.json(
         { error: "Compromisso não encontrado" },
         { status: 404 }
