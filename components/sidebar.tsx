@@ -50,6 +50,7 @@ const menuItems: MenuItem[] = [
   { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-5 w-5" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
   { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN"] },
   { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-5 w-5" />, roles: ["SUPERADMIN", "ADMIN"] },
+  { label: "Push / Comunicados", href: "/push-comunicados", icon: <Megaphone className="h-5 w-5" />, roles: ["SUPERADMIN"] },
 ];
 
 interface SidebarProps {

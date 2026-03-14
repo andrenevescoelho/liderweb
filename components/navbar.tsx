@@ -21,6 +21,7 @@ import {
   Cake,
   ClipboardList,
   Upload,
+  Megaphone,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const navItems = [
   { href: "/schedules", label: "Escalas", icon: Calendar, roles: ["ADMIN", "LEADER", "MEMBER"] },
   { href: "/importacao-csv", label: "Importação CSV", icon: Upload, roles: ["SUPERADMIN", "ADMIN"] },
   { href: "/auditoria", label: "Auditoria", icon: ClipboardList, roles: ["SUPERADMIN", "ADMIN"] },
+  { href: "/push-comunicados", label: "Push / Comunicados", icon: Megaphone, roles: ["SUPERADMIN"] },
 ];
 
 export function Navbar() {
