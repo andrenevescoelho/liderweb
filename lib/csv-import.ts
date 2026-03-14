@@ -31,6 +31,7 @@ const SONG_HEADERS = [
   "categoria",
   "idioma",
   "cifra",
+  "link_da_cifra",
   "link_playback",
   "link_referencia",
   "observacoes",
@@ -132,7 +133,7 @@ export function getCsvTemplate(importType: ImportTarget) {
 
   return {
     filename: "modelo-importacao-musicas.csv",
-    content: `${SONG_HEADERS.join(",")}\nGrande e o Senhor,C,72,Diante do Trono,,Adoração,pt-BR,"[Intro] C G Am F",https://exemplo.com/playback.mp3,https://youtube.com/watch?v=dQw4w9WgXcQ,Importado via CSV\n`,
+    content: `${SONG_HEADERS.join(",")}\nGrande e o Senhor,C,72,Diante do Trono,,Adoração,pt-BR,"[Intro] C G Am F",https://www.cifraclub.com.br/exemplo,https://exemplo.com/playback.mp3,https://youtube.com/watch?v=dQw4w9WgXcQ,Importado via CSV\n`,
   };
 }
 
@@ -302,6 +303,7 @@ function validateSongRow(row: Record<string, string>, line: number): ImportPrevi
   const category = row.categoria?.trim() || null;
   const language = row.idioma?.trim() || null;
   const chordPro = sanitizeMultiline(row.cifra);
+  const chordUrl = row.link_da_cifra?.trim() || row.link_cifra?.trim() || null;
   const audioUrl = row.link_playback?.trim() || null;
   const youtubeUrl = row.link_referencia?.trim() || null;
   const notes = sanitizeMultiline(row.observacoes);
@@ -319,6 +321,10 @@ function validateSongRow(row: Record<string, string>, line: number): ImportPrevi
       errors.push("bpm deve ser numérico");
       bpm = null;
     }
+  }
+
+  if (!isValidUrl(chordUrl ?? undefined)) {
+    errors.push("link da cifra inválido");
   }
 
   if (!isValidUrl(audioUrl ?? undefined)) {
@@ -344,6 +350,7 @@ function validateSongRow(row: Record<string, string>, line: number): ImportPrevi
       category,
       language,
       chordPro,
+      chordUrl,
       audioUrl,
       youtubeUrl,
       notes,
@@ -565,6 +572,7 @@ async function persistSongsRows(rows: ImportPreviewRow[], mode: ImportMode, grou
           bpm: normalized.bpm,
           tags: normalized.tags,
           chordPro: normalized.chordPro,
+          chordUrl: normalized.chordUrl,
           audioUrl: normalized.audioUrl,
           youtubeUrl: normalized.youtubeUrl,
         },
@@ -581,6 +589,7 @@ async function persistSongsRows(rows: ImportPreviewRow[], mode: ImportMode, grou
         bpm: normalized.bpm,
         tags: normalized.tags,
         chordPro: normalized.chordPro,
+        chordUrl: normalized.chordUrl,
         audioUrl: normalized.audioUrl,
         youtubeUrl: normalized.youtubeUrl,
         groupId,
