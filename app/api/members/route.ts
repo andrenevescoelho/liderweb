@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
+import { getEffectivePlanFromCoupon } from "@/lib/coupons";
 
 const getOptionalMemberProfileData = ({
   memberFunction,
@@ -162,16 +163,29 @@ export async function POST(req: NextRequest) {
       if (groupId) {
         const subscription = await prisma.subscription.findUnique({
           where: { groupId },
-          include: { plan: true },
+          include: {
+            plan: true,
+            couponRedemptions: {
+              where: { status: "ACTIVE" },
+              orderBy: { redeemedAt: "desc" },
+              take: 1,
+              include: { coupon: true },
+            },
+          },
         });
 
-        if (subscription && subscription.plan.userLimit > 0) {
+        const activeRedemption = subscription?.couponRedemptions?.[0] ?? null;
+        const effectivePlan = subscription
+          ? getEffectivePlanFromCoupon(subscription.plan, activeRedemption)
+          : null;
+
+        if (effectivePlan && effectivePlan.userLimit > 0) {
           const userCount = await prisma.user.count({ where: { groupId } });
           
-          if (userCount >= subscription.plan.userLimit) {
+          if (userCount >= effectivePlan.userLimit) {
             return NextResponse.json(
               { 
-                error: `Limite de usuários atingido (${subscription.plan.userLimit}). Faça upgrade do seu plano para adicionar mais membros.`,
+                error: `Limite de usuários atingido (${effectivePlan.userLimit}). Faça upgrade do seu plano para adicionar mais membros.`,
                 limitReached: true,
               },
               { status: 403 }
