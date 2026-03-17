@@ -32,6 +32,7 @@ async function verifyPassword(password: string, storedPassword: string | null, u
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
+  trustHost: true,
   providers: [
     ...(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()
       ? [
@@ -196,7 +197,11 @@ export const authOptions: NextAuthOptions = {
 
       try {
         const parsed = new URL(url);
-        if (parsed.origin === baseUrl) {
+        const parsedBaseUrl = new URL(baseUrl);
+
+        // Aceita callback da mesma origem e também do mesmo host com protocolo diferente
+        // (cenário comum em produção atrás de proxy/reverse proxy).
+        if (parsed.origin === baseUrl || parsed.host === parsedBaseUrl.host) {
           return url;
         }
       } catch {
@@ -268,5 +273,13 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/login",
+  },
+  logger: {
+    error(code, metadata) {
+      console.error("[auth][error]", code, metadata ?? {});
+    },
+    warn(code) {
+      console.warn("[auth][warn]", code);
+    },
   },
 };
