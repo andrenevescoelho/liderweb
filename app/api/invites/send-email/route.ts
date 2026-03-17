@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { randomBytes } from "crypto";
 import type { SessionUser } from "@/lib/types";
+import { sendSmtpMail } from "@/lib/smtp";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,8 @@ export async function POST(req: NextRequest) {
     const appUrl = process.env.NEXTAUTH_URL || '';
     const appName = appUrl ? new URL(appUrl).hostname.split('.')[0] : 'LiderWeb';
     const inviteLink = `${appUrl}/signup?token=${token}`;
+    const senderEmail = process.env.MAIL_FROM?.trim() || 'liderweb@multitrackgospel.com';
+    const senderAlias = process.env.MAIL_FROM_NAME?.trim() || appName;
     
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -146,27 +149,13 @@ export async function POST(req: NextRequest) {
     `;
     
     try {
-      const emailResponse = await fetch('https://apps.abacus.ai/api/sendNotificationEmail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deployment_token: process.env.ABACUSAI_API_KEY,
-          app_id: process.env.WEB_APP_ID,
-          notification_id: process.env.NOTIF_ID_CONVITE_PARA_GRUPO,
-          subject: `🎵 Convite para o ministério ${group.name}`,
-          body: htmlBody,
-          is_html: true,
-          recipient_email: email,
-          sender_email: `noreply@${appUrl ? new URL(appUrl).hostname : 'liderweb.app'}`,
-          sender_alias: 'LiderWeb',
-        }),
+      await sendSmtpMail({
+        to: email,
+        subject: `🎵 Convite para o ministério ${group.name}`,
+        html: htmlBody,
+        fromEmail: senderEmail,
+        fromName: senderAlias,
       });
-      
-      const emailResult = await emailResponse.json();
-      
-      if (!emailResult.success && !emailResult.notification_disabled) {
-        console.error('Failed to send invite email:', emailResult);
-      }
     } catch (emailError) {
       console.error('Error sending invite email:', emailError);
       // Continue mesmo se o email falhar
