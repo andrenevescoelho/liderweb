@@ -115,7 +115,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
             </div>
             <div className="flex flex-col">
               <span className="text-base font-semibold text-white">Líder Web</span>
-              <span className="-mt-0.5 text-[10px] text-slate-400">layout-sidebar</span>
+              <span className="-mt-0.5 text-[10px] text-slate-400">by multitrackgospel.com</span>
             </div>
           </Link>
         ) : (
