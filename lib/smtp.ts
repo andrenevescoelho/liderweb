@@ -9,6 +9,7 @@ interface SendMailOptions {
 }
 
 const CRLF = "\r\n";
+const LINE_BREAK = /\r?\n/;
 
 function parseBoolean(value: string | undefined, defaultValue: boolean) {
   if (value == null) return defaultValue;
@@ -31,7 +32,7 @@ async function readResponse(socket: tls.TLSSocket): Promise<{ code: number; text
 
     const onData = (chunk: Buffer) => {
       buffer += chunk.toString("utf-8");
-      const lines = buffer.split(CRLF).filter(Boolean);
+      const lines = buffer.split(LINE_BREAK).filter(Boolean);
       const lastLine = lines[lines.length - 1];
 
       if (!lastLine || lastLine.length < 4) {
@@ -70,15 +71,46 @@ async function readResponse(socket: tls.TLSSocket): Promise<{ code: number; text
   });
 }
 
-async function sendCommand(socket: tls.TLSSocket, command: string, expectedCodes: number[]) {
+async function sendCommand(
+  socket: tls.TLSSocket,
+  command: string,
+  expectedCodes: number[],
+  label: string = command,
+) {
   socket.write(`${command}${CRLF}`);
   const response = await readResponse(socket);
 
   if (!expectedCodes.includes(response.code)) {
-    throw new Error(`SMTP falhou em \"${command}\": ${response.text}`);
+    throw new Error(`SMTP falhou em "${label}": ${response.text}`);
   }
 
   return response;
+}
+
+async function authenticate(socket: tls.TLSSocket, user: string, pass: string) {
+  const plainToken = toBase64(`\u0000${user}\u0000${pass}`);
+  let plainError: unknown = null;
+
+  try {
+    await sendCommand(socket, `AUTH PLAIN ${plainToken}`, [235], "AUTH PLAIN");
+    return;
+  } catch (error) {
+    plainError = error;
+  }
+
+  try {
+    await sendCommand(socket, "AUTH LOGIN", [334], "AUTH LOGIN");
+    await sendCommand(socket, toBase64(user), [334], "AUTH LOGIN <username>");
+    await sendCommand(socket, toBase64(pass), [235], "AUTH LOGIN <password>");
+    return;
+  } catch (loginError) {
+    const plainMessage = plainError instanceof Error ? plainError.message : String(plainError);
+    const loginMessage = loginError instanceof Error ? loginError.message : String(loginError);
+    throw new Error(
+      `Falha na autenticação SMTP. AUTH PLAIN: ${plainMessage}. AUTH LOGIN: ${loginMessage}. ` +
+        "Verifique SMTP_USER/SMTP_PASS, se a caixa permite SMTP externo e se precisa de app password.",
+    );
+  }
 }
 
 export async function sendSmtpMail({ to, subject, html, fromEmail, fromName }: SendMailOptions) {
@@ -93,7 +125,7 @@ export async function sendSmtpMail({ to, subject, html, fromEmail, fromName }: S
   }
 
   if (!secure) {
-    throw new Error("Atualmente o envio SMTP suporta apenas conexão segura (SMTP_SECURE=true). ");
+    throw new Error("Atualmente o envio SMTP suporta apenas conexão segura (SMTP_SECURE=true).");
   }
 
   const socket = tls.connect({ host, port, servername: host });
@@ -107,9 +139,7 @@ export async function sendSmtpMail({ to, subject, html, fromEmail, fromName }: S
     await readResponse(socket);
 
     await sendCommand(socket, `EHLO ${host}`, [250]);
-    await sendCommand(socket, "AUTH LOGIN", [334]);
-    await sendCommand(socket, toBase64(user), [334]);
-    await sendCommand(socket, toBase64(pass), [235]);
+    await authenticate(socket, user, pass);
     await sendCommand(socket, `MAIL FROM:<${fromEmail}>`, [250]);
     await sendCommand(socket, `RCPT TO:<${to}>`, [250, 251]);
     await sendCommand(socket, "DATA", [354]);
