@@ -16,3 +16,16 @@ NEXTAUTH_SECRET=...
 ```
 
 > Reinicie a aplicação após alterar variáveis de ambiente.
+
+
+## Erro comum: `client_secret is missing`
+
+Se o log mostrar `OAuthCallbackError ... client_secret is missing`, a aplicação está iniciando sem a variável `GOOGLE_CLIENT_SECRET` (ou sem `GOOGLE_CLIENT_ID`).
+
+Checklist rápido:
+
+- Confira se `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` existem no ambiente do container/app.
+- Em produção, garanta também `NEXTAUTH_URL=https://liderweb.multitrackgospel.com`.
+- Reinicie a aplicação após atualizar as variáveis.
+
+> Nesta base, o provedor Google só é habilitado quando **ID e Secret** estão preenchidos.
