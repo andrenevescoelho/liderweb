@@ -1,6 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="#6B46C1"/>
-  <path d="M128 40 L128 140 Q128 160 108 160 Q88 160 88 140 Q88 120 108 120 Q118 120 128 122 L128 40 Z" fill="#FFD700"/>
-  <rect x="148" y="80" width="28" height="96" rx="4" fill="#FFD700"/>
-  <rect x="134" y="108" width="56" height="28" rx="4" fill="#FFD700"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Líder Web">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#d1132e"/>
+      <stop offset="100%" stop-color="#2f6ff2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="20" fill="url(#bg)"/>
+
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="12">
+    <line x1="60" y1="118" x2="60" y2="138"/>
+    <line x1="84" y1="100" x2="84" y2="156"/>
+    <path d="M108 84v88"/>
+    <path d="M128 70v116"/>
+    <path d="M148 84v88"/>
+    <line x1="172" y1="100" x2="172" y2="156"/>
+    <line x1="196" y1="118" x2="196" y2="138"/>
+    <circle cx="38" cy="128" r="4" fill="#ffffff" stroke="none"/>
+    <circle cx="218" cy="128" r="4" fill="#ffffff" stroke="none"/>
+  </g>
 </svg>
