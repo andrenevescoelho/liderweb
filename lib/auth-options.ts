@@ -176,7 +176,30 @@ export const authOptions: NextAuthOptions = {
         matchedExistingUser: Boolean(existingUser),
       });
 
+      if (user.id && user.email && user.email !== normalizedEmail) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { email: normalizedEmail },
+        });
+      }
+
       return true;
+    },
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`;
+      }
+
+      try {
+        const parsed = new URL(url);
+        if (parsed.origin === baseUrl) {
+          return url;
+        }
+      } catch {
+        return `${baseUrl}/dashboard`;
+      }
+
+      return `${baseUrl}/dashboard`;
     },
     async jwt({ token, user }) {
       if (user) {

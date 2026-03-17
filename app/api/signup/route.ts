@@ -45,8 +45,14 @@ export async function POST(req: NextRequest) {
       }
       
       // Verificar se já existe usuário com esse email
-      const existingUser = await prisma.user.findUnique({
-        where: { email: invite.email },
+      const normalizedInviteEmail = invite.email.trim().toLowerCase();
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedInviteEmail,
+            mode: "insensitive",
+          },
+        },
       });
       
       if (existingUser) {
@@ -61,7 +67,7 @@ export async function POST(req: NextRequest) {
       // Criar usuário como MEMBER do grupo
       const user = await prisma.user.create({
         data: {
-          email: invite.email,
+          email: normalizedInviteEmail,
           password: hashedPassword,
           name,
           role: "MEMBER",
@@ -97,8 +103,15 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: "insensitive",
+        },
+      },
     });
 
     if (existingUser) {
@@ -114,7 +127,7 @@ export async function POST(req: NextRequest) {
       
       const user = await prisma.user.create({
         data: {
-          email,
+          email: normalizedEmail,
           password: hashedPassword,
           name,
           role: "MEMBER",

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { signIn, getSession } from "next-auth/react";
+import { useEffect, useMemo, useState } from "react";
+import { signIn, getSession, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Music, Mail, Lock, Loader2 } from "lucide-react";
@@ -11,12 +11,15 @@ import { Card } from "@/components/ui/card";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [credentialsLoading, setCredentialsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("token");
+
   const oauthErrorMessage = useMemo(() => {
     const errorParam = searchParams.get("error");
     if (errorParam === "google_email_required") {
@@ -37,13 +40,19 @@ export default function LoginPage() {
     return null;
   };
 
+  const callbackAfterLogin = inviteToken ? `/signup?token=${inviteToken}` : "/dashboard";
 
+  useEffect(() => {
+    if (status === "authenticated" && !inviteToken) {
+      router.replace("/dashboard");
+    }
+  }, [inviteToken, router, status]);
 
   const handleGoogleLogin = async () => {
     setError("");
     setGoogleLoading(true);
     try {
-      await signIn("google", { callbackUrl: "/dashboard" });
+      await signIn("google", { callbackUrl: callbackAfterLogin });
     } catch {
       setError("Erro ao iniciar login com Google");
       setGoogleLoading(false);
@@ -64,6 +73,9 @@ export default function LoginPage() {
 
       const session = await resolveSession();
       if (session?.user) {
+        if (inviteToken) {
+          return router.replace(`/signup?token=${inviteToken}`);
+        }
         const user = session.user as any;
         if (user.role === "SUPERADMIN") return router.replace("/dashboard");
         if (user.hasActiveSubscription === false) {
@@ -116,7 +128,7 @@ export default function LoginPage() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Acesso SSO</span>
+              <span className="bg-card px-2 text-muted-foreground">ou continue com Google</span>
             </div>
           </div>
 
@@ -127,7 +139,7 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Não tem conta?{" "}
-          <Link href="/signup" className="text-primary hover:underline">
+          <Link href={inviteToken ? `/signup?token=${inviteToken}` : "/signup"} className="text-primary hover:underline">
             Cadastre-se
           </Link>
         </p>
