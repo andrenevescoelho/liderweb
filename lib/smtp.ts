@@ -26,6 +26,13 @@ function toBase64(value: string) {
   return Buffer.from(value, "utf-8").toString("base64");
 }
 
+function dotStuffMessageBody(body: string) {
+  return body
+    .split(LINE_BREAK)
+    .map((line) => (line.startsWith(".") ? `.${line}` : line))
+    .join(CRLF);
+}
+
 async function readResponse(socket: tls.TLSSocket): Promise<{ code: number; text: string }> {
   return await new Promise((resolve, reject) => {
     let buffer = "";
@@ -153,7 +160,7 @@ export async function sendSmtpMail({ to, subject, html, fromEmail, fromName }: S
       'Content-Type: text/html; charset="UTF-8"',
       "Content-Transfer-Encoding: 8bit",
       "",
-      html,
+      dotStuffMessageBody(html),
       ".",
     ].join(CRLF);
 
