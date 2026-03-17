@@ -111,7 +111,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         {!collapsed ? (
           <Link href="/dashboard" className="flex items-center gap-3" onClick={handleLinkClick}>
             <div className="relative h-8 w-8 overflow-hidden rounded-md ring-1 ring-white/20">
-              <Image src="/logo.png" alt="Líder Web" fill className="object-contain" />
+              <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
             <div className="flex flex-col">
               <span className="text-base font-semibold text-white">Líder Web</span>
@@ -121,7 +121,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         ) : (
           <Link href="/dashboard" onClick={handleLinkClick}>
             <div className="relative h-8 w-8 overflow-hidden rounded-md ring-1 ring-white/20">
-              <Image src="/logo.png" alt="Líder Web" fill className="object-contain" />
+              <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
           </Link>
         )}

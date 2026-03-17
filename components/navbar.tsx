@@ -67,7 +67,7 @@ export function Navbar() {
           <div className="flex items-center justify-between h-16">
             <Link href="/dashboard" className="flex items-center gap-2">
               <Image 
-                src="/logo.png" 
+                src="/favicon.svg" 
                 alt="Líder Web" 
                 width={40} 
                 height={40} 

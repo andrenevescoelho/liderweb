@@ -17,9 +17,9 @@ export const metadata: Metadata = {
   description: "Sistema completo para gestão de ministério de louvor: escalas, repertórios, membros e músicas. By Multitrack Gospel.",
   manifest: "/manifest.json",
   icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
-    apple: "/logo.png",
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
   },
   openGraph: {
     title: "Líder Web - By Multitrack Gospel",
