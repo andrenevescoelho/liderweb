@@ -31,6 +31,8 @@ services:
       NEXTAUTH_URL: "http://localhost:3000"
       # Troque por algo forte depois (por enquanto é só LAB)
       NEXTAUTH_SECRET: "dev-secret-change-me"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       # Serviço interno de análise automática (container audio_analysis)
       AUDIO_ANALYSIS_SERVICE_URL: "http://audio_analysis:8001"
       # Token opcional para autenticar envio de jobs ao serviço de análise
