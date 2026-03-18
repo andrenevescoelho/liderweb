@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import type { Adapter, AdapterUser } from "next-auth/adapters";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS, logUserAction } from "@/lib/audit-log";
@@ -31,7 +32,46 @@ async function verifyPassword(password: string, storedPassword: string | null, u
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: {
+    ...PrismaAdapter(prisma),
+    async createUser(user) {
+      const createdUser = await prisma.user.create({
+        data: {
+          name: user.name ?? user.email ?? "Usuário",
+          email: user.email,
+        },
+      });
+
+      return {
+        id: createdUser.id,
+        name: createdUser.name,
+        email: createdUser.email,
+        emailVerified: null,
+        image: null,
+      } as AdapterUser;
+    },
+    async updateUser(user) {
+      if (!user.id) {
+        throw new Error("Cannot update user without id");
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ...(typeof user.name === "string" ? { name: user.name } : {}),
+          ...(typeof user.email === "string" ? { email: user.email } : {}),
+        },
+      });
+
+      return {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        emailVerified: null,
+        image: null,
+      } as AdapterUser;
+    },
+  } as Adapter,
   trustHost: true,
   providers: [
     ...(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()
