@@ -70,6 +70,20 @@ export async function POST(
         },
       });
 
+      const existingProfile = await tx.memberProfile.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+
+      if (!existingProfile) {
+        await tx.memberProfile.create({
+          data: {
+            userId: user.id,
+            active: true,
+          },
+        });
+      }
+
       await tx.inviteToken.update({
         where: { id: invite.id },
         data: { used: true },
