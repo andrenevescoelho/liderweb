@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const extension = getExtension(fileName);
 
   if (!PROFESSOR_ALLOWED_EXTENSIONS.includes(extension)) {
-    return NextResponse.json({ error: "Formato inválido. Use mp3, wav ou m4a." }, { status: 400 });
+    return NextResponse.json({ error: "Formato inválido. Use mp3, wav, m4a, webm ou ogg." }, { status: 400 });
   }
 
   if (!PROFESSOR_ALLOWED_MIME_TYPES.includes(mimeType)) {

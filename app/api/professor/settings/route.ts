@@ -20,7 +20,7 @@ export async function GET() {
   if (!user.groupId && user.role !== "SUPERADMIN") return NextResponse.json({ error: "Usuário sem ministério" }, { status: 400 });
 
   if (user.role === "SUPERADMIN") {
-    return NextResponse.json({ enabled: false, accessMode: "SELECTED_MEMBERS", members: [] });
+    return NextResponse.json({ enabled: true, accessMode: "ALL_MEMBERS", members: [] });
   }
 
   const [settings, members, enabledMembers] = await Promise.all([
@@ -39,8 +39,8 @@ export async function GET() {
   const enabledSet = new Set(enabledMembers.map((item) => item.userId));
 
   return NextResponse.json({
-    enabled: settings?.enabled ?? false,
-    accessMode: settings?.accessMode ?? "SELECTED_MEMBERS",
+    enabled: settings?.enabled ?? true,
+    accessMode: settings?.accessMode ?? "ALL_MEMBERS",
     members: members.map((member) => ({
       id: member.id,
       name: member.name,

@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db";
 import { MemberProfile, PracticeType, ProfessorRoleType, RoleFunction } from "@prisma/client";
 
-export const PROFESSOR_ALLOWED_MIME_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/m4a", "audio/mp4"];
-export const PROFESSOR_ALLOWED_EXTENSIONS = ["mp3", "wav", "m4a"];
+export const PROFESSOR_ALLOWED_MIME_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/m4a", "audio/mp4", "audio/webm", "audio/ogg"];
+export const PROFESSOR_ALLOWED_EXTENSIONS = ["mp3", "wav", "m4a", "webm", "ogg"];
 export const PROFESSOR_MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 export function resolveProfessorRole(params: {
@@ -41,6 +41,13 @@ export async function canAccessProfessorModule(userId: string, groupId: string, 
   const settings = await prisma.professorModuleSettings.findUnique({ where: { groupId } });
   const canConfigure = role === "ADMIN";
 
+  if (!settings) {
+    return {
+      enabled: true,
+      canConfigure,
+    };
+  }
+
   if (canConfigure) {
     return {
       enabled: settings?.enabled ?? false,
@@ -48,7 +55,7 @@ export async function canAccessProfessorModule(userId: string, groupId: string, 
     };
   }
 
-  if (!settings?.enabled) {
+  if (!settings.enabled) {
     return { enabled: false, canConfigure: false };
   }
 

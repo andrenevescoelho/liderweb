@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,11 @@ export default function ProfessorPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [practiceType, setPracticeType] = useState("VOCAL");
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recorderSupported, setRecorderSupported] = useState(false);
   const [settings, setSettings] = useState<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   const load = async () => {
     const accessRes = await fetch("/api/professor/access");
@@ -54,8 +58,57 @@ export default function ProfessorPage() {
   };
 
   useEffect(() => {
+    setRecorderSupported(typeof window !== "undefined" && "MediaRecorder" in window && !!navigator?.mediaDevices?.getUserMedia);
     load();
   }, []);
+
+  const handleRecordedBlob = async (blob: Blob) => {
+    const extension = blob.type.includes("ogg") ? "ogg" : "webm";
+    const file = new File([blob], `gravacao-professor-${Date.now()}.${extension}`, {
+      type: blob.type || "audio/webm",
+    });
+    await handleUpload(file);
+  };
+
+  const startRecording = async () => {
+    try {
+      if (!recorderSupported) {
+        alert("Seu navegador não suporta gravação de áudio neste recurso.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        if (blob.size > 0) {
+          await handleRecordedBlob(blob);
+        }
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch (error) {
+      console.error("Erro ao iniciar gravação:", error);
+      alert("Não foi possível iniciar a gravação. Verifique permissões de microfone.");
+    }
+  };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    recorder.stop();
+    setRecording(false);
+  };
 
   const handleUpload = async (file: File) => {
     try {
@@ -185,7 +238,7 @@ export default function ProfessorPage() {
       <Card>
         <CardHeader>
           <CardTitle>Enviar gravação</CardTitle>
-          <p className="text-sm text-muted-foreground">Formatos aceitos: mp3, wav e m4a (até 20MB).</p>
+          <p className="text-sm text-muted-foreground">Formatos aceitos: mp3, wav, m4a, webm e ogg (até 20MB).</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="max-w-sm">
@@ -201,7 +254,7 @@ export default function ProfessorPage() {
           </div>
           <input
             type="file"
-            accept=".mp3,.wav,.m4a,audio/*"
+            accept=".mp3,.wav,.m4a,.webm,.ogg,audio/*"
             disabled={uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -209,7 +262,20 @@ export default function ProfessorPage() {
               event.currentTarget.value = "";
             }}
           />
+          <div className="flex flex-wrap gap-2">
+            {!recording ? (
+              <Button type="button" variant="outline" disabled={uploading || !recorderSupported} onClick={startRecording}>
+                Gravar áudio no site
+              </Button>
+            ) : (
+              <Button type="button" variant="destructive" disabled={uploading} onClick={stopRecording}>
+                Parar gravação e enviar
+              </Button>
+            )}
+            {!recorderSupported ? <p className="text-xs text-muted-foreground">Gravação no navegador indisponível neste dispositivo.</p> : null}
+          </div>
           {uploading ? <p className="text-sm text-muted-foreground">Enviando gravação para análise...</p> : null}
+          {recording ? <p className="text-sm text-red-500">Gravando... clique em “Parar gravação e enviar”.</p> : null}
         </CardContent>
       </Card>
 
