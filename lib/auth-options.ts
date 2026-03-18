@@ -195,7 +195,38 @@ export const authOptions: NextAuthOptions = {
       const normalizedEmail = rawEmail?.trim().toLowerCase();
       const isEmailVerified = Boolean((profile as { email_verified?: boolean } | undefined)?.email_verified);
 
+      const existingUser = normalizedEmail
+        ? await prisma.user.findFirst({
+            where: {
+              email: {
+                equals: normalizedEmail,
+                mode: "insensitive",
+              },
+            },
+            select: {
+              id: true,
+              groupId: true,
+              name: true,
+            },
+          })
+        : null;
+
       if (!normalizedEmail || !isEmailVerified) {
+        await logUserAction({
+          userId: existingUser?.id ?? null,
+          groupId: existingUser?.groupId ?? null,
+          action: AUDIT_ACTIONS.LOGIN_FAILED,
+          entityType: AuditEntityType.AUTH,
+          description: "Tentativa de login Google recusada por email ausente ou não verificado",
+          metadata: {
+            provider: "google",
+            email: normalizedEmail ?? null,
+            hasEmail: Boolean(normalizedEmail),
+            emailVerified: isEmailVerified,
+            providerAccountId: account.providerAccountId,
+          },
+        });
+
         console.error("[auth][google] Login recusado: email ausente ou não verificado.", {
           hasEmail: Boolean(normalizedEmail),
           isEmailVerified,
@@ -203,18 +234,6 @@ export const authOptions: NextAuthOptions = {
         });
         return "/login?error=google_email_required";
       }
-
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          email: {
-            equals: normalizedEmail,
-            mode: "insensitive",
-          },
-        },
-        select: {
-          id: true,
-        },
-      });
 
       console.info("[auth][google] Tentativa de login OAuth.", {
         providerAccountId: account.providerAccountId,
@@ -227,6 +246,20 @@ export const authOptions: NextAuthOptions = {
           data: { email: normalizedEmail },
         });
       }
+
+      await logUserAction({
+        userId: existingUser?.id ?? user.id ?? null,
+        groupId: existingUser?.groupId ?? null,
+        action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+        entityType: AuditEntityType.AUTH,
+        description: `Login realizado com sucesso via Google por ${existingUser?.name ?? user.name ?? normalizedEmail}`,
+        metadata: {
+          provider: "google",
+          email: normalizedEmail,
+          providerAccountId: account.providerAccountId,
+          matchedExistingUser: Boolean(existingUser),
+        },
+      });
 
       return true;
     },
