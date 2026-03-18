@@ -117,7 +117,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const hidePermissionSummary = pathname?.startsWith("/admin") || userRole === "ADMIN";
 
   const dynamicItems: MenuItem[] = [...menuItems];
-  const showProfessorMenu = Boolean(professorVisibility?.enabled || professorVisibility?.canConfigure);
+  const showProfessorMenu = Boolean(
+    professorVisibility?.enabled ||
+    professorVisibility?.canConfigure ||
+    (user?.groupId && ["ADMIN", "LEADER", "MEMBER"].includes(userRole))
+  );
 
   if (showProfessorMenu) {
     dynamicItems.splice(9, 0, {

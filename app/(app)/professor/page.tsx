@@ -262,6 +262,20 @@ export default function ProfessorPage() {
               event.currentTarget.value = "";
             }}
           />
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Ou grave pelo gravador do dispositivo:</p>
+            <input
+              type="file"
+              accept="audio/*"
+              capture="microphone"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) handleUpload(file);
+                event.currentTarget.value = "";
+              }}
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             {!recording ? (
               <Button type="button" variant="outline" disabled={uploading || !recorderSupported} onClick={startRecording}>
@@ -272,7 +286,7 @@ export default function ProfessorPage() {
                 Parar gravação e enviar
               </Button>
             )}
-            {!recorderSupported ? <p className="text-xs text-muted-foreground">Gravação no navegador indisponível neste dispositivo.</p> : null}
+            {!recorderSupported ? <p className="text-xs text-muted-foreground">Gravação direta no navegador indisponível aqui. Use o campo de gravação do dispositivo acima.</p> : null}
           </div>
           {uploading ? <p className="text-sm text-muted-foreground">Enviando gravação para análise...</p> : null}
           {recording ? <p className="text-sm text-red-500">Gravando... clique em “Parar gravação e enviar”.</p> : null}

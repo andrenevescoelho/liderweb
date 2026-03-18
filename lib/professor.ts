@@ -63,6 +63,17 @@ export async function canAccessProfessorModule(userId: string, groupId: string, 
     return { enabled: true, canConfigure: false };
   }
 
+  const enabledCount = await prisma.professorAccess.count({
+    where: {
+      groupId,
+      enabled: true,
+    },
+  });
+
+  if (enabledCount === 0) {
+    return { enabled: true, canConfigure: false };
+  }
+
   const access = await prisma.professorAccess.findUnique({
     where: {
       groupId_userId: {
