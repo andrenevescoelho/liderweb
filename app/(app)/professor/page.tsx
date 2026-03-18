@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -140,7 +140,7 @@ export default function ProfessorPage() {
         <Card>
           <CardHeader>
             <CardTitle>Dashboard do Professor</CardTitle>
-            <CardDescription>Resumo da sua evolução recente e foco atual.</CardDescription>
+            <p className="text-sm text-muted-foreground">Resumo da sua evolução recente e foco atual.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -185,20 +185,19 @@ export default function ProfessorPage() {
       <Card>
         <CardHeader>
           <CardTitle>Enviar gravação</CardTitle>
-          <CardDescription>Formatos aceitos: mp3, wav e m4a (até 20MB).</CardDescription>
+          <p className="text-sm text-muted-foreground">Formatos aceitos: mp3, wav e m4a (até 20MB).</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="max-w-sm">
-            <Select value={practiceType} onValueChange={setPracticeType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="VOCAL">Canto</SelectItem>
-                <SelectItem value="INSTRUMENT">Instrumento</SelectItem>
-                <SelectItem value="MINISTRATION">Ministração</SelectItem>
-              </SelectContent>
-            </Select>
+            <Select
+              value={practiceType}
+              onChange={(event) => setPracticeType(event.target.value)}
+              options={[
+                { value: "VOCAL", label: "Canto" },
+                { value: "INSTRUMENT", label: "Instrumento" },
+                { value: "MINISTRATION", label: "Ministração" },
+              ]}
+            />
           </div>
           <input
             type="file"
@@ -244,7 +243,7 @@ export default function ProfessorPage() {
         <Card>
           <CardHeader>
             <CardTitle>Configuração do módulo (Admin)</CardTitle>
-            <CardDescription>Defina quem pode acessar o módulo Professor neste ministério.</CardDescription>
+            <p className="text-sm text-muted-foreground">Defina quem pode acessar o módulo Professor neste ministério.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border p-3">
@@ -254,15 +253,15 @@ export default function ProfessorPage() {
 
             <div className="max-w-sm">
               <Label>Escopo de acesso</Label>
-              <Select value={settings.accessMode} onValueChange={(value) => setSettings((prev: any) => ({ ...prev, accessMode: value }))}>
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL_MEMBERS">Todos os membros</SelectItem>
-                  <SelectItem value="SELECTED_MEMBERS">Somente membros selecionados</SelectItem>
-                </SelectContent>
-              </Select>
+              <Select
+                className="mt-2"
+                value={settings.accessMode}
+                onChange={(event) => setSettings((prev: any) => ({ ...prev, accessMode: event.target.value }))}
+                options={[
+                  { value: "ALL_MEMBERS", label: "Todos os membros" },
+                  { value: "SELECTED_MEMBERS", label: "Somente membros selecionados" },
+                ]}
+              />
             </div>
 
             {settings.accessMode === "SELECTED_MEMBERS" ? (
