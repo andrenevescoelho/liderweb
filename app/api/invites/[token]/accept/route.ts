@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { emailsMatch } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
-
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 export async function POST(
   _req: NextRequest,
@@ -37,10 +36,7 @@ export async function POST(
       return NextResponse.json({ error: "Este convite expirou" }, { status: 400 });
     }
 
-    const inviteEmail = normalizeEmail(invite.email);
-    const authenticatedEmail = normalizeEmail(session.user.email);
-
-    if (inviteEmail !== authenticatedEmail) {
+    if (!emailsMatch(invite.email, session.user.email)) {
       return NextResponse.json(
         { error: `Este convite foi enviado para ${invite.email}. Entre com essa conta para continuar.` },
         { status: 409 }
