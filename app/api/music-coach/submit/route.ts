@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { getFileUrl } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,20 @@ Responda em português brasileiro no seguinte formato JSON (sem markdown, apenas
 Seja específico, prático e encorajador nas suas observações.`;
 
     try {
+      // Download audio from S3
+      console.log("[music-coach/submit] cloud_storage_path recebido:", cloud_storage_path);
+      const audioUrl = await getFileUrl(cloud_storage_path, false);
+      console.log("[music-coach/submit] audioUrl gerada pelo getFileUrl:", audioUrl);
+      const audioResponse = await fetch(audioUrl);
+      console.log("[music-coach/submit] status HTTP da resposta S3:", audioResponse.status);
+      const contentType = audioResponse.headers.get("content-type") || "";
+      console.log("[music-coach/submit] content-type recebido:", contentType);
+      const audioFormat = contentType.split("/")[1]?.split(";")[0] || "unknown";
+      console.log("[music-coach/submit] audioFormat detectado:", audioFormat);
+      const SUPPORTED_FORMATS = ["mp3", "mp4", "wav", "flac", "ogg", "webm", "mpeg"];
+      const isAudioFormatSupported = SUPPORTED_FORMATS.includes(audioFormat);
+      console.log("[music-coach/submit] isAudioFormatSupported:", isAudioFormatSupported);
+
       const userContent = [
         {
           type: "text",
