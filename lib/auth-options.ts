@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
+import { canAccessProfessorModule } from "@/lib/professor";
 
 async function verifyPassword(password: string, storedPassword: string | null, userId: string) {
   if (!storedPassword) {
@@ -171,6 +172,12 @@ export const authOptions: NextAuthOptions = {
           }
         }
         
+        let musicCoachEnabled = false;
+        if (user.groupId) {
+          const access = await canAccessProfessorModule(user.id, user.groupId, user.role);
+          musicCoachEnabled = access.enabled;
+        }
+
         return {
           id: user.id,
           email: user.email,
@@ -180,6 +187,7 @@ export const authOptions: NextAuthOptions = {
           permissions: user.profile?.permissions ?? [],
           hasActiveSubscription,
           subscriptionStatus,
+          musicCoachEnabled,
         };
       },
     }),
@@ -292,6 +300,7 @@ export const authOptions: NextAuthOptions = {
         token.permissions = (user as any).permissions ?? [];
         token.hasActiveSubscription = (user as any).hasActiveSubscription;
         token.subscriptionStatus = (user as any).subscriptionStatus;
+        token.musicCoachEnabled = (user as any).musicCoachEnabled ?? false;
       }
 
       if (token.id && typeof token.id === "string") {
@@ -311,6 +320,12 @@ export const authOptions: NextAuthOptions = {
           token.role = dbUser.role;
           token.groupId = dbUser.groupId;
           token.permissions = dbUser.profile?.permissions ?? [];
+          if (dbUser.groupId) {
+            const access = await canAccessProfessorModule(dbUser.id, dbUser.groupId, dbUser.role);
+            token.musicCoachEnabled = access.enabled;
+          } else {
+            token.musicCoachEnabled = false;
+          }
         }
       }
 
@@ -325,6 +340,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).permissions = token.permissions;
         (session.user as any).hasActiveSubscription = token.hasActiveSubscription;
         (session.user as any).subscriptionStatus = token.subscriptionStatus;
+        (session.user as any).musicCoachEnabled = token.musicCoachEnabled ?? false;
       }
       return session;
     },
