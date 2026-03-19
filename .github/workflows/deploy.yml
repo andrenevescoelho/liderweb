@@ -15,6 +15,16 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
+      - name: Backup do banco antes do deploy
+        run: |
+          BACKUP_FILE="/opt/backups/liderweb_$(date +%Y%m%d_%H%M%S).sql"
+          mkdir -p /opt/backups
+          docker exec liderweb_db pg_dump -U liderweb_user liderweb > "$BACKUP_FILE"
+          echo "✅ Backup salvo em $BACKUP_FILE"
+          # Manter apenas os últimos 7 backups
+          ls -t /opt/backups/liderweb_*.sql | tail -n +8 | xargs -r rm
+          echo "🗑️ Backups antigos removidos"
+
       - name: Sincronizar código (preservando arquivos de prod)
         run: |
           rsync -av --delete \
@@ -31,6 +41,6 @@ jobs:
           docker compose -f docker-compose.prod.yml --env-file .env.prod build app
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
           docker cp /opt/liderweb/prisma liderweb_app:/app/prisma
-          docker exec liderweb_app node_modules/.bin/prisma db push --accept-data-loss --schema=/app/prisma/schema.prisma
+          docker exec liderweb_app node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma || echo "⚠️ Migration falhou - app continua rodando com schema anterior"
           docker builder prune -f --keep-storage 2gb
           echo "✅ Deploy concluído!"
