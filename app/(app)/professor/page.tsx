@@ -232,6 +232,52 @@ export default function ProfessorPage() {
   }, [activeTab, mainSection, dashData, content, streaming, generateContent]);
 
   /* ─── Audio Recording ─── */
+
+  // Converte qualquer blob de áudio para WAV usando Web Audio API
+  const convertToWav = async (blob: Blob): Promise<Blob> => {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new AudioContext();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const numSamples = audioBuffer.length;
+    const bytesPerSample = 2; // 16-bit PCM
+    const dataLength = numSamples * numChannels * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + dataLength, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+    view.setUint16(32, numChannels * bytesPerSample, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(ch)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+
+    await audioCtx.close();
+    return new Blob([buffer], { type: "audio/wav" });
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -278,32 +324,40 @@ export default function ProfessorPage() {
     if (!audioBlob) return;
     setUploading(true);
     setUploadStatus("idle");
-    setUploadMessage("");
+    setUploadMessage("Convertendo áudio...");
 
     try {
+      // Converter para WAV (suportado pelo LLM)
+      let uploadBlob: Blob;
+      try {
+        uploadBlob = await convertToWav(audioBlob);
+      } catch (convErr) {
+        console.error("Conversão para WAV falhou, usando original:", convErr);
+        uploadBlob = audioBlob;
+      }
+
       // 1. Get presigned URL
-      const ext = audioBlob.type.includes("webm") ? "webm" : "ogg";
-      const fileName = `practice-${Date.now()}.${ext}`;
+      const fileName = `practice-${Date.now()}.wav`;
       const presignRes = await fetch("/api/music-coach/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName, contentType: audioBlob.type }),
+        body: JSON.stringify({ fileName, contentType: "audio/wav" }),
       });
       if (!presignRes.ok) throw new Error("Falha ao obter URL de upload");
       const { uploadUrl, cloud_storage_path } = await presignRes.json();
 
       // 2. Upload to S3
-      // Check signed headers to determine if Content-Disposition header is needed
+      setUploadMessage("Enviando áudio...");
       const urlObj = new URL(uploadUrl);
       const signedHeaders = urlObj.searchParams.get("X-Amz-SignedHeaders") || "";
-      const headers: Record<string, string> = { "Content-Type": audioBlob.type };
+      const headers: Record<string, string> = { "Content-Type": "audio/wav" };
       if (signedHeaders.includes("content-disposition")) {
         headers["Content-Disposition"] = "attachment";
       }
       const uploadRes = await fetch(uploadUrl, {
         method: "PUT",
         headers,
-        body: audioBlob,
+        body: uploadBlob,
       });
       if (!uploadRes.ok) throw new Error("Falha no upload do áudio");
 
