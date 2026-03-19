@@ -44,6 +44,7 @@ export async function GET() {
     members: members.map((member) => ({
       id: member.id,
       name: member.name,
+      email: member.email,
       role: member.role,
       memberFunction: member.profile?.memberFunction,
       enabled: enabledSet.has(member.id),

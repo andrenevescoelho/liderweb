@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { GraduationCap, Search, Users, CheckCircle2, XCircle } from "lucide-react";
 
 type AccessInfo = { enabled: boolean; canConfigure: boolean };
 
@@ -30,6 +29,7 @@ export default function ProfessorPage() {
   const [recording, setRecording] = useState(false);
   const [recorderSupported, setRecorderSupported] = useState(false);
   const [settings, setSettings] = useState<any>(null);
+  const [memberSearch, setMemberSearch] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
 
@@ -156,6 +156,29 @@ export default function ProfessorPage() {
   };
 
   const sortedMembers = useMemo(() => (settings?.members ?? []).slice().sort((a: any, b: any) => a.name.localeCompare(b.name)), [settings]);
+  const filteredMembers = useMemo(() => {
+    const term = memberSearch.trim().toLowerCase();
+    if (!term) return sortedMembers;
+
+    return sortedMembers.filter((member: any) => {
+      const haystack = `${member.name} ${member.email ?? ""} ${member.memberFunction ?? ""} ${member.role ?? ""}`.toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [memberSearch, sortedMembers]);
+
+  const enabledMembersCount = useMemo(
+    () => sortedMembers.filter((member: any) => Boolean(member.enabled)).length,
+    [sortedMembers]
+  );
+
+  const setAllMembersEnabled = (enabled: boolean) => {
+    setSettings((prev: any) => ({
+      ...prev,
+      enabled: true,
+      accessMode: "SELECTED_MEMBERS",
+      members: (prev?.members ?? []).map((member: any) => ({ ...member, enabled })),
+    }));
+  };
 
   const saveSettings = async () => {
     const selectedIds = sortedMembers.filter((member: any) => member.enabled).map((member: any) => member.id);
@@ -320,54 +343,90 @@ export default function ProfessorPage() {
       </Card>
 
       {access.canConfigure && settings && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Configuração do módulo (Admin)</CardTitle>
-            <p className="text-sm text-muted-foreground">Defina quem pode acessar o módulo Professor neste ministério.</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <Label htmlFor="professor-enabled">Habilitar módulo Professor</Label>
-              <Switch id="professor-enabled" checked={Boolean(settings.enabled)} onCheckedChange={(value) => setSettings((prev: any) => ({ ...prev, enabled: value }))} />
-            </div>
-
-            <div className="max-w-sm">
-              <Label>Escopo de acesso</Label>
-              <Select
-                className="mt-2"
-                value={settings.accessMode}
-                onChange={(event) => setSettings((prev: any) => ({ ...prev, accessMode: event.target.value }))}
-                options={[
-                  { value: "ALL_MEMBERS", label: "Todos os membros" },
-                  { value: "SELECTED_MEMBERS", label: "Somente membros selecionados" },
-                ]}
-              />
-            </div>
-
-            {settings.accessMode === "SELECTED_MEMBERS" ? (
-              <div className="space-y-2 rounded-lg border p-3">
-                <p className="text-sm font-medium">Membros habilitados</p>
-                {sortedMembers.map((member: any) => (
-                  <label key={member.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={Boolean(member.enabled)}
-                      onCheckedChange={(checked) => {
-                        setSettings((prev: any) => ({
-                          ...prev,
-                          members: prev.members.map((item: any) => (item.id === member.id ? { ...item, enabled: checked === true } : item)),
-                        }));
-                      }}
-                    />
-                    <span>{member.name}</span>
-                    <span className="text-xs text-muted-foreground">({member.memberFunction ?? member.role})</span>
-                  </label>
-                ))}
+        <section className="space-y-4 rounded-2xl border border-cyan-900/40 bg-[#0b172a] p-6 text-slate-100">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-6 w-6 text-primary" />
+                <h2 className="text-3xl font-bold">Configurar Professor</h2>
               </div>
-            ) : null}
+              <p className="mt-1 text-lg text-slate-300">Habilite o módulo Professor para os membros do seu grupo.</p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-cyan-800/40 px-4 py-2 text-sm text-emerald-300">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>{enabledMembersCount} de {sortedMembers.length} habilitados</span>
+            </div>
+          </div>
 
+          <div className="rounded-xl border border-slate-700 bg-[#1a2a42] p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-3xl font-semibold">
+                <Users className="h-6 w-6 text-slate-200" />
+                <h3>Membros do Grupo</h3>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setAllMembersEnabled(true)}>
+                  Habilitar Todos
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setAllMembersEnabled(false)}>
+                  Desabilitar Todos
+                </Button>
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-slate-600 bg-[#1f324f] px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-slate-300" />
+                <input
+                  value={memberSearch}
+                  onChange={(event) => setMemberSearch(event.target.value)}
+                  placeholder="Buscar por nome, email ou função..."
+                  className="w-full bg-transparent text-base text-slate-100 placeholder:text-slate-400 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              {filteredMembers.map((member: any) => {
+                const active = Boolean(member.enabled);
+                return (
+                  <div key={member.id} className="flex items-center justify-between gap-3 border-b border-slate-700 py-4 last:border-b-0">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-3xl font-medium text-slate-100">{member.name}</p>
+                        <span className="rounded bg-cyan-900/50 px-2 py-0.5 text-xs font-semibold text-cyan-300">
+                          {member.role}
+                        </span>
+                      </div>
+                      <p className="text-lg text-slate-300">{member.email ?? member.memberFunction ?? "Sem e-mail cadastrado"}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {active ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-slate-500" />}
+                      <Switch
+                        checked={active}
+                        onCheckedChange={(checked) => {
+                          setSettings((prev: any) => ({
+                            ...prev,
+                            enabled: true,
+                            accessMode: "SELECTED_MEMBERS",
+                            members: prev.members.map((item: any) => (item.id === member.id ? { ...item, enabled: checked === true } : item)),
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredMembers.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-400">Nenhum membro encontrado para a busca informada.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
             <Button onClick={saveSettings}>Salvar configuração</Button>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
     </div>
   );
