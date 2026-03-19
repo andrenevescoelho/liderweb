@@ -8,7 +8,7 @@ import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit
 import { SessionUser } from "@/lib/types";
 
 function canConfigure(role: string) {
-  return role === "SUPERADMIN" || role === "ADMIN";
+  return role === "SUPERADMIN" || role === "ADMIN" || role === "LEADER";
 }
 
 export async function GET() {

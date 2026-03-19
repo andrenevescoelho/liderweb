@@ -39,7 +39,7 @@ export async function canAccessProfessorModule(userId: string, groupId: string, 
   }
 
   const settings = await prisma.professorModuleSettings.findUnique({ where: { groupId } });
-  const canConfigure = role === "ADMIN";
+  const canConfigure = role === "ADMIN" || role === "LEADER";
 
   if (!settings) {
     return {

@@ -124,12 +124,21 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   );
 
   if (showProfessorMenu) {
-    dynamicItems.splice(9, 0, {
-      label: "Professor",
-      href: "/professor",
-      icon: <GraduationCap className="h-5 w-5" />,
-      roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"],
-    });
+    if (userRole === "ADMIN" || userRole === "LEADER") {
+      dynamicItems.splice(9, 0, {
+        label: "Config. Professor",
+        href: "/professor/config",
+        icon: <GraduationCap className="h-5 w-5" />,
+        roles: ["ADMIN", "LEADER"],
+      });
+    } else {
+      dynamicItems.splice(9, 0, {
+        label: "Professor",
+        href: "/professor",
+        icon: <GraduationCap className="h-5 w-5" />,
+        roles: ["MEMBER", "SUPERADMIN"],
+      });
+    }
   }
 
   const filteredMenuItems = dynamicItems.filter((item) => {
