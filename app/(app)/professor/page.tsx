@@ -1,292 +1,839 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { SessionUser } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select } from "@/components/ui/select";
+import {
+  GraduationCap,
+  Music,
+  BookOpen,
+  Lightbulb,
+  Dumbbell,
+  RefreshCw,
+  Loader2,
+  Star,
+  Award,
+  BarChart3,
+  Mic2,
+  Mic,
+  MicOff,
+  Square,
+  Upload,
+  Play,
+  Pause,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type AccessInfo = { enabled: boolean; canConfigure: boolean };
+/* ─── Types ─── */
+interface DashboardData {
+  level: number;
+  memberFunction: string | null;
+  instruments: string[];
+  voiceType: string | null;
+  roles: string[];
+  submissionCount: number;
+  latestProgress: Array<{ metricType: string; value: number; createdAt: string }>;
+}
 
-type DashboardData = {
-  roleType: string;
-  instrument?: string | null;
-  avgScore?: number | null;
-  strengths: string[];
-  improvements: string[];
-  recentSubmissions: Array<any>;
-};
+type ContentTab = "general" | "exercises" | "theory" | "tips";
+type MainSection = "content" | "record" | "history";
 
+interface FeedbackData {
+  id: string;
+  score: number | null;
+  feedback: string | null;
+  suggestions: string | null;
+  metricsJson: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+interface SubmissionData {
+  id: string;
+  type: string;
+  instrument: string | null;
+  notes: string | null;
+  audioPlayUrl: string | null;
+  createdAt: string;
+  feedback: FeedbackData | null;
+}
+
+interface HistoryResponse {
+  submissions: SubmissionData[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+/* ─── Constants ─── */
+const CONTENT_TABS: { key: ContentTab; label: string; icon: React.ReactNode }[] = [
+  { key: "general", label: "Hoje", icon: <Lightbulb className="h-4 w-4" /> },
+  { key: "exercises", label: "Exercícios", icon: <Dumbbell className="h-4 w-4" /> },
+  { key: "theory", label: "Teoria", icon: <BookOpen className="h-4 w-4" /> },
+  { key: "tips", label: "Dicas", icon: <Star className="h-4 w-4" /> },
+];
+
+const MAIN_SECTIONS: { key: MainSection; label: string; icon: React.ReactNode }[] = [
+  { key: "content", label: "Conteúdo", icon: <BookOpen className="h-4 w-4" /> },
+  { key: "record", label: "Gravar Prática", icon: <Mic className="h-4 w-4" /> },
+  { key: "history", label: "Histórico", icon: <Clock className="h-4 w-4" /> },
+];
+
+const PRACTICE_TYPES = [
+  { value: "vocal", label: "Vocal" },
+  { value: "instrumental", label: "Instrumental" },
+  { value: "rehearsal", label: "Ensaio" },
+  { value: "warmup", label: "Aquecimento" },
+];
+
+/* ─── Helpers ─── */
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score === null) return <span className="text-xs text-muted-foreground">Sem nota</span>;
+  const color = score >= 80 ? "bg-emerald-500/20 text-emerald-400" : score >= 60 ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400";
+  return <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold", color)}>{score}/100</span>;
+}
+
+/* ═══════════════════════════════════════════ */
 export default function ProfessorPage() {
-  const [access, setAccess] = useState<AccessInfo | null>(null);
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [contents, setContents] = useState<any[]>([]);
-  const [submissions, setSubmissions] = useState<any[]>([]);
-  const [practiceType, setPracticeType] = useState("VOCAL");
+  const { data: session, status } = useSession() || {};
+  const router = useRouter();
+  const user = session?.user as SessionUser | undefined;
+
+  const [dashData, setDashData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mainSection, setMainSection] = useState<MainSection>("content");
+
+  /* ─── Content state ─── */
+  const [activeTab, setActiveTab] = useState<ContentTab>("general");
+  const [content, setContent] = useState<Record<string, string>>({});
+  const [streaming, setStreaming] = useState(false);
+  const [cachedFlags, setCachedFlags] = useState<Record<string, boolean>>({});
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  /* ─── Recording state ─── */
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
+  const [practiceType, setPracticeType] = useState("vocal");
+  const [practiceInstrument, setPracticeInstrument] = useState("");
+  const [practiceNotes, setPracticeNotes] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recorderSupported, setRecorderSupported] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "success" | "error">("idle");
+  const [uploadMessage, setUploadMessage] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = async () => {
-    const accessRes = await fetch("/api/professor/access");
-    if (!accessRes.ok) return;
-    const accessData = await accessRes.json();
-    setAccess(accessData);
+  /* ─── History state ─── */
+  const [history, setHistory] = useState<HistoryResponse | null>(null);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedSubmission, setExpandedSubmission] = useState<string | null>(null);
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-    if (!accessData.enabled && !accessData.canConfigure) return;
-
-    const [d, c, s] = await Promise.all([
-      fetch("/api/professor/dashboard").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/professor/contents").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/professor/submissions").then((r) => (r.ok ? r.json() : [])),
-    ]);
-
-    if (d) setDashboard(d);
-    setContents(c?.contents ?? []);
-    setSubmissions(s ?? []);
-
-  };
-
+  /* ─── Init: load dashboard ─── */
   useEffect(() => {
-    setRecorderSupported(typeof window !== "undefined" && "MediaRecorder" in window && !!navigator?.mediaDevices?.getUserMedia);
-    load();
-  }, []);
+    if (status === "loading") return;
+    if (!user) { router.replace("/login"); return; }
+    const fetchDash = async () => {
+      try {
+        const res = await fetch("/api/music-coach/dashboard");
+        if (res.status === 403) { router.replace("/dashboard"); return; }
+        if (!res.ok) throw new Error();
+        setDashData(await res.json());
+      } catch { router.replace("/dashboard"); }
+      finally { setLoading(false); }
+    };
+    fetchDash();
+  }, [status, user, router]);
 
-  const handleRecordedBlob = async (blob: Blob) => {
-    const extension = blob.type.includes("ogg") ? "ogg" : "webm";
-    const file = new File([blob], `gravacao-professor-${Date.now()}.${extension}`, {
-      type: blob.type || "audio/webm",
-    });
-    await handleUpload(file);
-  };
+  /* ─── Content generation (cache-aware) ─── */
+  const generateContent = useCallback(async (type: ContentTab, forceRefresh = false) => {
+    if (streaming) return;
+    setStreaming(true);
+    setContent((prev) => ({ ...prev, [type]: "" }));
+    setCachedFlags((prev) => ({ ...prev, [type]: false }));
 
-  const startRecording = async () => {
     try {
-      if (!recorderSupported) {
-        alert("Seu navegador não suporta gravação de áudio neste recurso.");
+      const res = await fetch("/api/music-coach/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, forceRefresh }),
+      });
+
+      if (!res.ok) throw new Error();
+
+      const ct = res.headers.get("content-type") || "";
+
+      // Cached response (JSON, no streaming)
+      if (ct.includes("application/json")) {
+        const data = await res.json();
+        setContent((prev) => ({ ...prev, [type]: data.content || "" }));
+        setCachedFlags((prev) => ({ ...prev, [type]: !!data.cached }));
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      recordedChunksRef.current = [];
+      // Streaming response
+      if (!res.body) throw new Error();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-      };
-
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        const mimeType = recorder.mimeType || "audio/webm";
-        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-        if (blob.size > 0) {
-          await handleRecordedBlob(blob);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        const lines = text.split("\n").filter((l) => l.startsWith("data: "));
+        for (const line of lines) {
+          const data = line.slice(6);
+          if (data === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.content) {
+              accumulated += parsed.content;
+              setContent((prev) => ({ ...prev, [type]: accumulated }));
+            }
+          } catch { /* skip */ }
         }
-      };
+      }
+    } catch {
+      setContent((prev) => ({ ...prev, [type]: "Erro ao gerar conteúdo. Tente novamente." }));
+    } finally {
+      setStreaming(false);
+    }
+  }, [streaming]);
 
-      recorder.start();
+  // Auto-load content when switching tabs
+  useEffect(() => {
+    if (mainSection === "content" && dashData && !content[activeTab] && !streaming) {
+      generateContent(activeTab);
+    }
+  }, [activeTab, mainSection, dashData, content, streaming, generateContent]);
+
+  /* ─── Audio Recording ─── */
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        setAudioBlob(blob);
+        setAudioPreviewUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
+      };
       mediaRecorderRef.current = recorder;
-      setRecording(true);
-    } catch (error) {
-      console.error("Erro ao iniciar gravação:", error);
-      alert("Não foi possível iniciar a gravação. Verifique permissões de microfone.");
+      recorder.start(1000);
+      setIsRecording(true);
+      setRecordingTime(0);
+      setAudioBlob(null);
+      setAudioPreviewUrl(null);
+      setUploadStatus("idle");
+      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    } catch (err) {
+      console.error("Microphone error:", err);
+      setUploadStatus("error");
+      setUploadMessage("Não foi possível acessar o microfone. Verifique as permissões.");
     }
   };
 
   const stopRecording = () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
-    recorder.stop();
-    setRecording(false);
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
-  const handleUpload = async (file: File) => {
-    try {
-      setUploading(true);
+  const discardRecording = () => {
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+    setAudioBlob(null);
+    setAudioPreviewUrl(null);
+    setRecordingTime(0);
+    setUploadStatus("idle");
+  };
 
-      const uploadRes = await fetch("/api/professor/upload", {
+  const submitRecording = async () => {
+    if (!audioBlob) return;
+    setUploading(true);
+    setUploadStatus("idle");
+    setUploadMessage("");
+
+    try {
+      // 1. Get presigned URL
+      const ext = audioBlob.type.includes("webm") ? "webm" : "ogg";
+      const fileName = `practice-${Date.now()}.${ext}`;
+      const presignRes = await fetch("/api/music-coach/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, mimeType: file.type, fileSize: file.size }),
+        body: JSON.stringify({ fileName, contentType: audioBlob.type }),
       });
+      if (!presignRes.ok) throw new Error("Falha ao obter URL de upload");
+      const { uploadUrl, cloud_storage_path } = await presignRes.json();
 
-      if (!uploadRes.ok) throw new Error("Falha ao preparar upload");
-      const uploadData = await uploadRes.json();
-
-      const putRes = await fetch(uploadData.uploadUrl, {
+      // 2. Upload to S3
+      // Check signed headers to determine if Content-Disposition header is needed
+      const urlObj = new URL(uploadUrl);
+      const signedHeaders = urlObj.searchParams.get("X-Amz-SignedHeaders") || "";
+      const headers: Record<string, string> = { "Content-Type": audioBlob.type };
+      if (signedHeaders.includes("content-disposition")) {
+        headers["Content-Disposition"] = "attachment";
+      }
+      const uploadRes = await fetch(uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
+        headers,
+        body: audioBlob,
       });
+      if (!uploadRes.ok) throw new Error("Falha no upload do áudio");
 
-      if (!putRes.ok) throw new Error("Falha ao enviar arquivo para o R2");
-
-      const submissionRes = await fetch("/api/professor/submissions", {
+      // 3. Submit for AI analysis
+      setUploadMessage("Áudio enviado! Analisando com IA...");
+      const submitRes = await fetch("/api/music-coach/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          cloud_storage_path,
           type: practiceType,
-          fileName: file.name,
-          fileKey: uploadData.fileKey,
-          fileUrl: uploadData.fileUrl,
-          mimeType: file.type,
-          fileSize: file.size,
+          instrument: practiceType === "instrumental" ? practiceInstrument : null,
+          notes: practiceNotes || null,
         }),
       });
+      if (!submitRes.ok) throw new Error("Falha ao enviar para análise");
 
-      if (!submissionRes.ok) throw new Error("Falha ao registrar submissão");
-
-      await load();
-      alert("Gravação enviada e feedback inicial gerado com sucesso.");
-    } catch (error: any) {
-      alert(error?.message ?? "Erro no envio da gravação");
+      const result = await submitRes.json();
+      setUploadStatus("success");
+      setUploadMessage(
+        result.feedback?.score
+          ? `Prática enviada! Nota: ${result.feedback.score}/100`
+          : "Prática enviada com sucesso! Feedback será processado."
+      );
+      // Refresh dashboard count
+      setDashData((prev) => prev ? { ...prev, submissionCount: prev.submissionCount + 1 } : prev);
+      // Clear form after short delay
+      setTimeout(() => {
+        discardRecording();
+        setPracticeNotes("");
+        setPracticeInstrument("");
+      }, 3000);
+    } catch (err) {
+      console.error("Submit error:", err);
+      setUploadStatus("error");
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar prática.");
     } finally {
       setUploading(false);
     }
   };
 
-  if (!access) return <p>Carregando módulo Professor...</p>;
-  if (!access.enabled && !access.canConfigure) return <p>O módulo Professor ainda não está habilitado para o seu usuário.</p>;
+  /* ─── History ─── */
+  const fetchHistory = useCallback(async (page: number) => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/music-coach/history?page=${page}&limit=10`);
+      if (res.ok) {
+        setHistory(await res.json());
+        setHistoryPage(page);
+      }
+    } catch { /* ignore */ }
+    finally { setHistoryLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (mainSection === "history" && !history) fetchHistory(1);
+  }, [mainSection, history, fetchHistory]);
+
+  const togglePlayAudio = (url: string, submissionId: string) => {
+    if (playingAudio === submissionId) {
+      audioPlayerRef.current?.pause();
+      setPlayingAudio(null);
+      return;
+    }
+    if (audioPlayerRef.current) audioPlayerRef.current.pause();
+    const audio = new Audio(url);
+    audio.onended = () => setPlayingAudio(null);
+    audio.play();
+    audioPlayerRef.current = audio;
+    setPlayingAudio(submissionId);
+  };
+
+  /* ─── Cleanup ─── */
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      audioPlayerRef.current?.pause();
+    };
+  }, []);
+
+  /* ─── Loading / guard ─── */
+  if (status === "loading" || loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!dashData) return null;
+
+  const levelLabel = dashData.level <= 2 ? "Iniciante" : dashData.level <= 5 ? "Intermediário" : "Avançado";
+  const levelColor = dashData.level <= 2 ? "text-emerald-400" : dashData.level <= 5 ? "text-blue-400" : "text-amber-400";
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Professor</h1>
-        <p className="text-muted-foreground">Acompanhamento musical personalizado para evolução no ministério.</p>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <GraduationCap className="h-7 w-7 text-primary" />
+          Professor
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Seu assistente personalizado de aprendizado musical.
+        </p>
       </div>
 
-      {dashboard && (
+      {/* Profile Summary Cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader>
-            <CardTitle>Dashboard do Professor</CardTitle>
-            <p className="text-sm text-muted-foreground">Resumo da sua evolução recente e foco atual.</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>Função: {dashboard.roleType}</Badge>
-              {dashboard.instrument && <Badge variant="secondary">Instrumento: {dashboard.instrument}</Badge>}
-              {dashboard.avgScore ? <Badge variant="outline">Score médio: {dashboard.avgScore}</Badge> : null}
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Award className={cn("h-5 w-5", levelColor)} />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Nível</p>
+                <p className={cn("font-semibold", levelColor)}>{dashData.level} — {levelLabel}</p>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-violet-500/10 p-2">
+                <Music className="h-5 w-5 text-violet-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Instrumentos</p>
+                <p className="font-semibold text-sm">{dashData.instruments.length > 0 ? dashData.instruments.join(", ") : "—"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-amber-500/10 p-2">
+                <Mic2 className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Voz / Função</p>
+                <p className="font-semibold text-sm">{dashData.voiceType || dashData.memberFunction || dashData.roles[0] || "—"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-blue-500/10 p-2">
+                <BarChart3 className="h-5 w-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Práticas Enviadas</p>
+                <p className="font-semibold">{dashData.submissionCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <h3 className="mb-2 font-medium">Pontos fortes</h3>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                  {(dashboard.strengths ?? []).map((item, idx) => <li key={idx}>{item}</li>)}
-                </ul>
+      {/* Main Section Tabs */}
+      <div className="flex gap-1 border-b border-border">
+        {MAIN_SECTIONS.map((sec) => (
+          <button
+            key={sec.key}
+            onClick={() => setMainSection(sec.key)}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors",
+              mainSection === sec.key
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            {sec.icon}
+            {sec.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══ CONTENT SECTION ═══ */}
+      {mainSection === "content" && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle>Conteúdo Personalizado</CardTitle>
+              <div className="flex items-center gap-2">
+                {cachedFlags[activeTab] && (
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Em cache</span>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => generateContent(activeTab, true)}
+                  disabled={streaming}
+                >
+                  {streaming ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                  Gerar Novo
+                </Button>
               </div>
-              <div>
-                <h3 className="mb-2 font-medium">Pontos a melhorar</h3>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                  {(dashboard.improvements ?? []).map((item, idx) => <li key={idx}>{item}</li>)}
-                </ul>
-              </div>
+            </div>
+            <div className="flex gap-1 mt-2 border-b border-border pb-0">
+              {CONTENT_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-md transition-colors",
+                    activeTab === tab.key
+                      ? "bg-primary/10 text-primary border-b-2 border-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div ref={contentRef} className="min-h-[200px] prose prose-invert max-w-none">
+              {streaming && !content[activeTab] ? (
+                <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Gerando conteúdo personalizado...</span>
+                </div>
+              ) : content[activeTab] ? (
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {content[activeTab]}
+                  {streaming && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-8">
+                  Clique em &quot;Gerar Novo&quot; para receber conteúdo personalizado.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Conteúdos recomendados</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2">
-          {contents.map((content: any, idx: number) => (
-            <div key={content.id ?? idx} className="rounded-lg border p-3">
-              <p className="font-medium">{content.title}</p>
-              {content.description ? <p className="text-sm text-muted-foreground">{content.description}</p> : null}
-              <Badge variant="outline" className="mt-2">{content.contentType}</Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Enviar gravação</CardTitle>
-          <p className="text-sm text-muted-foreground">Formatos aceitos: mp3, wav, m4a, webm e ogg (até 20MB).</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="max-w-sm">
-            <Select
-              value={practiceType}
-              onChange={(event) => setPracticeType(event.target.value)}
-              options={[
-                { value: "VOCAL", label: "Canto" },
-                { value: "INSTRUMENT", label: "Instrumento" },
-                { value: "MINISTRATION", label: "Ministração" },
-              ]}
-            />
-          </div>
-          <input
-            type="file"
-            accept=".mp3,.wav,.m4a,.webm,.ogg,audio/*"
-            disabled={uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) handleUpload(file);
-              event.currentTarget.value = "";
-            }}
-          />
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Ou grave pelo gravador do dispositivo:</p>
-            <input
-              type="file"
-              accept="audio/*"
-              capture="microphone"
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) handleUpload(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {!recording ? (
-              <Button type="button" variant="outline" disabled={uploading || !recorderSupported} onClick={startRecording}>
-                Gravar áudio no site
-              </Button>
-            ) : (
-              <Button type="button" variant="destructive" disabled={uploading} onClick={stopRecording}>
-                Parar gravação e enviar
-              </Button>
-            )}
-            {!recorderSupported ? <p className="text-xs text-muted-foreground">Gravação direta no navegador indisponível aqui. Use o campo de gravação do dispositivo acima.</p> : null}
-          </div>
-          {uploading ? <p className="text-sm text-muted-foreground">Enviando gravação para análise...</p> : null}
-          {recording ? <p className="text-sm text-red-500">Gravando... clique em “Parar gravação e enviar”.</p> : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico e evolução</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {submissions.map((submission: any) => {
-            const feedback = submission.feedbacks?.[0];
-            return (
-              <div key={submission.id} className="rounded-lg border p-3">
-                <div className="mb-1 flex items-center justify-between">
-                  <p className="font-medium">{submission.fileName}</p>
-                  <Badge variant="secondary">{submission.type}</Badge>
+      {/* ═══ RECORD SECTION ═══ */}
+      {mainSection === "record" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="h-5 w-5 text-primary" />
+                Gravar Prática
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Practice type selection */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Tipo de Prática</label>
+                  <select
+                    value={practiceType}
+                    onChange={(e) => setPracticeType(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    {PRACTICE_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
                 </div>
-                <p className="text-xs text-muted-foreground">{new Date(submission.createdAt).toLocaleString("pt-BR")}</p>
-                {feedback ? (
-                  <>
-                    <p className="mt-2 text-sm">{feedback.feedbackText}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Score: {feedback.score ?? "-"}</p>
-                  </>
-                ) : null}
+                {practiceType === "instrumental" && (
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Instrumento</label>
+                    <input
+                      type="text"
+                      value={practiceInstrument}
+                      onChange={(e) => setPracticeInstrument(e.target.value)}
+                      placeholder="Ex: Violão, Teclado, Bateria..."
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
               </div>
-            );
-          })}
-        </CardContent>
-      </Card>
 
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Observações (opcional)</label>
+                <textarea
+                  value={practiceNotes}
+                  onChange={(e) => setPracticeNotes(e.target.value)}
+                  placeholder="Descreva o que você está praticando, música, escala, exercício..."
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+                />
+              </div>
+
+              {/* Recording controls */}
+              <div className="flex flex-col items-center gap-4 py-4">
+                {/* Timer */}
+                <div className="text-3xl font-mono font-bold tabular-nums">
+                  {formatDuration(recordingTime)}
+                </div>
+
+                {/* Waveform indicator */}
+                {isRecording && (
+                  <div className="flex items-center gap-1 h-8">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1 bg-red-500 rounded-full animate-pulse"
+                        style={{
+                          height: `${Math.random() * 100}%`,
+                          animationDelay: `${i * 0.1}s`,
+                          minHeight: "4px",
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Buttons */}
+                <div className="flex items-center gap-3">
+                  {!isRecording && !audioBlob && (
+                    <Button onClick={startRecording} size="lg" className="gap-2 bg-red-600 hover:bg-red-700">
+                      <Mic className="h-5 w-5" />
+                      Iniciar Gravação
+                    </Button>
+                  )}
+                  {isRecording && (
+                    <Button onClick={stopRecording} size="lg" variant="outline" className="gap-2 border-red-500 text-red-500 hover:bg-red-500/10">
+                      <Square className="h-4 w-4 fill-current" />
+                      Parar
+                    </Button>
+                  )}
+                  {audioBlob && !isRecording && (
+                    <>
+                      <Button onClick={discardRecording} variant="outline" size="sm" className="gap-1">
+                        <Trash2 className="h-4 w-4" />
+                        Descartar
+                      </Button>
+                      <Button onClick={submitRecording} disabled={uploading} size="lg" className="gap-2">
+                        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {uploading ? "Enviando..." : "Enviar para Análise"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+
+                {/* Audio Preview */}
+                {audioPreviewUrl && !isRecording && (
+                  <div className="w-full max-w-md">
+                    <audio controls src={audioPreviewUrl} className="w-full" />
+                  </div>
+                )}
+
+                {/* Status messages */}
+                {uploadStatus === "success" && (
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {uploadMessage}
+                  </div>
+                )}
+                {uploadStatus === "error" && (
+                  <div className="flex items-center gap-2 text-red-400 text-sm">
+                    <AlertCircle className="h-4 w-4" />
+                    {uploadMessage}
+                  </div>
+                )}
+                {uploading && uploadMessage && uploadStatus === "idle" && (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {uploadMessage}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ═══ HISTORY SECTION ═══ */}
+      {mainSection === "history" && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                Histórico de Práticas
+              </CardTitle>
+              <Button size="sm" variant="outline" onClick={() => fetchHistory(historyPage)} disabled={historyLoading}>
+                {historyLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {historyLoading && !history ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : !history || history.submissions.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Mic2 className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="font-medium">Nenhuma prática enviada ainda</p>
+                <p className="text-sm mt-1">Grave sua primeira prática na aba &quot;Gravar Prática&quot;.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {history.submissions.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="border border-border rounded-lg p-4 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {sub.audioPlayUrl && (
+                          <button
+                            onClick={() => togglePlayAudio(sub.audioPlayUrl!, sub.id)}
+                            className="flex-shrink-0 rounded-full bg-primary/10 p-2 hover:bg-primary/20 transition-colors"
+                          >
+                            {playingAudio === sub.id ? <Pause className="h-4 w-4 text-primary" /> : <Play className="h-4 w-4 text-primary" />}
+                          </button>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm capitalize">{sub.type}</span>
+                            {sub.instrument && <span className="text-xs text-muted-foreground">• {sub.instrument}</span>}
+                            {sub.feedback && <ScoreBadge score={sub.feedback.score} />}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{formatDate(sub.createdAt)}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setExpandedSubmission(expandedSubmission === sub.id ? null : sub.id)}
+                        className="text-xs text-primary hover:underline flex-shrink-0"
+                      >
+                        {expandedSubmission === sub.id ? "Fechar" : "Ver Feedback"}
+                      </button>
+                    </div>
+
+                    {/* Expanded Feedback */}
+                    {expandedSubmission === sub.id && sub.feedback && (
+                      <div className="mt-4 pt-4 border-t border-border space-y-3">
+                        {sub.feedback.feedback && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Feedback</p>
+                            <p className="text-sm whitespace-pre-wrap">{sub.feedback.feedback}</p>
+                          </div>
+                        )}
+                        {sub.feedback.metricsJson && (() => {
+                          const m = sub.feedback.metricsJson as Record<string, unknown>;
+                          const pontos = (m.pontos_fortes || []) as string[];
+                          const areas = (m.areas_melhoria || []) as string[];
+                          const exercicio = m.exercicio_recomendado as string;
+                          return (
+                            <>
+                              {pontos.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-emerald-400 mb-1">Pontos Fortes</p>
+                                  <ul className="text-sm space-y-1">
+                                    {pontos.map((p, i) => <li key={i} className="flex items-start gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />{p}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {areas.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-amber-400 mb-1">Áreas para Melhorar</p>
+                                  <ul className="text-sm space-y-1">
+                                    {areas.map((a, i) => <li key={i} className="flex items-start gap-1.5"><AlertCircle className="h-3.5 w-3.5 text-amber-400 mt-0.5 flex-shrink-0" />{a}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+                              {exercicio && (
+                                <div>
+                                  <p className="text-xs font-medium text-blue-400 mb-1">Exercício Recomendado</p>
+                                  <p className="text-sm">{exercicio}</p>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {sub.feedback.suggestions && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Sugestões</p>
+                            <p className="text-sm whitespace-pre-wrap">{sub.feedback.suggestions}</p>
+                          </div>
+                        )}
+                        {sub.notes && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Suas Observações</p>
+                            <p className="text-sm italic">{sub.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {expandedSubmission === sub.id && !sub.feedback && (
+                      <div className="mt-4 pt-4 border-t border-border">
+                        <p className="text-sm text-muted-foreground">Feedback ainda não disponível.</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Pagination */}
+                {history.totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-4">
+                    <p className="text-xs text-muted-foreground">
+                      Página {history.page} de {history.totalPages} ({history.total} práticas)
+                    </p>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => fetchHistory(historyPage - 1)}
+                        disabled={historyPage <= 1 || historyLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => fetchHistory(historyPage + 1)}
+                        disabled={historyPage >= history.totalPages || historyLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
