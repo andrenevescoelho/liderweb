@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +23,7 @@ import {
   TicketPercent,
   ClipboardList,
   Upload,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -66,6 +68,28 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const user = session?.user as SessionUser | undefined;
   const userRole = user?.role || "";
   const userPermissions = user?.permissions ?? [];
+  const [professorVisibility, setProfessorVisibility] = useState<{ enabled: boolean; canConfigure: boolean } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadProfessorAccess = async () => {
+      try {
+        const res = await fetch("/api/professor/access");
+        if (!res.ok || !mounted) return;
+        const data = await res.json();
+        if (mounted) setProfessorVisibility(data);
+      } catch (error) {
+        console.error("Professor access check failed", error);
+      }
+    };
+
+    if (user?.id) loadProfessorAccess();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   const permissionLabels = userPermissions
     .map((permissionKey) => PERMISSIONS.find((permission) => permission.key === permissionKey)?.label ?? permissionKey)
@@ -92,7 +116,32 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const isPresetCustomized = Boolean(bestPresetMatch && (bestPresetMatch.missingCount > 0 || bestPresetMatch.extraCount > 0));
   const hidePermissionSummary = pathname?.startsWith("/admin") || userRole === "ADMIN";
 
-  const filteredMenuItems = menuItems.filter((item) => {
+  const dynamicItems: MenuItem[] = [...menuItems];
+  const showProfessorMenu = Boolean(
+    professorVisibility?.enabled ||
+    professorVisibility?.canConfigure ||
+    (user?.groupId && ["ADMIN", "LEADER", "MEMBER"].includes(userRole))
+  );
+
+  if (showProfessorMenu) {
+    if (userRole === "ADMIN" || userRole === "LEADER") {
+      dynamicItems.splice(9, 0, {
+        label: "Config. Professor",
+        href: "/professor/config",
+        icon: <GraduationCap className="h-5 w-5" />,
+        roles: ["ADMIN", "LEADER"],
+      });
+    } else {
+      dynamicItems.splice(9, 0, {
+        label: "Professor",
+        href: "/professor",
+        icon: <GraduationCap className="h-5 w-5" />,
+        roles: ["MEMBER", "SUPERADMIN"],
+      });
+    }
+  }
+
+  const filteredMenuItems = dynamicItems.filter((item) => {
     if (item.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
     if (item.href === "/aniversariantes" && userRole === "SUPERADMIN") return false;
     if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) return false;

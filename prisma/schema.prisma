@@ -123,10 +123,35 @@ enum AuditEntityType {
   REHEARSAL
   SCALE
   SONG
+  PROFESSOR
   IMPORT
   SUBSCRIPTION
   RBAC
   OTHER
+}
+
+enum ProfessorRoleType {
+  MINISTER
+  SINGER
+  MUSICIAN
+}
+
+enum ProfessorAccessMode {
+  ALL_MEMBERS
+  SELECTED_MEMBERS
+}
+
+enum PracticeType {
+  VOCAL
+  INSTRUMENT
+  MINISTRATION
+}
+
+enum PracticeSubmissionStatus {
+  UPLOADED
+  ANALYZING
+  ANALYZED
+  FAILED
 }
 
 enum AnnouncementType {
@@ -192,6 +217,12 @@ model Group {
   auditLogs    AuditLog[]
   importJobs   ImportJob[]
   announcementTargets AnnouncementGroup[]
+  professorSettings ProfessorModuleSettings?
+  professorContents ProfessorContent[]
+  practiceSubmissions PracticeSubmission[]
+  progressHistory ProgressHistory[]
+  musicCoachProfiles MusicCoachProfile[]
+  professorAccesses ProfessorAccess[]
 }
 
 model SubscriptionPlan {
@@ -296,6 +327,121 @@ model User {
   importJobs    ImportJob[]
   createdAnnouncements Announcement[] @relation("AnnouncementCreator")
   announcementReceipts AnnouncementReceipt[]
+  professorAccesses ProfessorAccess[]
+  coachProfile MusicCoachProfile?
+  practiceSubmissions PracticeSubmission[]
+  progressHistory ProgressHistory[]
+}
+
+model ProfessorModuleSettings {
+  id          String             @id @default(cuid())
+  groupId     String             @unique
+  group       Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  enabled     Boolean            @default(false)
+  accessMode  ProfessorAccessMode @default(SELECTED_MEMBERS)
+  enabledBy   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model ProfessorAccess {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled     Boolean  @default(true)
+  enabledBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([groupId, userId])
+  @@index([groupId, enabled])
+}
+
+model MusicCoachProfile {
+  id            String            @id @default(cuid())
+  userId         String            @unique
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId        String
+  group          Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  roleType       ProfessorRoleType
+  instrument     String?
+  level          SkillLevel?
+  currentFocus   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([groupId, roleType])
+}
+
+model PracticeSubmission {
+  id          String                  @id @default(cuid())
+  userId       String
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId      String
+  group        Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  type         PracticeType
+  fileName     String
+  fileKey      String
+  fileUrl      String
+  mimeType     String
+  fileSize     Int
+  uploadedAt   DateTime                @default(now())
+  status       PracticeSubmissionStatus @default(UPLOADED)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  feedbacks    PracticeFeedback[]
+
+  @@index([groupId, userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PracticeFeedback {
+  id            String            @id @default(cuid())
+  submissionId  String
+  submission    PracticeSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  score         Int?
+  strengths     String[]          @default([])
+  improvements  String[]          @default([])
+  suggestions   String[]          @default([])
+  feedbackText  String            @db.Text
+  metricsJson   Json?
+  createdAt     DateTime          @default(now())
+
+  @@index([submissionId, createdAt])
+}
+
+model ProgressHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  metricType  String
+  metricValue Float
+  referenceId String?
+  createdAt   DateTime @default(now())
+
+  @@index([groupId, userId, metricType, createdAt])
+}
+
+model ProfessorContent {
+  id               String             @id @default(cuid())
+  groupId          String?
+  group            Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  targetRole       ProfessorRoleType?
+  targetInstrument String?
+  contentType      String
+  url              String?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([groupId, isActive, createdAt])
+  @@index([targetRole, targetInstrument])
 }
 
 model Announcement {
