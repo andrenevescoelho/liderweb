@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { cloud_storage_path, type, instrument, notes } = body;
+    const { cloud_storage_path, type, instrument, notes, audioBase64 } = body;
 
     if (!cloud_storage_path || !type) {
       return NextResponse.json({ error: "cloud_storage_path e type são obrigatórios" }, { status: 400 });
@@ -100,6 +100,8 @@ Seja específico, prático e encorajador nas suas observações.`;
           text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`,
         },
       ];
+
+      console.log("[music-coach/submit] audioBase64:", audioBase64 ? `${audioBase64.length} chars` : "NULL");
 
       const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
       const llmResponse = await fetch("https://api.anthropic.com/v1/messages", {
