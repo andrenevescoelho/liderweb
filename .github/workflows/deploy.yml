@@ -18,9 +18,12 @@ jobs:
         run: |
           set -e
           cd /opt/liderweb
-          git pull origin main
+          git fetch origin main
+          git clean -fd
+          git reset --hard origin/main
           docker compose -f docker-compose.prod.yml --env-file .env.prod build app
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
           docker cp /opt/liderweb/prisma liderweb_app:/app/prisma
+          docker exec liderweb_app npx prisma db push --accept-data-loss --schema=/app/prisma/schema.prisma
           docker builder prune -f --keep-storage 2gb
           echo "✅ Deploy concluído!"
