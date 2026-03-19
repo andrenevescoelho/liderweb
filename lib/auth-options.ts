@@ -7,7 +7,6 @@ import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
-import { canAccessProfessorModule } from "@/lib/professor";
 
 async function verifyPassword(password: string, storedPassword: string | null, userId: string) {
   if (!storedPassword) {
@@ -174,8 +173,11 @@ export const authOptions: NextAuthOptions = {
         
         let musicCoachEnabled = false;
         if (user.groupId) {
-          const access = await canAccessProfessorModule(user.id, user.groupId, user.role);
-          musicCoachEnabled = access.enabled;
+          const coachProfile = await prisma.musicCoachProfile.findUnique({
+            where: { userId_groupId: { userId: user.id, groupId: user.groupId } },
+            select: { enabled: true },
+          });
+          musicCoachEnabled = coachProfile?.enabled ?? false;
         }
 
         return {
@@ -321,8 +323,11 @@ export const authOptions: NextAuthOptions = {
           token.groupId = dbUser.groupId;
           token.permissions = dbUser.profile?.permissions ?? [];
           if (dbUser.groupId) {
-            const access = await canAccessProfessorModule(dbUser.id, dbUser.groupId, dbUser.role);
-            token.musicCoachEnabled = access.enabled;
+            const coachProfile = await prisma.musicCoachProfile.findUnique({
+              where: { userId_groupId: { userId: dbUser.id, groupId: dbUser.groupId } },
+              select: { enabled: true },
+            });
+            token.musicCoachEnabled = coachProfile?.enabled ?? false;
           } else {
             token.musicCoachEnabled = false;
           }

@@ -1,182 +1,169 @@
-export const dynamic = "force-dynamic";
-
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
+import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
-import { canAccessProfessorModule } from "@/lib/professor";
-import { AUDIT_ACTIONS, logUserAction, extractRequestContext } from "@/lib/audit-log";
+import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
 
-const cache = new Map<string, { expiresAt: number; content: string }>();
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const dynamic = "force-dynamic";
 
-function getCacheKey(userId: string, tab: string, instrument?: string, voiceType?: string, level?: string) {
-  return [userId, tab, instrument ?? "-", voiceType ?? "-", level ?? "-"].join(":");
-}
-
-function buildPrompt(tab: string, profile: { instrument?: string; voiceType?: string; level?: string }) {
-  const tabPrompts: Record<string, string> = {
-    hoje: "Crie um plano de estudo para hoje em tópicos curtos e objetivos.",
-    exercicios: "Liste exercícios práticos com tempo estimado e progressão.",
-    teoria: "Explique teoria musical aplicada ao louvor de forma simples.",
-    dicas: "Dê dicas diretas para evolução musical no ministério de louvor.",
-  };
-
-  return [
-    "Você é um professor de música para ministério de louvor.",
-    tabPrompts[tab] ?? tabPrompts.hoje,
-    `Instrumento: ${profile.instrument ?? "não informado"}.`,
-    `Tipo vocal: ${profile.voiceType ?? "não informado"}.`,
-    `Nível: ${profile.level ?? "não informado"}.`,
-    "Responda em português do Brasil com markdown curto.",
-  ].join(" ");
-}
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const user = session?.user as SessionUser | undefined;
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const user = session.user as SessionUser;
+    if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
 
-  if (!session || !user?.id) {
-    return new Response("Não autorizado", { status: 401 });
-  }
-
-  if (user.groupId && user.role !== "SUPERADMIN") {
-    const access = await canAccessProfessorModule(user.id, user.groupId, user.role);
-    if (!access.enabled) {
-      return new Response("Módulo não habilitado", { status: 403 });
+    const coachProfile = await prisma.musicCoachProfile.findUnique({
+      where: { userId_groupId: { userId: user.id, groupId: user.groupId } },
+    });
+    if (!coachProfile?.enabled) {
+      return NextResponse.json({ error: "Módulo não habilitado" }, { status: 403 });
     }
-  }
 
-  const body = await req.json().catch(() => ({}));
-  const tab = typeof body.tab === "string" ? body.tab.toLowerCase() : "hoje";
-  const instrument = typeof body.instrument === "string" ? body.instrument : undefined;
-  const voiceType = typeof body.voiceType === "string" ? body.voiceType : undefined;
-  const level = typeof body.level === "string" ? body.level : undefined;
+    const body = await req.json();
+    const contentType = body.type || "general";
+    const forceRefresh = body.forceRefresh === true;
 
-  const key = getCacheKey(user.id, tab, instrument, voiceType, level);
-  const now = Date.now();
-  const cached = cache.get(key);
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cached = await prisma.coachContentCache.findUnique({
+        where: { userId_groupId_contentType: { userId: user.id, groupId: user.groupId, contentType } },
+      });
+      if (cached && Date.now() - cached.generatedAt.getTime() < CACHE_TTL_MS) {
+        return NextResponse.json({ content: cached.content, cached: true });
+      }
+    }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        if (cached && cached.expiresAt > now) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", text: cached.content, cached: true })}\n\n`));
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-          return;
-        }
+    // Fetch member profile for personalized content
+    const memberProfile = await prisma.memberProfile.findUnique({
+      where: { userId: user.id },
+      select: { memberFunction: true, instruments: true, voiceType: true },
+    });
 
-        const endpoint = process.env.MUSIC_COACH_LLM_ENDPOINT || process.env.OPENAI_BASE_URL || "https://api.anthropic.com/v1/messages";
-        const prompt = buildPrompt(tab, { instrument, voiceType, level });
+    const memberFunctions = await prisma.memberFunction.findMany({
+      where: { memberId: user.id },
+      include: { roleFunction: { select: { name: true } } },
+    });
 
-        let resultText = "";
+    const roles = memberFunctions.map((mf) => mf.roleFunction.name);
+    const instruments = memberProfile?.instruments || [];
+    const voiceType = memberProfile?.voiceType || null;
+    const level = coachProfile.level;
 
-        if (endpoint.includes("anthropic.com")) {
-          const apiKey = process.env.ANTHROPIC_API_KEY;
-          if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurada");
+    const profileDescription = [
+      `Nível atual: ${level}`,
+      roles.length > 0 ? `Funções no ministério: ${roles.join(", ")}` : null,
+      instruments.length > 0 ? `Instrumentos: ${instruments.join(", ")}` : null,
+      voiceType ? `Tipo vocal: ${voiceType}` : null,
+      memberProfile?.memberFunction ? `Função principal: ${memberProfile.memberFunction}` : null,
+    ].filter(Boolean).join(". ");
 
-          const model = process.env.ANTHROPIC_MODEL || "claude-3-7-sonnet-latest";
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-api-key": apiKey,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify({
-              model,
-              max_tokens: 900,
-              stream: true,
-              messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            }),
-          });
+    const prompts: Record<string, string> = {
+      general: `Você é um professor de música cristã especializado em ministério de louvor. Com base no perfil do aluno (${profileDescription}), gere um conteúdo personalizado com:\n1. Uma saudação motivacional personalizada\n2. Dica do dia relacionada ao instrumento/função do aluno\n3. Um exercício prático simples para fazer hoje\n4. Uma recomendação de estudo (técnica musical ou teoria)\nResponda em português brasileiro, de forma encorajadora e prática.`,
+      exercises: `Você é um professor de música cristã. Com base no perfil do aluno (${profileDescription}), crie 3 exercícios práticos progressivos adequados ao nível ${level}. Cada exercício deve ter: título, descrição detalhada, duração sugerida e dica de execução. Foque em técnicas relevantes para ministério de louvor. Responda em português brasileiro.`,
+      theory: `Você é um professor de teoria musical para ministério de louvor. Com base no perfil do aluno (${profileDescription}), ensine um conceito de teoria musical adequado ao nível ${level}. Inclua: explicação clara, exemplos práticos, como aplicar no contexto de louvor, e um mini-quiz com 2 perguntas. Responda em português brasileiro.`,
+      tips: `Você é um mentor de ministério de louvor. Com base no perfil do aluno (${profileDescription}), compartilhe 5 dicas práticas para melhorar a performance no ministério. Considere o nível ${level} e as funções do aluno. Inclua dicas sobre: técnica, musicalidade, entrosamento com a equipe, e crescimento espiritual através da música. Responda em português brasileiro.`,
+    };
 
-          if (!response.ok || !response.body) {
-            throw new Error(`Falha no provider LLM (${response.status})`);
-          }
+    const systemPrompt = prompts[contentType] || prompts.general;
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
+    const apiKey = process.env.ABACUSAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "API key não configurada" }, { status: 500 });
+    }
 
+    const llmResponse = await fetch("https://apps.abacus.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Gere o conteúdo de ${contentType === "general" ? "hoje" : contentType} para mim.` },
+        ],
+        stream: true,
+      }),
+    });
+
+    if (!llmResponse.ok || !llmResponse.body) {
+      console.error("[music-coach/content] LLM error:", llmResponse.status);
+      return NextResponse.json({ error: "Erro ao gerar conteúdo" }, { status: 500 });
+    }
+
+    // Stream the response and accumulate for cache
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    let fullContent = "";
+    const userId = user.id;
+    const groupId = user.groupId;
+
+    const readable = new ReadableStream({
+      async start(controller) {
+        const reader = llmResponse.body!.getReader();
+        try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split("\n");
-
+            const text = decoder.decode(value, { stream: true });
+            const lines = text.split("\n").filter((l) => l.startsWith("data: "));
             for (const line of lines) {
-              if (!line.startsWith("data:")) continue;
-              const payload = line.slice(5).trim();
-              if (!payload || payload === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(payload);
-                const text = parsed?.delta?.text ?? parsed?.content_block?.text ?? "";
-                if (text) {
-                  resultText += text;
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", text })}\n\n`));
+              const data = line.slice(6);
+              if (data === "[DONE]") {
+                // Save to cache before closing
+                try {
+                  await prisma.coachContentCache.upsert({
+                    where: { userId_groupId_contentType: { userId, groupId, contentType } },
+                    create: { userId, groupId, contentType, content: fullContent },
+                    update: { content: fullContent, generatedAt: new Date() },
+                  });
+                  // Audit log for content generation
+                  await logUserAction({
+                    userId,
+                    groupId,
+                    action: AUDIT_ACTIONS.COACH_CONTENT_GENERATED,
+                    entityType: "COACH",
+                    description: `Conteúdo de ${contentType} gerado pelo Professor IA`,
+                    metadata: { contentType, contentLength: fullContent.length },
+                  });
+                } catch (cacheErr) {
+                  console.error("[music-coach/content] cache save error:", cacheErr);
                 }
-              } catch {
-                continue;
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                break;
               }
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  fullContent += content;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+                }
+              } catch { /* skip malformed */ }
             }
           }
-        } else {
-          const token = process.env.OPENAI_API_KEY || process.env.ABACUS_API_KEY;
-          if (!token) throw new Error("Chave de API LLM não configurada");
-
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              model: process.env.MUSIC_COACH_MODEL || "gpt-4o-mini",
-              stream: false,
-              messages: [{ role: "user", content: prompt }],
-            }),
-          });
-
-          const payload = await response.json();
-          resultText = payload?.choices?.[0]?.message?.content ?? "";
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", text: resultText })}\n\n`));
+        } catch (err) {
+          console.error("[music-coach/content] stream error:", err);
+        } finally {
+          controller.close();
         }
+      },
+    });
 
-        if (!resultText.trim()) {
-          resultText = "Não consegui gerar conteúdo agora. Tente novamente em instantes.";
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "chunk", text: resultText })}\n\n`));
-        }
-
-        cache.set(key, { expiresAt: Date.now() + DAY_MS, content: resultText });
-
-        const ctx = extractRequestContext(req);
-        await logUserAction({
-          userId: user.id,
-          groupId: user.groupId,
-          action: AUDIT_ACTIONS.COACH_CONTENT_GENERATED,
-          entityType: "PROFESSOR",
-          description: "Conteúdo do Music Coach gerado por IA",
-          metadata: { tab, cached: false },
-          ipAddress: ctx.ipAddress,
-          userAgent: ctx.userAgent,
-        });
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      } catch (error: any) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: error?.message ?? "Erro interno" })}\n\n`));
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (err) {
+    console.error("[music-coach/content] error:", err);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  }
 }
