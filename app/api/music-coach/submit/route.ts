@@ -3,24 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
-import { getFileUrl } from "@/lib/s3";
 import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
 
 export const dynamic = "force-dynamic";
-
-// Helper to detect audio format from content type or extension
-function getAudioFormat(contentType: string, path: string): string {
-  if (contentType.includes("mp3") || contentType.includes("mpeg")) return "mp3";
-  if (contentType.includes("wav")) return "wav";
-  if (contentType.includes("ogg")) return "ogg";
-  if (contentType.includes("webm")) return "webm";
-  if (contentType.includes("m4a") || contentType.includes("mp4")) return "m4a";
-  if (contentType.includes("flac")) return "flac";
-  // Fallback to extension
-  const ext = path.split(".").pop()?.toLowerCase();
-  if (ext && ["mp3", "wav", "ogg", "webm", "m4a", "flac"].includes(ext)) return ext;
-  return "wav"; // default to wav which is widely supported
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -83,24 +68,6 @@ export async function POST(req: NextRequest) {
     });
     const roles = memberFunctions.map((mf) => mf.roleFunction.name);
 
-    // Get signed URL for audio and download it
-    const audioUrl = await getFileUrl(cloud_storage_path, false);
-    let audioBase64: string | null = null;
-    let audioFormat = "wav";
-    
-    try {
-      const audioResponse = await fetch(audioUrl);
-      if (audioResponse.ok) {
-        const contentType = audioResponse.headers.get("content-type") || "";
-        audioFormat = getAudioFormat(contentType, cloud_storage_path);
-        const audioBuffer = await audioResponse.arrayBuffer();
-        audioBase64 = Buffer.from(audioBuffer).toString("base64");
-        console.log(`[music-coach/submit] Audio downloaded: ${audioBuffer.byteLength} bytes, format: ${audioFormat}`);
-      }
-    } catch (downloadErr) {
-      console.error("[music-coach/submit] Audio download error:", downloadErr);
-    }
-
     const profileCtx = [
       `Nível: ${coachProfile.level}`,
       roles.length > 0 ? `Funções: ${roles.join(", ")}` : null,
@@ -110,7 +77,7 @@ export async function POST(req: NextRequest) {
       notes ? `Observações do aluno: ${notes}` : null,
     ].filter(Boolean).join(". ");
 
-    const systemPrompt = `Você é um professor de música cristã especializado em ministério de louvor. ${audioBase64 ? "Analise o áudio de prática enviado pelo aluno e forneça feedback detalhado baseado no que você ouviu." : "Forneça feedback pedagógico baseado no contexto do aluno."}
+    const systemPrompt = `Você é um professor de música cristã especializado em ministério de louvor. Forneça feedback pedagógico detalhado baseado no contexto e perfil do aluno.
 
 Perfil do aluno: ${profileCtx}
 
@@ -127,26 +94,12 @@ Responda em português brasileiro no seguinte formato JSON (sem markdown, apenas
 Seja específico, prático e encorajador nas suas observações.`;
 
     try {
-      // Build message content
-      type MessageContent = { type: string; text?: string; source?: { type: string; media_type: string; data: string } };
-      const userContent: MessageContent[] = [
+      const userContent = [
         {
           type: "text",
-          text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`
+          text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`,
         },
       ];
-
-      // Add audio if available
-      if (audioBase64) {
-        userContent.push({
-          type: "document",
-          source: {
-            type: "base64",
-            media_type: "audio/wav",
-            data: audioBase64,
-          },
-        });
-      }
 
       const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
       const llmResponse = await fetch("https://api.anthropic.com/v1/messages", {
