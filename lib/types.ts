@@ -11,6 +11,7 @@ export interface SessionUser {
   permissions?: string[];
   hasActiveSubscription?: boolean;
   subscriptionStatus?: string | null;
+  musicCoachEnabled?: boolean;
 }
 
 export const INSTRUMENTS = [
