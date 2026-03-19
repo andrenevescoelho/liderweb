@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Now analyze with AI
-    const apiKey = process.env.ABACUSAI_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ submission, feedback: null, error: "API key não configurada" });
     }
@@ -128,38 +128,41 @@ Seja específico, prático e encorajador nas suas observações.`;
 
     try {
       // Build message content
-      type MessageContent = { type: string; text?: string; input_audio?: { data: string; format: string } };
+      type MessageContent = { type: string; text?: string; source?: { type: string; media_type: string; data: string } };
       const userContent: MessageContent[] = [
-        { 
-          type: "text", 
-          text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}` 
+        {
+          type: "text",
+          text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`
         },
       ];
-      
+
       // Add audio if available
       if (audioBase64) {
         userContent.push({
-          type: "input_audio",
-          input_audio: {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "audio/wav",
             data: audioBase64,
-            format: audioFormat,
           },
         });
       }
 
-      const llmResponse = await fetch("https://apps.abacus.ai/v1/chat/completions", {
+      const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+      const llmResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "gpt-4o-2024-11-20",
+          model,
+          max_tokens: 1024,
+          system: systemPrompt,
           messages: [
-            { role: "system", content: systemPrompt },
             { role: "user", content: userContent },
           ],
-          max_tokens: 1000,
         }),
       });
 
@@ -167,7 +170,7 @@ Seja específico, prático e encorajador nas suas observações.`;
 
       if (llmResponse.ok) {
         const llmData = await llmResponse.json();
-        const rawContent = llmData.choices?.[0]?.message?.content || "";
+        const rawContent = llmData.content?.[0]?.text || "";
         
         // Try to parse JSON from response
         try {
