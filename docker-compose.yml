@@ -22,6 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile.app
     container_name: liderweb_app
+    user: root
     restart: unless-stopped
     ports:
       - "3000:3000"
