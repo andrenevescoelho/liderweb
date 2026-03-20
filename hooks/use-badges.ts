@@ -13,6 +13,8 @@ interface Badges {
 
 const EMPTY: Badges = { escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0 };
 
+const SECTIONS = ["chat", "comunicados", "musicas", "ensaios", "aniversariantes"] as const;
+
 let _refresh: (() => void) | null = null;
 
 export function refreshBadges() {
@@ -40,7 +42,7 @@ export function useBadges() {
     const fetchBadges = async () => {
       try {
         const params = new URLSearchParams();
-        for (const section of ["musicas", "chat", "ensaios", "aniversariantes"]) {
+        for (const section of SECTIONS) {
           const ts = localStorage.getItem(`badge_seen_${section}`);
           if (ts) params.set(`seen_${section}`, ts);
         }

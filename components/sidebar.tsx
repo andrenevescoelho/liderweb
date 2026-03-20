@@ -45,21 +45,19 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const musicCoachEnabled = (user as SessionUser | undefined)?.musicCoachEnabled;
   const badges = useBadges();
 
-  const SEEN_MAP: Record<string, string> = {
-    "/songs": "musicas",
-    "/chat-grupo": "chat",
-    "/ensaios": "ensaios",
-    "/aniversariantes": "aniversariantes",
-  };
-
-  const handleLinkClick = () => {
+  const handleLinkClick = (href?: string) => () => {
+    const SEEN_MAP: Record<string, string> = {
+      "/songs": "musicas",
+      "/chat-grupo": "chat",
+      "/comunicados": "comunicados",
+      "/ensaios": "ensaios",
+      "/aniversariantes": "aniversariantes",
+    };
+    if (href) {
+      const section = SEEN_MAP[href];
+      if (section) markAsSeen(section);
+    }
     if (isMobile && onMobileClose) onMobileClose();
-  };
-
-  const handleNavClick = (href: string) => {
-    if (isMobile && onMobileClose) onMobileClose();
-    const section = SEEN_MAP[href];
-    if (section) markAsSeen(section);
   };
 
   const roleLabel =
@@ -136,7 +134,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       {/* Logo */}
       <div className={cn("flex h-14 items-center border-b border-white/10 px-3", collapsed ? "justify-center" : "justify-between")}>
         {!collapsed ? (
-          <Link href="/dashboard" className="flex items-center gap-2.5" onClick={handleLinkClick}>
+          <Link href="/dashboard" className="flex items-center gap-2.5" onClick={handleLinkClick()}>
             <div className="relative h-7 w-7 overflow-hidden rounded-md ring-1 ring-white/20 flex-shrink-0">
               <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
@@ -146,7 +144,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
             </div>
           </Link>
         ) : (
-          <Link href="/dashboard" onClick={handleLinkClick}>
+          <Link href="/dashboard" onClick={handleLinkClick()}>
             <div className="relative h-7 w-7 overflow-hidden rounded-md ring-1 ring-white/20">
               <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
@@ -183,7 +181,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      onClick={() => handleNavClick(item.href)}
+                      onClick={handleLinkClick(item.href)}
                       title={collapsed ? item.label : undefined}
                       className={cn(
                         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all relative",
@@ -227,7 +225,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       <div className="border-t border-white/10 p-2">
         <Link
           href="/profile"
-          onClick={handleLinkClick}
+          onClick={handleLinkClick()}
           className={cn(
             "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-slate-400 transition-all hover:bg-white/8 hover:text-slate-100",
             pathname === "/profile" && "bg-primary/20 text-primary",
