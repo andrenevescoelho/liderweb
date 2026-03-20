@@ -137,7 +137,7 @@ Seja específico, prático e encorajador nas suas observações.`;
       parts.push({ text: promptText });
 
       const llmResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
