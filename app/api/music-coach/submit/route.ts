@@ -109,14 +109,40 @@ Seja específico, prático e encorajador nas suas observações.`;
       const isAudioFormatSupported = SUPPORTED_FORMATS.includes(audioFormat);
       console.log("[music-coach/submit] isAudioFormatSupported:", isAudioFormatSupported);
 
-      const userContent = [
+      let s3AudioBase64: string | null = null;
+      if (isAudioFormatSupported) {
+        const audioBuffer = await audioResponse.arrayBuffer();
+        console.log("[music-coach/submit] audioBuffer tamanho em bytes:", audioBuffer.byteLength);
+        s3AudioBase64 = Buffer.from(audioBuffer).toString("base64");
+        console.log("[music-coach/submit] s3AudioBase64 tamanho em chars:", s3AudioBase64.length);
+      } else {
+        console.log("[music-coach/submit] formato não suportado, pulando leitura do buffer");
+      }
+
+      const resolvedAudioBase64 = s3AudioBase64 || audioBase64 || null;
+      console.log("[music-coach/submit] resolvedAudioBase64 (s3 ou body):", resolvedAudioBase64 ? `${resolvedAudioBase64.length} chars` : "NULL");
+
+      const userContent: object[] = [
         {
           type: "text",
           text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`,
         },
       ];
 
-      console.log("[music-coach/submit] audioBase64:", audioBase64 ? `${audioBase64.length} chars` : "NULL");
+      if (resolvedAudioBase64 && isAudioFormatSupported) {
+        const mediaType = contentType.split(";")[0].trim() || `audio/${audioFormat}`;
+        userContent.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: resolvedAudioBase64,
+          },
+        });
+        console.log("[music-coach/submit] bloco de áudio adicionado ao userContent, media_type:", mediaType);
+      } else {
+        console.log("[music-coach/submit] sem áudio para enviar à API, usando apenas contexto textual");
+      }
 
       const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
       const llmResponse = await fetch("https://api.anthropic.com/v1/messages", {
