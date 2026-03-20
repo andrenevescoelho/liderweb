@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Now analyze with AI
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ submission, feedback: null, error: "API key não configurada" });
     }
@@ -122,51 +122,34 @@ Seja específico, prático e encorajador nas suas observações.`;
       const resolvedAudioBase64 = s3AudioBase64 || audioBase64 || null;
       console.log("[music-coach/submit] resolvedAudioBase64 (s3 ou body):", resolvedAudioBase64 ? `${resolvedAudioBase64.length} chars` : "NULL");
 
-      const userContent: object[] = [
-        {
-          type: "text",
-          text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`,
-        },
-      ];
+      const promptText = `${systemPrompt}\n\nAnalise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`;
+
+      const parts: object[] = [];
 
       if (resolvedAudioBase64 && isAudioFormatSupported) {
         const mediaType = contentType.split(";")[0].trim() || `audio/${audioFormat}`;
-        userContent.push({
-          type: "document",
-          source: {
-            type: "base64",
-            media_type: mediaType,
-            data: resolvedAudioBase64,
-          },
-        });
-        console.log("[music-coach/submit] bloco de áudio adicionado ao userContent, media_type:", mediaType);
+        parts.push({ inline_data: { mime_type: mediaType, data: resolvedAudioBase64 } });
+        console.log("[music-coach/submit] bloco de áudio adicionado ao Gemini, mime_type:", mediaType);
       } else {
         console.log("[music-coach/submit] sem áudio para enviar à API, usando apenas contexto textual");
       }
 
-      const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
-      const llmResponse = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: [
-            { role: "user", content: userContent },
-          ],
-        }),
-      });
+      parts.push({ text: promptText });
+
+      const llmResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts }] }),
+        }
+      );
 
       let feedbackData: { score?: number; feedback?: string; suggestions?: string; metricsJson?: Record<string, unknown> } = {};
 
       if (llmResponse.ok) {
         const llmData = await llmResponse.json();
-        const rawContent = llmData.content?.[0]?.text || "";
+        const rawContent = llmData.candidates?.[0]?.content?.parts?.[0]?.text || "";
         
         // Try to parse JSON from response
         try {
