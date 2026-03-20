@@ -96,31 +96,20 @@ Seja específico, prático e encorajador nas suas observações.`;
 
     try {
       // Download audio from S3
-      console.log("[music-coach/submit] cloud_storage_path recebido:", cloud_storage_path);
       const audioUrl = await getFileUrl(cloud_storage_path, false);
-      console.log("[music-coach/submit] audioUrl gerada pelo getFileUrl:", audioUrl);
       const audioResponse = await fetch(audioUrl);
-      console.log("[music-coach/submit] status HTTP da resposta S3:", audioResponse.status);
       const contentType = audioResponse.headers.get("content-type") || "";
-      console.log("[music-coach/submit] content-type recebido:", contentType);
       const audioFormat = contentType.split("/")[1]?.split(";")[0] || "unknown";
-      console.log("[music-coach/submit] audioFormat detectado:", audioFormat);
       const SUPPORTED_FORMATS = ["mp3", "mp4", "wav", "flac", "ogg", "webm", "mpeg"];
       const isAudioFormatSupported = SUPPORTED_FORMATS.includes(audioFormat);
-      console.log("[music-coach/submit] isAudioFormatSupported:", isAudioFormatSupported);
 
       let s3AudioBase64: string | null = null;
       if (isAudioFormatSupported) {
         const audioBuffer = await audioResponse.arrayBuffer();
-        console.log("[music-coach/submit] audioBuffer tamanho em bytes:", audioBuffer.byteLength);
         s3AudioBase64 = Buffer.from(audioBuffer).toString("base64");
-        console.log("[music-coach/submit] s3AudioBase64 tamanho em chars:", s3AudioBase64.length);
-      } else {
-        console.log("[music-coach/submit] formato não suportado, pulando leitura do buffer");
       }
 
       const resolvedAudioBase64 = s3AudioBase64 || audioBase64 || null;
-      console.log("[music-coach/submit] resolvedAudioBase64 (s3 ou body):", resolvedAudioBase64 ? `${resolvedAudioBase64.length} chars` : "NULL");
 
       const promptText = `${systemPrompt}\n\nAnalise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`;
 
@@ -129,9 +118,6 @@ Seja específico, prático e encorajador nas suas observações.`;
       if (resolvedAudioBase64 && isAudioFormatSupported) {
         const mediaType = contentType.split(";")[0].trim() || `audio/${audioFormat}`;
         parts.push({ inline_data: { mime_type: mediaType, data: resolvedAudioBase64 } });
-        console.log("[music-coach/submit] bloco de áudio adicionado ao Gemini, mime_type:", mediaType);
-      } else {
-        console.log("[music-coach/submit] sem áudio para enviar à API, usando apenas contexto textual");
       }
 
       parts.push({ text: promptText });
