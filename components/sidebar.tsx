@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Music, Calendar, NotebookPen, CreditCard,
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
-  GraduationCap, GraduationCap as ProfessorIcon,
+  GraduationCap, GraduationCap as ProfessorIcon, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -92,6 +92,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       label: "Música",
       items: [
         { label: "Músicas", href: "/songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.musicas > 0 ? String(badges.musicas) : undefined },
+        { label: "Metrônomo", href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
       ],
     },
