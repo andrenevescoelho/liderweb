@@ -31,6 +31,12 @@ export async function GET(request: NextRequest) {
     });
     const lastLoginAt = lastLogins[1]?.createdAt ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+    const sp = request.nextUrl.searchParams;
+    const seenChat = parseTs(sp.get("seen_chat"), new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const seenMusicas = parseTs(sp.get("seen_musicas"), lastLoginAt);
+    const seenEnsaios = parseTs(sp.get("seen_ensaios"), new Date(0));
+    const seenAniversariantes = parseTs(sp.get("seen_aniversariantes"), new Date(0));
+
     const [escalas, comunicados, ensaios, aniversariantes, musicas] = await Promise.all([
       // Escalas — convites pendentes de resposta do usuário
       prisma.scheduleRole.count({
@@ -80,21 +86,21 @@ export async function GET(request: NextRequest) {
         }).length;
       })(),
 
-      // Músicas adicionadas desde o último login
+      // Músicas adicionadas desde a última vez que o usuário viu
       prisma.song.count({
         where: {
           groupId: user.groupId,
-          createdAt: { gte: lastLoginAt },
+          createdAt: { gte: seenMusicas },
         },
       }),
     ]);
 
-    // Chat — mensagens de outros membros nas últimas 24h
+    // Chat — mensagens de outros membros desde a última vez que o usuário viu
     const chat = await prisma.groupMessage.count({
       where: {
         groupId: user.groupId,
         senderUserId: { not: user.id },
-        createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        createdAt: { gte: seenChat },
       },
     });
 
