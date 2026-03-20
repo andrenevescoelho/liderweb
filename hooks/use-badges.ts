@@ -13,13 +13,26 @@ interface Badges {
 
 const EMPTY: Badges = { escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0 };
 
+let _refresh: (() => void) | null = null;
+
+export function refreshBadges() {
+  _refresh?.();
+}
+
 export function markAsSeen(section: string) {
   localStorage.setItem(`badge_seen_${section}`, String(Date.now()));
+  refreshBadges();
 }
 
 export function useBadges() {
   const { data: session } = useSession() || {};
   const [badges, setBadges] = useState<Badges>(EMPTY);
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    _refresh = () => setVersion((v) => v + 1);
+    return () => { _refresh = null; };
+  }, []);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -40,7 +53,7 @@ export function useBadges() {
     fetchBadges();
     const interval = setInterval(fetchBadges, 60_000);
     return () => clearInterval(interval);
-  }, [session?.user]);
+  }, [session?.user, version]);
 
   return badges;
 }
