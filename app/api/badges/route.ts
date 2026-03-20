@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const user = session.user as SessionUser;
-    if (!user.id || !user.groupId) return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0 });
+    if (!user.id || !user.groupId) return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0 });
 
     const now = new Date();
     const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
     });
     const lastLoginAt = lastLogins[1]?.createdAt ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+    // Timestamps do localStorage enviados pelo hook
     const sp = request.nextUrl.searchParams;
     const seenChat = parseTs(sp.get("seen_chat"), new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const seenComunicados = parseTs(sp.get("seen_comunicados"), new Date(now.getTime() - 24 * 60 * 60 * 1000));
     const seenMusicas = parseTs(sp.get("seen_musicas"), lastLoginAt);
-    const seenEnsaios = parseTs(sp.get("seen_ensaios"), new Date(0));
-    const seenAniversariantes = parseTs(sp.get("seen_aniversariantes"), new Date(0));
 
     const [escalas, comunicados, ensaios, aniversariantes, musicas] = await Promise.all([
       // Escalas — convites pendentes de resposta do usuário
@@ -47,21 +47,14 @@ export async function GET(request: NextRequest) {
         },
       }),
 
-      // Comunicados — não lidos (sem receipt ou sem viewedAt)
-      (async () => {
-        const all = await prisma.announcement.findMany({
-          where: {
-            isActive: true,
-            status: "ACTIVE",
-            OR: [
-              { targetScope: "ALL_PLATFORM" },
-              { targetGroups: { some: { groupId: user.groupId } } },
-            ],
-          },
-          select: { id: true, receipts: { where: { userId: user.id }, select: { viewedAt: true } } },
-        });
-        return all.filter((a) => !a.receipts[0] || !a.receipts[0].viewedAt).length;
-      })(),
+      // Comunicados — broadcasts do grupo não vistos
+      prisma.groupBroadcast.count({
+        where: {
+          groupId: user.groupId,
+          senderUserId: { not: user.id },
+          createdAt: { gte: seenComunicados },
+        },
+      }),
 
       // Ensaios — próximo ensaio nos próximos 3 dias
       prisma.rehearsal.count({
@@ -86,7 +79,7 @@ export async function GET(request: NextRequest) {
         }).length;
       })(),
 
-      // Músicas adicionadas desde a última vez que o usuário viu
+      // Músicas adicionadas desde a última visita
       prisma.song.count({
         where: {
           groupId: user.groupId,
@@ -95,7 +88,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Chat — mensagens de outros membros desde a última vez que o usuário viu
+    // Chat — mensagens de outros membros desde a última visita
     const chat = await prisma.groupMessage.count({
       where: {
         groupId: user.groupId,
