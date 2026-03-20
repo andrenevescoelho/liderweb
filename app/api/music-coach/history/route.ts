@@ -15,8 +15,27 @@ export async function GET(req: NextRequest) {
     if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
 
     const { searchParams } = new URL(req.url);
+    const all = searchParams.get("all") === "true";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = Math.min(parseInt(searchParams.get("limit") || "10", 10), 50);
+
+    if (all) {
+      const submissions = await prisma.practiceSubmission.findMany({
+        where: { userId: user.id, groupId: user.groupId },
+        include: { feedback: true },
+        orderBy: { createdAt: "desc" },
+      });
+      const withUrls = await Promise.all(
+        submissions.map(async (sub) => {
+          let audioPlayUrl: string | null = null;
+          if (sub.audioUrl) {
+            try { audioPlayUrl = await getFileUrl(sub.audioUrl, false); } catch { audioPlayUrl = null; }
+          }
+          return { ...sub, audioPlayUrl };
+        })
+      );
+      return NextResponse.json({ submissions: withUrls, total: withUrls.length });
+    }
 
     const [submissions, total] = await Promise.all([
       prisma.practiceSubmission.findMany({
