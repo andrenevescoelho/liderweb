@@ -18,21 +18,9 @@ export async function GET() {
       select: { enabled: true, level: true },
     });
 
-    // DEBUG: lista modelos Gemini disponíveis
-    const apiKey = process.env.GEMINI_API_KEY;
-    let geminiModels = null;
-    if (apiKey) {
-      const modelsResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`
-      );
-      geminiModels = await modelsResponse.json();
-      console.log("[music-coach/status] modelos Gemini disponíveis:", JSON.stringify(geminiModels, null, 2));
-    }
-
     return NextResponse.json({
       enabled: profile?.enabled ?? false,
       level: profile?.level ?? 1,
-      geminiModels,
     });
   } catch (err) {
     console.error("[music-coach/status] error:", err);
