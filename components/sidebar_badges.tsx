@@ -7,11 +7,11 @@ import {
   LayoutDashboard, Users, Music, Calendar, NotebookPen, CreditCard,
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
-  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3,
+  GraduationCap, GraduationCap as ProfessorIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
-import { useBadges, markAsSeen } from "@/hooks/use-badges";
+import { useBadges } from "@/hooks/use-badges";
 
 interface MenuItem {
   label: string;
@@ -45,18 +45,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const musicCoachEnabled = (user as SessionUser | undefined)?.musicCoachEnabled;
   const badges = useBadges();
 
-  const handleLinkClick = (href?: string) => () => {
-    const SEEN_MAP: Record<string, string> = {
-      "/songs": "musicas",
-      "/chat-grupo": "chat",
-      "/comunicados": "comunicados",
-      "/ensaios": "ensaios",
-      "/aniversariantes": "aniversariantes",
-    };
-    if (href) {
-      const section = SEEN_MAP[href];
-      if (section) markAsSeen(section);
-    }
+  const handleLinkClick = () => {
     if (isMobile && onMobileClose) onMobileClose();
   };
 
@@ -91,9 +80,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     {
       label: "Música",
       items: [
-        { label: "Músicas", href: "/songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.musicas > 0 ? String(badges.musicas) : undefined },
-        { label: "Metrônomo", href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
-        { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "NOVO" },
+        { label: "Músicas", href: "/songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
       ],
     },
@@ -136,7 +123,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       {/* Logo */}
       <div className={cn("flex h-14 items-center border-b border-white/10 px-3", collapsed ? "justify-center" : "justify-between")}>
         {!collapsed ? (
-          <Link href="/dashboard" className="flex items-center gap-2.5" onClick={handleLinkClick()}>
+          <Link href="/dashboard" className="flex items-center gap-2.5" onClick={handleLinkClick}>
             <div className="relative h-7 w-7 overflow-hidden rounded-md ring-1 ring-white/20 flex-shrink-0">
               <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
@@ -146,7 +133,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
             </div>
           </Link>
         ) : (
-          <Link href="/dashboard" onClick={handleLinkClick()}>
+          <Link href="/dashboard" onClick={handleLinkClick}>
             <div className="relative h-7 w-7 overflow-hidden rounded-md ring-1 ring-white/20">
               <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
@@ -183,7 +170,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      onClick={handleLinkClick(item.href)}
+                      onClick={handleLinkClick}
                       title={collapsed ? item.label : undefined}
                       className={cn(
                         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all relative",
@@ -227,7 +214,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       <div className="border-t border-white/10 p-2">
         <Link
           href="/profile"
-          onClick={handleLinkClick()}
+          onClick={handleLinkClick}
           className={cn(
             "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-slate-400 transition-all hover:bg-white/8 hover:text-slate-100",
             pathname === "/profile" && "bg-primary/20 text-primary",
