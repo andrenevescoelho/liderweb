@@ -5,7 +5,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
-import { getFileUrl } from "@/lib/s3";
 
 export async function GET(
   req: NextRequest,
@@ -30,22 +29,15 @@ export async function GET(
     }
 
     const stems = Array.isArray(rental.album.stems)
-      ? rental.album.stems as { name: string; driveUrl: string; r2Key: string | null }[]
+      ? rental.album.stems as { name: string; r2Key: string }[]
       : [];
 
-    // Gerar URLs assinadas para cada stem
-    const stemsWithUrls = await Promise.all(
-      stems.map(async (stem) => {
-        const r2Key = `${rental.r2Folder}/${stem.name.toLowerCase().replace(/\s+/g, "-")}.mp3`;
-        let url: string | null = null;
-        try {
-          url = await getFileUrl(r2Key, false);
-        } catch {
-          url = null;
-        }
-        return { name: stem.name, url };
-      })
-    );
+    // Retornar URLs do proxy backend em vez de URLs assinadas do R2
+    // Isso evita CORS e nunca expõe URLs do R2 para o cliente
+    const stemsWithUrls = stems.map((stem, i) => ({
+      name: stem.name,
+      url: `/api/multitracks/${albumId}/audio/${i}`,
+    }));
 
     return NextResponse.json({
       album: {
@@ -56,7 +48,7 @@ export async function GET(
         musicalKey: rental.album.musicalKey,
         coverUrl: rental.album.coverUrl,
       },
-      stems: stemsWithUrls.filter((s) => s.url !== null),
+      stems: stemsWithUrls,
       expiresAt: rental.expiresAt,
     });
   } catch (err) {
