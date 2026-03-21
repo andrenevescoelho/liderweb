@@ -127,7 +127,20 @@ enum AuditEntityType {
   IMPORT
   SUBSCRIPTION
   RBAC
+  MULTITRACK
   OTHER
+}
+
+enum MultitracksAlbumStatus {
+  PENDING
+  READY
+  ERROR
+}
+
+enum MultitracksRentalStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
 }
 
 enum AnnouncementType {
@@ -197,6 +210,8 @@ model Group {
   practiceSubmissions PracticeSubmission[]
   progressHistories   ProgressHistory[]
   coachContentCaches  CoachContentCache[]
+  multitracksRentals  MultitracksRental[]
+  multitracksUsage    MultitracksUsage[]
 }
 
 model SubscriptionPlan {
@@ -824,4 +839,60 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// ─── Módulo Multitracks ───────────────────────────────────────────────────────
+
+model MultitracksAlbum {
+  id          String                 @id @default(cuid())
+  title       String
+  artist      String
+  genre       String?
+  bpm         Int?
+  musicalKey  String?
+  coverUrl    String?
+  description String?                @db.Text
+  status      MultitracksAlbumStatus @default(PENDING)
+  stems       Json                   // Array de { name: string, driveUrl: string, r2Key: string | null }
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  rentals     MultitracksRental[]
+
+  @@index([status, isActive])
+  @@index([title, artist])
+}
+
+model MultitracksRental {
+  id        String                  @id @default(cuid())
+  groupId   String
+  group     Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  albumId   String
+  album     MultitracksAlbum        @relation(fields: [albumId], references: [id], onDelete: Restrict)
+  rentedBy  String                  // userId de quem alugou
+  r2Folder  String                  // pasta no R2: multitracks/{groupId}/{albumId}
+  status    MultitracksRentalStatus @default(ACTIVE)
+  rentedAt  DateTime                @default(now())
+  expiresAt DateTime
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  @@unique([groupId, albumId])
+  @@index([groupId, status])
+  @@index([albumId])
+  @@index([expiresAt])
+}
+
+model MultitracksUsage {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  month     Int      // 1-12
+  year      Int
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, month, year])
+  @@index([groupId, year, month])
 }
