@@ -747,26 +747,21 @@ export default function MultitracksPlayerPage() {
                 );
               })}
 
-              {/* Grade de BPM */}
+              {/* Grade BPM — apenas cabeça dos compassos */}
               {showBpmGrid && album.bpm && (() => {
                 const bpm = album.bpm;
-                const beatDuration = 60 / bpm; // segundos por beat
-                const totalBeats = Math.floor(duration / beatDuration);
-                const beatsPerMeasure = 4;
-                return Array.from({ length: totalBeats + 1 }).map((_, beat) => {
-                  const t = beat * beatDuration;
+                const measureDur = (60 / bpm) * 4;
+                const totalMeasures = Math.ceil(duration / measureDur);
+                return Array.from({ length: totalMeasures + 1 }).map((_, m) => {
+                  const t = m * measureDur;
                   if (t > duration) return null;
                   const pct = (t / duration) * 100;
-                  const isMeasureStart = beat % beatsPerMeasure === 0;
-                  const measureNumber = Math.floor(beat / beatsPerMeasure) + 1;
                   return (
-                    <div key={`beat-${beat}`} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pct}%` }}>
-                      <div className={cn("w-px h-full", isMeasureStart ? "bg-white/25" : "bg-white/08")} />
-                      {isMeasureStart && (
-                        <span className="absolute bottom-0 text-[7px] text-muted-foreground/40 tabular-nums" style={{ left: 1 }}>
-                          {measureNumber}
-                        </span>
-                      )}
+                    <div key={`m-${m}`} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pct}%` }}>
+                      <div className="w-px h-full bg-white/20" />
+                      <span className="absolute bottom-0 text-[7px] text-muted-foreground/50 tabular-nums" style={{ left: 1 }}>
+                        {m + 1}
+                      </span>
                     </div>
                   );
                 });
@@ -1056,20 +1051,22 @@ export default function MultitracksPlayerPage() {
                   </div>
                 )}
               </div>
-              {/* Grade BPM sobreposta */}
+              {/* Grade BPM — apenas início de compasso */}
               {showBpmGrid && album?.bpm && (() => {
                 const bpm = album.bpm!;
                 const beatDur = 60 / bpm;
-                const totalBeats = Math.floor(duration / beatDur);
-                const bpMeasure = 4;
-                return Array.from({ length: totalBeats + 1 }).map((_, beat) => {
-                  const t = beat * beatDur;
+                const beatsPerMeasure = 4;
+                const measureDur = beatDur * beatsPerMeasure;
+                const totalMeasures = Math.ceil(duration / measureDur);
+                return Array.from({ length: totalMeasures + 1 }).map((_, m) => {
+                  const t = m * measureDur;
                   if (t > duration) return null;
-                  const isMeasure = beat % bpMeasure === 0;
                   const pct = (t / duration) * 100;
                   return (
-                    <div key={beat} className="absolute top-0 bottom-0 pointer-events-none z-10"
-                      style={{ left: `${pct}%`, width: 1, backgroundColor: isMeasure ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.05)" }} />
+                    <div key={m} className="absolute top-0 bottom-0 pointer-events-none z-10"
+                      style={{ left: `${pct}%`, width: 1, backgroundColor: "rgba(255,255,255,0.18)" }}>
+                      {/* Numeração do compasso na régua */}
+                    </div>
                   );
                 });
               })()}
