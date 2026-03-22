@@ -752,7 +752,11 @@ export default function MultitracksPlayerPage() {
                 const bpm = album.bpm;
                 const measureDur = (60 / bpm) * 4;
                 const totalMeasures = Math.ceil(duration / measureDur);
+                // Mostrar 1 a cada N compassos para não ficar denso
+                const pxPerMeasure = (1500 * zoom) / totalMeasures;
+                const step = pxPerMeasure < 8 ? 8 : pxPerMeasure < 16 ? 4 : pxPerMeasure < 30 ? 2 : 1;
                 return Array.from({ length: totalMeasures + 1 }).map((_, m) => {
+                  if (m % step !== 0) return null;
                   const t = m * measureDur;
                   if (t > duration) return null;
                   const pct = (t / duration) * 100;
@@ -1054,19 +1058,18 @@ export default function MultitracksPlayerPage() {
               {/* Grade BPM — apenas início de compasso */}
               {showBpmGrid && album?.bpm && (() => {
                 const bpm = album.bpm!;
-                const beatDur = 60 / bpm;
-                const beatsPerMeasure = 4;
-                const measureDur = beatDur * beatsPerMeasure;
+                const measureDur = (60 / bpm) * 4;
                 const totalMeasures = Math.ceil(duration / measureDur);
+                const pxPerMeasure = (1500 * zoom) / totalMeasures;
+                const step = pxPerMeasure < 8 ? 8 : pxPerMeasure < 16 ? 4 : pxPerMeasure < 30 ? 2 : 1;
                 return Array.from({ length: totalMeasures + 1 }).map((_, m) => {
+                  if (m % step !== 0) return null;
                   const t = m * measureDur;
                   if (t > duration) return null;
                   const pct = (t / duration) * 100;
                   return (
                     <div key={m} className="absolute top-0 bottom-0 pointer-events-none z-10"
-                      style={{ left: `${pct}%`, width: 1, backgroundColor: "rgba(255,255,255,0.18)" }}>
-                      {/* Numeração do compasso na régua */}
-                    </div>
+                      style={{ left: `${pct}%`, width: 1, backgroundColor: "rgba(255,255,255,0.15)" }} />
                   );
                 });
               })()}
