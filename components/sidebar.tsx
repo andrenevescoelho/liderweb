@@ -108,13 +108,13 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       items: [
         { label: "Administração", href: "/dashboard/admin", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
         { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
-        { label: "Config. Professor", href: "/professor-config", icon: <GraduationCap className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
         { label: "Multitracks Admin", href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
         { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
-        { label: "Grupos", href: "/admin", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Grupos", href: "/admin?tab=groups", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Membros", href: "/admin?tab=users", icon: <Users className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Assinaturas", href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Cupons", href: "/cupons", icon: <TicketPercent className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Push / Comunicados", href: "/push-comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
       ],
     },
   ];
