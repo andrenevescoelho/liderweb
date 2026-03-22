@@ -240,6 +240,18 @@ export default function MultitracksPlayerPage() {
   const [selectedStem, setSelectedStem] = useState<number | null>(null);
   const [scheduledJump, setScheduledJump] = useState<{ markerIndex: number; label: string; color: string } | null>(null);
   const scheduledJumpRef = useRef<{ markerIndex: number; sectionEndTime: number } | null>(null);
+  const waveformAreaRef = useRef<HTMLDivElement>(null);
+  const [editingMarker, setEditingMarker] = useState<number | null>(null);
+
+  const saveMarkers = useCallback(async (newMarkers: Marker[]) => {
+    try {
+      await fetch(`/api/multitracks/${albumId}/analyze`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markers: newMarkers }),
+      });
+    } catch { /* silent */ }
+  }, [albumId]);
 
   useEffect(() => { pruneExpiredCache(); }, []);
 
@@ -473,8 +485,10 @@ export default function MultitracksPlayerPage() {
             toast("Repetição cancelada", { duration: 1200 });
           }
           break;
+        default:
           // 1-9 para marcações
           if (e.code.startsWith("Digit")) {
+            e.preventDefault();
             const n = parseInt(e.code.replace("Digit", "")) - 1;
             if (n >= 0 && n < markers.length) jumpToMarker(n);
           }
@@ -595,7 +609,60 @@ export default function MultitracksPlayerPage() {
         </div>
       )}
 
-      {/* Stems — scrollable */}
+      {/* Faixa de marcações — alinhada com a waveform */}
+      {markers.length > 0 && (
+        <div className="flex flex-shrink-0 border-b border-border/50 bg-black/20 h-7">
+          {/* Offset igual ao controle lateral */}
+          <div className="flex-shrink-0 w-44" />
+          <div className="flex-shrink-0 w-36" />
+          {/* Área dos markers alinhada com waveform */}
+          <div className="flex-1 relative pr-3" ref={waveformAreaRef}>
+            {markers.map((marker, i) => (
+              <div
+                key={i}
+                className="absolute top-0 bottom-0 flex flex-col items-center"
+                style={{ left: `${(marker.time / duration) * 100}%`, transform: "translateX(-50%)" }}
+              >
+                {/* Pin vertical */}
+                <div className="w-px flex-1 opacity-40" style={{ backgroundColor: marker.color }} />
+                {/* Label clicável/editável */}
+                {editingMarker === i ? (
+                  <input
+                    autoFocus
+                    defaultValue={marker.label}
+                    className="absolute bottom-0 text-[9px] font-semibold px-1 rounded z-10 bg-card border"
+                    style={{ color: marker.color, borderColor: marker.color, width: 80 }}
+                    onBlur={(e) => {
+                      const newLabel = e.target.value.trim() || marker.label;
+                      const updated = markers.map((m, idx) => idx === i ? { ...m, label: newLabel } : m);
+                      setMarkers(updated);
+                      saveMarkers(updated);
+                      setEditingMarker(null);
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditingMarker(null); }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <button
+                    className="absolute bottom-0 text-[9px] font-semibold px-1 py-0.5 rounded whitespace-nowrap transition-all hover:opacity-100"
+                    style={{
+                      backgroundColor: scheduledJump?.markerIndex === i ? marker.color + "55" : marker.color + "25",
+                      color: marker.color,
+                      border: `1px solid ${marker.color}${scheduledJump?.markerIndex === i ? "aa" : "44"}`,
+                      opacity: scheduledJump?.markerIndex === i ? 1 : 0.8,
+                    }}
+                    onClick={(e) => { e.stopPropagation(); jumpToMarker(i); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); setEditingMarker(i); }}
+                    title={`${i + 1}: ${marker.label} — Clique para agendar, duplo clique para editar nome\nArraste para ajustar tempo`}
+                  >
+                    {scheduledJump?.markerIndex === i ? "🔁 " : `${i + 1}. `}{marker.label}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto">
         {stems.map((stem, i) => (
           <div
@@ -707,27 +774,6 @@ export default function MultitracksPlayerPage() {
 
           {/* Seekbar com marcações */}
           <div className="flex-1 flex flex-col gap-1">
-            {/* Marcações */}
-            {markers.length > 0 && (
-              <div className="relative h-5">
-                {markers.map((marker, i) => (
-                  <button
-                    key={i}
-                    onClick={() => jumpToMarker(i)}
-                    title={`${i + 1}: ${marker.label} (${formatTime(marker.time)})`}
-                    className="absolute -translate-x-1/2 flex flex-col items-center group"
-                    style={{ left: `${(marker.time / duration) * 100}%` }}
-                  >
-                    <span
-                      className="text-[9px] font-semibold px-1 py-0.5 rounded whitespace-nowrap opacity-80 group-hover:opacity-100 transition-opacity"
-                      style={{ backgroundColor: marker.color + "33", color: marker.color, border: `1px solid ${marker.color}55` }}
-                    >
-                      {i + 1}. {marker.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
             {/* Seekbar */}
             <div className="relative h-2 cursor-pointer" onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
@@ -737,12 +783,13 @@ export default function MultitracksPlayerPage() {
             }}>
               <div className="absolute inset-0 rounded-full bg-muted" />
               <div className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all" style={{ width: `${progress * 100}%` }} />
-              {/* Pins das marcações na seekbar */}
+              {/* Pins coloridos das marcações */}
               {markers.map((marker, i) => (
                 <div
                   key={i}
-                  className="absolute top-0 bottom-0 w-0.5 opacity-70"
+                  className="absolute top-0 bottom-0 w-0.5 opacity-60 hover:opacity-100 cursor-pointer"
                   style={{ left: `${(marker.time / duration) * 100}%`, backgroundColor: marker.color }}
+                  onClick={(e) => { e.stopPropagation(); jumpToMarker(i); }}
                 />
               ))}
               <input

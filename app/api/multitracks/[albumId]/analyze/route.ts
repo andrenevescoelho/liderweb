@@ -217,3 +217,36 @@ export async function POST(
     }, { status: 500 });
   }
 }
+
+// PATCH — salvar markers editados pelo usuário
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { albumId: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const user = session.user as SessionUser;
+    // Qualquer admin pode editar markers
+    if (!["SUPERADMIN", "ADMIN"].includes(user.role)) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
+
+    const { albumId } = params;
+    const { markers } = await req.json();
+
+    if (!Array.isArray(markers)) {
+      return NextResponse.json({ error: "markers deve ser um array" }, { status: 400 });
+    }
+
+    await prisma.multitracksAlbum.update({
+      where: { id: albumId },
+      data: { markers } as any,
+    });
+
+    return NextResponse.json({ ok: true, count: markers.length });
+  } catch (err) {
+    console.error("[analyze/PATCH] error:", err);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  }
+}
