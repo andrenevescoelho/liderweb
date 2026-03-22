@@ -222,7 +222,7 @@ function PanKnob({ value, onChange }: { value: number; onChange: (v: number) => 
   );
 }
 
-
+export default function MultitracksPlayerPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
   const params = useParams();

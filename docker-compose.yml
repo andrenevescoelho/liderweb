@@ -40,7 +40,7 @@ services:
       AUDIO_ANALYSIS_SERVICE_TOKEN: "dev-audio-service-token"
       # Token compartilhado para callback do worker -> app (/api/songs/:id/analysis-result)
       AUDIO_ANALYSIS_CALLBACK_TOKEN: "dev-audio-callback-token"
-      GEMINI_API_KEY: "AIzaSyBirjLDg_gZHtYD8XNSlDV9sxB1CQKUa4Y"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
     volumes:
       - ./:/app
       - liderweb_node_modules:/app/node_modules
