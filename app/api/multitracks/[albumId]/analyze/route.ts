@@ -93,7 +93,7 @@ Regras:
         }],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 1000,
+          maxOutputTokens: 4096,
         },
       }),
     }
@@ -107,11 +107,54 @@ Regras:
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-  // Extrair JSON da resposta
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error("Gemini não retornou JSON válido");
+  console.log("[analyze] Gemini response text:", text.substring(0, 500));
 
-  const rawMarkers = JSON.parse(jsonMatch[0]) as { label: string; time: number }[];
+  // Tentar extrair JSON de várias formas
+  let rawMarkers: { label: string; time: number }[] | null = null;
+
+  // 1. Tentar JSON direto
+  try {
+    const trimmed = text.trim();
+    if (trimmed.startsWith("[")) {
+      rawMarkers = JSON.parse(trimmed);
+    }
+  } catch {}
+
+  // 2. Extrair array do texto
+  if (!rawMarkers) {
+    const jsonMatch = text.match(/\[[\s\S]*?\]/);
+    if (jsonMatch) {
+      try { rawMarkers = JSON.parse(jsonMatch[0]); } catch {}
+    }
+  }
+
+  // 3. Extrair de bloco de código markdown (incluindo truncado)
+  if (!rawMarkers) {
+    const codeMatch = text.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/);
+    if (codeMatch) {
+      try {
+        let inner = codeMatch[1].trim();
+        // Tentar parsear direto
+        try { rawMarkers = JSON.parse(inner); } catch {
+          // Tentar fechar JSON truncado adicionando ]
+          try { rawMarkers = JSON.parse(inner + "]"); } catch {
+            // Remover última linha incompleta e fechar
+            const lines = inner.split("\n");
+            const lastComplete = lines.findLastIndex((l: string) => l.trim().endsWith("},") || l.trim().endsWith("}"));
+            if (lastComplete > 0) {
+              const fixed = lines.slice(0, lastComplete + 1).join("\n").replace(/,\s*$/, "") + "\n]";
+              try { rawMarkers = JSON.parse(fixed); } catch {}
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  if (!rawMarkers || rawMarkers.length === 0) {
+    console.error("[analyze] Raw text from Gemini:", text);
+    throw new Error("Gemini não retornou marcações válidas. Resposta: " + text.substring(0, 200));
+  }
 
   return rawMarkers.map((m) => ({
     label: m.label,

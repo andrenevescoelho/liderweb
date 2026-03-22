@@ -853,6 +853,7 @@ model MultitracksAlbum {
   coverUrl    String?
   description String?                @db.Text
   status      MultitracksAlbumStatus @default(PENDING)
+  markers     Json                   @default("[]")
   stems       Json                   // Array de { name: string, driveUrl: string, r2Key: string | null }
   isActive    Boolean                @default(true)
   createdAt   DateTime               @default(now())
