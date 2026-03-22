@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Disc3, Plus, Search, Pencil, Loader2, CheckCircle2, Clock,
-  X, Music2, AlertCircle, RefreshCw,
+  X, Music2, AlertCircle, RefreshCw, Wand2, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -196,6 +196,33 @@ export default function MultitracksAdminPage() {
     } catch { toast.error("Erro ao atualizar"); }
   };
 
+  const deleteAlbum = async (album: Album) => {
+    if (!confirm(`Tem certeza que deseja excluir "${album.title}"?\n\nEsta ação não pode ser desfeita e removerá todos os aluguéis ativos.`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/multitracks/admin?id=${album.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) { toast.success("Multitrack excluída!"); fetchAlbums(search); }
+      else toast.error(data.error || "Erro ao excluir");
+    } catch { toast.error("Erro ao excluir"); }
+    finally { setSaving(false); }
+  };
+
+  const analyzeMarkers = async (album: Album) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/multitracks/${album.id}/analyze`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`${data.count} marcações detectadas!`);
+        fetchAlbums(search);
+      } else {
+        toast.error(data.error || "Erro ao analisar");
+      }
+    } catch { toast.error("Erro ao analisar"); }
+    finally { setSaving(false); }
+  };
+
   const reprocess = async (album: Album) => {
     const url = prompt("URL do novo ZIP no Google Drive:");
     if (!url) return;
@@ -287,6 +314,11 @@ export default function MultitracksAdminPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
+                    {album.status === "READY" && (
+                      <Button size="sm" variant="ghost" onClick={() => analyzeMarkers(album)} title="Detectar marcações via IA" disabled={saving}>
+                        <Wand2 className="h-4 w-4 text-violet-400" />
+                      </Button>
+                    )}
                     {album.status === "ERROR" && (
                       <Button size="sm" variant="ghost" onClick={() => reprocess(album)} title="Reprocessar ZIP">
                         <RefreshCw className="h-4 w-4 text-amber-400" />
@@ -297,6 +329,9 @@ export default function MultitracksAdminPage() {
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => toggleActive(album)} className={album.isActive ? "text-muted-foreground" : "text-emerald-500"}>
                       {album.isActive ? <X className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => deleteAlbum(album)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10" disabled={saving}>
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

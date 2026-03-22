@@ -25,6 +25,8 @@ const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, string[]> = {
     "rehearsal.view",
     "rehearsal.manage",
     "rehearsal.attendance",
+    "multitrack.view",
+    "multitrack.rent",
   ],
   LEADER: [
     "member.manage",

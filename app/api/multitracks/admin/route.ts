@@ -314,3 +314,32 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }
+
+// DELETE — excluir multitrack
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const user = session.user as SessionUser;
+    if (!["SUPERADMIN"].includes(user.role)) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+
+    // Verificar se existe
+    const album = await prisma.multitracksAlbum.findUnique({ where: { id } });
+    if (!album) return NextResponse.json({ error: "Multitrack não encontrada" }, { status: 404 });
+
+    // Deletar rentals e usage primeiro (cascade deveria cuidar, mas por segurança)
+    await prisma.multitracksRental.deleteMany({ where: { albumId: id } });
+    await prisma.multitracksAlbum.delete({ where: { id } });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[multitracks/admin] DELETE error:", err);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  }
+}

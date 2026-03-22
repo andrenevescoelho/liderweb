@@ -12,12 +12,19 @@ interface StemTrack {
   name: string;
   url: string;
   volume: number;
+  pan: number; // -1 (L) a 1 (R)
   muted: boolean;
   solo: boolean;
   loading: boolean;
   ready: boolean;
   color: string;
   waveformData: number[] | null;
+}
+
+interface Marker {
+  label: string;
+  time: number;
+  color: string;
 }
 
 interface AlbumInfo {
@@ -163,18 +170,21 @@ export default function MultitracksPlayerPage() {
 
   const [album, setAlbum] = useState<AlbumInfo | null>(null);
   const [stems, setStems] = useState<StemTrack[]>([]);
+  const [markers, setMarkers] = useState<Marker[]>([]);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [cachedStems, setCachedStems] = useState<Set<number>>(new Set());
+  const [selectedStem, setSelectedStem] = useState<number | null>(null);
 
   useEffect(() => { pruneExpiredCache(); }, []);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceNodesRef = useRef<AudioBufferSourceNode[]>([]);
   const gainNodesRef = useRef<GainNode[]>([]);
+  const panNodesRef = useRef<StereoPannerNode[]>([]);
   const buffersRef = useRef<AudioBuffer[]>([]);
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
@@ -193,8 +203,8 @@ export default function MultitracksPlayerPage() {
         const data = await res.json();
         setAlbum(data.album);
         setExpiresAt(data.expiresAt);
+        if (data.markers?.length > 0) setMarkers(data.markers);
 
-        // Ordenar: prioridade (Click, Guia) primeiro
         const rawStems = data.stems as { name: string; url: string }[];
         const sorted = [
           ...rawStems.filter((s) => isPriority(s.name)),
@@ -205,6 +215,7 @@ export default function MultitracksPlayerPage() {
           name: s.name,
           url: s.url,
           volume: 1,
+          pan: 0,
           muted: false,
           solo: false,
           loading: true,
@@ -261,11 +272,18 @@ export default function MultitracksPlayerPage() {
       if (!buf) return;
       const source = ctx.createBufferSource();
       source.buffer = buf;
+
       const gain = gainNodesRef.current[i] || ctx.createGain();
       gainNodesRef.current[i] = gain;
       gain.gain.value = (stem.muted || (hasSolo && !stem.solo)) ? 0 : stem.volume;
+
+      const panner = panNodesRef.current[i] || ctx.createStereoPanner();
+      panNodesRef.current[i] = panner;
+      panner.pan.value = stem.pan;
+
       source.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(panner);
+      panner.connect(ctx.destination);
       source.start(0, offset);
       sourceNodesRef.current[i] = source;
     });
@@ -280,6 +298,56 @@ export default function MultitracksPlayerPage() {
     };
     animFrameRef.current = requestAnimationFrame(tick);
   }, [stems, duration, stopAll]);
+
+  const jumpToMarker = useCallback((index: number) => {
+    const marker = markers[index];
+    if (!marker) return;
+    offsetRef.current = marker.time;
+    setCurrentTime(marker.time);
+    if (isPlaying) { stopAll(); playAll(marker.time); }
+    toast(`↩ ${marker.label}`, { duration: 1500, icon: "🎵" });
+  }, [markers, isPlaying, stopAll, playAll]);
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      // Ignorar se estiver em input/textarea
+      if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
+
+      switch (e.code) {
+        case "Space":
+          e.preventDefault();
+          if (isPlaying) { stopAll(); offsetRef.current = currentTime; setIsPlaying(false); }
+          else { if (stems.every((s) => s.ready)) { playAll(offsetRef.current); setIsPlaying(true); } }
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          { const t = Math.max(0, currentTime - 5); offsetRef.current = t; setCurrentTime(t); if (isPlaying) { stopAll(); playAll(t); } }
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          { const t = Math.min(duration, currentTime + 5); offsetRef.current = t; setCurrentTime(t); if (isPlaying) { stopAll(); playAll(t); } }
+          break;
+        case "KeyM":
+          if (selectedStem !== null) updateStem(selectedStem, { muted: !stems[selectedStem]?.muted, solo: false });
+          break;
+        case "KeyS":
+          if (selectedStem !== null) {
+            const isSolo = stems[selectedStem]?.solo;
+            setStems((prev) => prev.map((s, idx) => ({ ...s, solo: idx === selectedStem ? !isSolo : false, muted: false })));
+          }
+          break;
+        default:
+          // 1-9 para marcações
+          if (e.code.startsWith("Digit")) {
+            const n = parseInt(e.code.replace("Digit", "")) - 1;
+            if (n >= 0 && n < markers.length) jumpToMarker(n);
+          }
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker]);
 
   const togglePlay = () => {
     if (isPlaying) { stopAll(); offsetRef.current = currentTime; setIsPlaying(false); }
@@ -310,13 +378,14 @@ export default function MultitracksPlayerPage() {
     if (isPlaying) { stopAll(); playAll(t); }
   };
 
-  // Atualizar gains em tempo real
+  // Atualizar gains e pan em tempo real
   useEffect(() => {
     const hasSolo = stems.some((s) => s.solo);
     stems.forEach((stem, i) => {
       const gain = gainNodesRef.current[i];
-      if (!gain) return;
-      gain.gain.value = (stem.muted || (hasSolo && !stem.solo)) ? 0 : stem.volume;
+      if (gain) gain.gain.value = (stem.muted || (hasSolo && !stem.solo)) ? 0 : stem.volume;
+      const panner = panNodesRef.current[i];
+      if (panner) panner.pan.value = stem.pan;
     });
   }, [stems]);
 
@@ -396,52 +465,54 @@ export default function MultitracksPlayerPage() {
         {stems.map((stem, i) => (
           <div
             key={i}
+            onClick={() => setSelectedStem(i)}
             className={cn(
-              "flex items-center border-b border-border/50 group",
+              "flex items-center border-b border-border/50 cursor-pointer transition-colors",
               stem.muted && "opacity-40",
               stems.some((s) => s.solo) && !stem.solo && "opacity-30",
+              selectedStem === i && "bg-white/5",
             )}
             style={{ borderLeft: `4px solid ${stem.color}` }}
           >
             {/* Controls */}
-            <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 w-48">
+            <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 w-44">
               <div className="flex gap-1">
-                <button
-                  onClick={() => toggleMute(i)}
-                  className={cn(
-                    "rounded px-2 py-0.5 text-[10px] font-bold transition-colors",
+                <button onClick={(e) => { e.stopPropagation(); toggleMute(i); }}
+                  className={cn("rounded px-2 py-0.5 text-[10px] font-bold transition-colors",
                     stem.muted ? "bg-red-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >M</button>
-                <button
-                  onClick={() => toggleSolo(i)}
-                  className={cn(
-                    "rounded px-2 py-0.5 text-[10px] font-bold transition-colors",
+                  )}>M</button>
+                <button onClick={(e) => { e.stopPropagation(); toggleSolo(i); }}
+                  className={cn("rounded px-2 py-0.5 text-[10px] font-bold transition-colors",
                     stem.solo ? "bg-amber-500 text-black" : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >S</button>
+                  )}>S</button>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold truncate" style={{ color: stem.color }}>{stem.name}</p>
               </div>
             </div>
 
-            {/* Volume fader */}
-            <div className="flex items-center gap-1 px-2 flex-shrink-0 w-28">
-              <Volume2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-              <input
-                type="range" min={0} max={1} step={0.01} value={stem.volume}
-                onChange={(e) => updateStem(i, { volume: Number(e.target.value) })}
-                className="w-16 accent-primary"
-                disabled={stem.muted}
-              />
+            {/* Volume + Pan */}
+            <div className="flex flex-col gap-0.5 px-2 flex-shrink-0 w-32" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-muted-foreground w-4">VOL</span>
+                <input type="range" min={0} max={1} step={0.01} value={stem.volume}
+                  onChange={(e) => updateStem(i, { volume: Number(e.target.value) })}
+                  className="w-20 accent-primary h-1" disabled={stem.muted} />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-muted-foreground w-4">PAN</span>
+                <input type="range" min={-1} max={1} step={0.01} value={stem.pan}
+                  onChange={(e) => updateStem(i, { pan: Number(e.target.value) })}
+                  className="w-20 accent-violet-500 h-1" />
+                <span className="text-[9px] text-muted-foreground w-5 text-right">
+                  {stem.pan === 0 ? "C" : stem.pan < 0 ? `L${Math.round(Math.abs(stem.pan) * 100)}` : `R${Math.round(stem.pan * 100)}`}
+                </span>
+              </div>
             </div>
 
             {/* Waveform */}
-            <div
-              className="flex-1 cursor-pointer py-1 pr-3"
-              onClick={(e) => handleWaveformClick(e, i)}
-            >
+            <div className="flex-1 cursor-pointer py-1 pr-3 relative"
+              onClick={(e) => { e.stopPropagation(); handleWaveformClick(e, i); }}>
               {stem.loading ? (
                 <div className="h-12 flex items-center px-2">
                   <div className="h-1 w-full rounded bg-muted animate-pulse" />
@@ -485,20 +556,52 @@ export default function MultitracksPlayerPage() {
           {/* Time */}
           <span className="text-xs text-muted-foreground tabular-nums w-10">{formatTime(currentTime)}</span>
 
-          {/* Seekbar */}
-          <div className="flex-1 relative h-2 group cursor-pointer" onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const t = ((e.clientX - rect.left) / rect.width) * duration;
-            offsetRef.current = t; setCurrentTime(t);
-            if (isPlaying) { stopAll(); playAll(t); }
-          }}>
-            <div className="absolute inset-0 rounded-full bg-muted" />
-            <div className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all" style={{ width: `${progress * 100}%` }} />
-            <input
-              type="range" min={0} max={duration || 1} step={0.1} value={currentTime}
-              onChange={handleSeek}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-            />
+          {/* Seekbar com marcações */}
+          <div className="flex-1 flex flex-col gap-1">
+            {/* Marcações */}
+            {markers.length > 0 && (
+              <div className="relative h-5">
+                {markers.map((marker, i) => (
+                  <button
+                    key={i}
+                    onClick={() => jumpToMarker(i)}
+                    title={`${i + 1}: ${marker.label} (${formatTime(marker.time)})`}
+                    className="absolute -translate-x-1/2 flex flex-col items-center group"
+                    style={{ left: `${(marker.time / duration) * 100}%` }}
+                  >
+                    <span
+                      className="text-[9px] font-semibold px-1 py-0.5 rounded whitespace-nowrap opacity-80 group-hover:opacity-100 transition-opacity"
+                      style={{ backgroundColor: marker.color + "33", color: marker.color, border: `1px solid ${marker.color}55` }}
+                    >
+                      {i + 1}. {marker.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Seekbar */}
+            <div className="relative h-2 cursor-pointer" onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const t = ((e.clientX - rect.left) / rect.width) * duration;
+              offsetRef.current = t; setCurrentTime(t);
+              if (isPlaying) { stopAll(); playAll(t); }
+            }}>
+              <div className="absolute inset-0 rounded-full bg-muted" />
+              <div className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all" style={{ width: `${progress * 100}%` }} />
+              {/* Pins das marcações na seekbar */}
+              {markers.map((marker, i) => (
+                <div
+                  key={i}
+                  className="absolute top-0 bottom-0 w-0.5 opacity-70"
+                  style={{ left: `${(marker.time / duration) * 100}%`, backgroundColor: marker.color }}
+                />
+              ))}
+              <input
+                type="range" min={0} max={duration || 1} step={0.1} value={currentTime}
+                onChange={handleSeek}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              />
+            </div>
           </div>
 
           <span className="text-xs text-muted-foreground tabular-nums w-10 text-right">{formatTime(duration)}</span>
@@ -509,6 +612,18 @@ export default function MultitracksPlayerPage() {
               <span className="text-primary font-bold">{album.bpm}</span>
               <span className="text-muted-foreground">BPM</span>
             </span>
+          )}
+        </div>
+
+        {/* Atalhos de teclado */}
+        <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground/50">
+          <span><kbd className="rounded bg-muted px-1">Espaço</kbd> play/pause</span>
+          <span><kbd className="rounded bg-muted px-1">←</kbd><kbd className="rounded bg-muted px-1">→</kbd> ±5s</span>
+          <span><kbd className="rounded bg-muted px-1">M</kbd> mute</span>
+          <span><kbd className="rounded bg-muted px-1">S</kbd> solo</span>
+          {markers.length > 0 && <span><kbd className="rounded bg-muted px-1">1-9</kbd> marcações</span>}
+          {selectedStem !== null && (
+            <span className="text-primary/60">Canal selecionado: <span style={{ color: stems[selectedStem]?.color }}>{stems[selectedStem]?.name}</span></span>
           )}
         </div>
       </div>
