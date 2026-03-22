@@ -386,7 +386,13 @@ export default function MultitracksPlayerPage() {
             idx === i ? { ...s, loading: false, ready: true, waveformData } : s
           ));
         })
-        .catch(() => setStems((prev) => prev.map((s, idx) => idx === i ? { ...s, loading: false } : s)));
+        .catch((err) => {
+          console.warn(`[multitracks] Stem ${i} (${stem.name}) falhou:`, err);
+          // Marca como ready=true mesmo com erro para não travar o allReady
+          setStems((prev) => prev.map((s, idx) =>
+            idx === i ? { ...s, loading: false, ready: true } : s
+          ));
+        });
     });
   }, [stems.length]);
 
@@ -650,6 +656,7 @@ export default function MultitracksPlayerPage() {
   const progress = duration > 0 ? currentTime / duration : 0;
   const allReady = stems.length > 0 && stems.every((s) => s.ready);
   const loadingCount = stems.filter((s) => s.loading).length;
+  const errorCount = stems.filter((s) => s.ready && !s.waveformData && !buffersRef.current[stems.indexOf(s)]).length;
 
   const daysLeft = expiresAt
     ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000))
