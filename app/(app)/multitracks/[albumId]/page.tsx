@@ -162,7 +162,67 @@ async function pruneExpiredCache() {
   } catch { /* silent */ }
 }
 
-export default function MultitracksPlayerPage() {
+function PanKnob({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const ref = useRef<SVGSVGElement>(null);
+  const dragging = useRef(false);
+  const startY = useRef(0);
+  const startVal = useRef(0);
+
+  // Ângulo: -135° (L) a +135° (R), 0 = centro
+  const angle = value * 135;
+  const rad = (angle - 90) * (Math.PI / 180);
+  const cx = 16, cy = 16, r = 10;
+  const dotX = cx + r * 0.7 * Math.cos(rad);
+  const dotY = cy + r * 0.7 * Math.sin(rad);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging.current = true;
+    startY.current = e.clientY;
+    startVal.current = value;
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = (startY.current - ev.clientY) / 80;
+      const next = Math.max(-1, Math.min(1, startVal.current + delta));
+      onChange(Math.round(next * 100) / 100);
+    };
+    const onUp = () => { dragging.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const onDblClick = (e: React.MouseEvent) => { e.stopPropagation(); onChange(0); };
+
+  const label = value === 0 ? "C" : value < 0 ? `L${Math.round(Math.abs(value) * 100)}` : `R${Math.round(value * 100)}`;
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 select-none" title="Pan — arraste para ajustar, duplo clique para centralizar">
+      <svg ref={ref} width={32} height={32} viewBox="0 0 32 32"
+        onMouseDown={onMouseDown} onDoubleClick={onDblClick}
+        className="cursor-ns-resize"
+      >
+        {/* Track arc */}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={3} />
+        {/* Active arc */}
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          stroke={value === 0 ? "rgba(255,255,255,0.3)" : value < 0 ? "#06B6D4" : "#8B5CF6"}
+          strokeWidth={3}
+          strokeDasharray={`${Math.abs(value) * 21} 63`}
+          strokeDashoffset={value < 0 ? 16 : 16 - Math.abs(value) * 21}
+          transform={`rotate(-90 ${cx} ${cy})`}
+        />
+        {/* Knob body */}
+        <circle cx={cx} cy={cy} r={8} fill="#1e2535" stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+        {/* Indicator dot */}
+        <circle cx={dotX} cy={dotY} r={2} fill={value === 0 ? "rgba(255,255,255,0.6)" : value < 0 ? "#06B6D4" : "#8B5CF6"} />
+      </svg>
+      <span className="text-[8px] text-muted-foreground tabular-nums">{label}</span>
+    </div>
+  );
+}
+
+
   const { data: session, status } = useSession() || {};
   const router = useRouter();
   const params = useParams();
@@ -412,7 +472,7 @@ export default function MultitracksPlayerPage() {
   if (!album) return null;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-background">
+    <div className="fixed inset-0 top-[64px] flex flex-col bg-background z-10">
       {/* Header */}
       <div className="flex items-center gap-4 px-5 py-3 border-b border-border flex-shrink-0">
         <button onClick={() => router.push("/multitracks")} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -492,22 +552,16 @@ export default function MultitracksPlayerPage() {
             </div>
 
             {/* Volume + Pan */}
-            <div className="flex flex-col gap-0.5 px-2 flex-shrink-0 w-32" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-1">
-                <span className="text-[9px] text-muted-foreground w-4">VOL</span>
-                <input type="range" min={0} max={1} step={0.01} value={stem.volume}
-                  onChange={(e) => updateStem(i, { volume: Number(e.target.value) })}
-                  className="w-20 accent-primary h-1" disabled={stem.muted} />
+            <div className="flex items-center gap-3 px-2 flex-shrink-0 w-36" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-col gap-0.5 flex-1">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] text-muted-foreground w-4">VOL</span>
+                  <input type="range" min={0} max={1} step={0.01} value={stem.volume}
+                    onChange={(e) => updateStem(i, { volume: Number(e.target.value) })}
+                    className="w-16 accent-primary h-1" disabled={stem.muted} />
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[9px] text-muted-foreground w-4">PAN</span>
-                <input type="range" min={-1} max={1} step={0.01} value={stem.pan}
-                  onChange={(e) => updateStem(i, { pan: Number(e.target.value) })}
-                  className="w-20 accent-violet-500 h-1" />
-                <span className="text-[9px] text-muted-foreground w-5 text-right">
-                  {stem.pan === 0 ? "C" : stem.pan < 0 ? `L${Math.round(Math.abs(stem.pan) * 100)}` : `R${Math.round(stem.pan * 100)}`}
-                </span>
-              </div>
+              <PanKnob value={stem.pan} onChange={(v) => updateStem(i, { pan: v })} />
             </div>
 
             {/* Waveform */}
