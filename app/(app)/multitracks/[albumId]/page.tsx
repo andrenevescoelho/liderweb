@@ -673,6 +673,38 @@ export default function MultitracksPlayerPage() {
         </div>
       )}
 
+      {/* Régua de tempo */}
+      {duration > 0 && (
+        <div className="flex flex-shrink-0 border-b border-border/40 bg-black/30 h-5">
+          <div className="flex-shrink-0 w-44" />
+          <div className="flex-shrink-0 w-36" />
+          <div className="flex-1 relative overflow-hidden pr-3">
+            <div className="absolute inset-0" style={{
+              width: `${zoom * 100}%`,
+              transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)`,
+            }}>
+              {Array.from({ length: Math.ceil(duration / (zoom < 2 ? 30 : zoom < 4 ? 15 : 5)) + 1 }).map((_, i) => {
+                const interval = zoom < 2 ? 30 : zoom < 4 ? 15 : 5;
+                const t = i * interval;
+                if (t > duration) return null;
+                const pct = (t / duration) * 100;
+                return (
+                  <div key={i} className="absolute top-0 flex flex-col items-start" style={{ left: `${pct}%` }}>
+                    <div className="w-px h-2 bg-white/20" />
+                    <span className="text-[8px] text-muted-foreground/50 tabular-nums ml-0.5 leading-none">
+                      {Math.floor(t / 60)}:{String(t % 60).padStart(2, "0")}
+                    </span>
+                  </div>
+                );
+              })}
+              {/* Playhead na régua */}
+              <div className="absolute top-0 bottom-0 w-px bg-primary/80 z-10"
+                style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Faixa de marcações + controles zoom — alinhada com waveform */}
       {markers.length > 0 && (
         <div className="flex-shrink-0 border-b border-border/50 bg-black/20">
@@ -891,15 +923,13 @@ export default function MultitracksPlayerPage() {
             </div>
 
             {/* Waveform com zoom */}
-            <div className="flex-1 relative overflow-hidden py-1 pr-3 cursor-pointer"
+            <div className="flex-1 relative overflow-hidden h-14 cursor-pointer"
               onClick={(e) => { e.stopPropagation(); handleWaveformClick(e); }}>
-              {/* Container escalado pelo zoom */}
               <div
-                className="absolute inset-y-1 right-3"
+                className="absolute inset-0"
                 style={{
                   width: `${zoom * 100}%`,
                   transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)`,
-                  pointerEvents: "none",
                 }}
               >
                 {stem.loading ? (
@@ -907,18 +937,22 @@ export default function MultitracksPlayerPage() {
                     <div className="h-1 w-full rounded bg-muted animate-pulse" />
                   </div>
                 ) : stem.waveformData ? (
-                  <WaveformBar data={stem.waveformData} progress={zoom > 1 ? (currentTime / duration * zoom - scrollLeft * (zoom - 1)) : progress} color={stem.color} />
+                  <WaveformBar
+                    data={stem.waveformData}
+                    progress={zoom > 1
+                      ? Math.max(0, Math.min(1, currentTime / duration * zoom - scrollLeft * (zoom - 1)))
+                      : progress}
+                    color={stem.color}
+                  />
                 ) : (
                   <div className="h-full flex items-center px-2">
                     <div className="h-1 w-full rounded" style={{ backgroundColor: stem.color + "40" }} />
                   </div>
                 )}
               </div>
-              {/* Playhead linha vertical */}
-              {zoom > 1 && (
-                <div className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none"
-                  style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
-              )}
+              {/* Playhead */}
+              <div className="absolute top-0 bottom-0 w-px bg-white/40 pointer-events-none z-10"
+                style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
             </div>
           </div>
         ))}
