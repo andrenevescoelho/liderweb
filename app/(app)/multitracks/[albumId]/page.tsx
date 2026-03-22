@@ -252,6 +252,8 @@ export default function MultitracksPlayerPage() {
   const [draggingMarker, setDraggingMarker] = useState<number | null>(null);
   const [showBpmGrid, setShowBpmGrid] = useState(false);
   const [addingMarker, setAddingMarker] = useState(false);
+  const [bpmOffset, setBpmOffset] = useState(0); // segundos de offset do 1º tempo
+  const rulerRef = useRef<HTMLDivElement>(null);
   const shortcutsRef = useRef<Record<number, string>>({});
   const userIdRef = useRef<string>("");
 
@@ -710,28 +712,60 @@ export default function MultitracksPlayerPage() {
       {/* Régua de tempo + grade BPM */}
       {duration > 0 && (
         <div className="flex flex-shrink-0 border-b border-border/40 bg-black/30 h-6">
-          {/* Controles lado esquerdo */}
           <div className="flex-shrink-0 w-44 flex items-center px-2 gap-1">
             {album.bpm && (
               <button
-                onClick={() => setShowBpmGrid((v) => !v)}
+                onClick={() => { setShowBpmGrid((v) => !v); setBpmOffset(0); }}
                 className={cn(
-                  "text-[9px] px-1.5 py-0.5 rounded transition-colors",
-                  showBpmGrid ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted text-muted-foreground hover:text-foreground"
+                  "text-[9px] px-1.5 py-0.5 rounded transition-colors whitespace-nowrap",
+                  showBpmGrid ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-muted text-muted-foreground hover:text-foreground"
                 )}
                 title="Mostrar grade de BPM"
-              >
-                ♩ BPM
-              </button>
+              >♩ BPM</button>
             )}
           </div>
-          <div className="flex-shrink-0 w-36" />
-          <div className="flex-1 relative overflow-hidden pr-3">
+          {/* Controles de offset */}
+          <div className="flex-shrink-0 w-36 flex items-center px-1 gap-0.5">
+            {showBpmGrid && (
+              <>
+                <span className="text-[8px] text-muted-foreground/40 mr-0.5">offset</span>
+                <button onClick={() => setBpmOffset(v => Math.round((v - 0.05) * 100) / 100)}
+                  className="text-[9px] w-4 h-4 flex items-center justify-center rounded bg-muted hover:bg-muted/80 text-muted-foreground">−</button>
+                <span className="text-[8px] text-amber-400/70 tabular-nums w-9 text-center">{bpmOffset.toFixed(2)}s</span>
+                <button onClick={() => setBpmOffset(v => Math.round((v + 0.05) * 100) / 100)}
+                  className="text-[9px] w-4 h-4 flex items-center justify-center rounded bg-muted hover:bg-muted/80 text-muted-foreground">+</button>
+                <button onClick={() => setBpmOffset(0)}
+                  className="text-[9px] px-1 ml-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground" title="Reset">↺</button>
+              </>
+            )}
+          </div>
+          <div className="flex-1 relative overflow-hidden pr-3" ref={rulerRef}>
+            {/* Overlay arrastável para ajustar offset */}
+            {showBpmGrid && (
+              <div
+                className="absolute inset-0 z-20 cursor-ew-resize"
+                title="Arraste para alinhar a grade com o 1º tempo da música"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startOffset = bpmOffset;
+                  const w = rulerRef.current?.getBoundingClientRect().width ?? 1;
+                  const pxPerSec = (w * zoom) / duration;
+                  const onMove = (ev: MouseEvent) => {
+                    const delta = (ev.clientX - startX) / pxPerSec;
+                    setBpmOffset(Math.round((startOffset + delta) * 100) / 100);
+                  };
+                  const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                }}
+              />
+            )}
             <div className="absolute inset-0" style={{
               width: `${zoom * 100}%`,
               transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)`,
             }}>
-              {/* Linhas de tempo (a cada 30s/15s/5s) */}
+              {/* Marcações de tempo */}
               {Array.from({ length: Math.ceil(duration / (zoom < 2 ? 30 : zoom < 4 ? 15 : 5)) + 1 }).map((_, i) => {
                 const interval = zoom < 2 ? 30 : zoom < 4 ? 15 : 5;
                 const t = i * interval;
@@ -747,31 +781,27 @@ export default function MultitracksPlayerPage() {
                 );
               })}
 
-              {/* Grade BPM — apenas cabeça dos compassos */}
+              {/* Grade BPM com offset */}
               {showBpmGrid && album.bpm && (() => {
-                const bpm = album.bpm;
-                const measureDur = (60 / bpm) * 4;
-                const totalMeasures = Math.ceil(duration / measureDur);
-                // Mostrar 1 a cada N compassos para não ficar denso
-                const pxPerMeasure = (1500 * zoom) / totalMeasures;
+                const measureDur = (60 / album.bpm) * 4;
+                const totalMeasures = Math.ceil((duration - bpmOffset) / measureDur) + 1;
+                const pxPerMeasure = (1500 * zoom) / (duration / measureDur);
                 const step = pxPerMeasure < 8 ? 8 : pxPerMeasure < 16 ? 4 : pxPerMeasure < 30 ? 2 : 1;
-                return Array.from({ length: totalMeasures + 1 }).map((_, m) => {
+                return Array.from({ length: totalMeasures }).map((_, m) => {
                   if (m % step !== 0) return null;
-                  const t = m * measureDur;
-                  if (t > duration) return null;
+                  const t = bpmOffset + m * measureDur;
+                  if (t < 0 || t > duration) return null;
                   const pct = (t / duration) * 100;
                   return (
-                    <div key={`m-${m}`} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pct}%` }}>
-                      <div className="w-px h-full bg-white/20" />
-                      <span className="absolute bottom-0 text-[7px] text-muted-foreground/50 tabular-nums" style={{ left: 1 }}>
-                        {m + 1}
-                      </span>
+                    <div key={m} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pct}%` }}>
+                      <div className="w-px h-full bg-amber-400/40" />
+                      <span className="absolute bottom-0 text-[7px] text-amber-400/50 tabular-nums" style={{ left: 1 }}>{m + 1}</span>
                     </div>
                   );
                 });
               })()}
 
-              {/* Playhead na régua */}
+              {/* Playhead */}
               <div className="absolute top-0 bottom-0 w-px bg-primary/80 z-10"
                 style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
             </div>
@@ -1057,19 +1087,18 @@ export default function MultitracksPlayerPage() {
               </div>
               {/* Grade BPM — apenas início de compasso */}
               {showBpmGrid && album?.bpm && (() => {
-                const bpm = album.bpm!;
-                const measureDur = (60 / bpm) * 4;
-                const totalMeasures = Math.ceil(duration / measureDur);
-                const pxPerMeasure = (1500 * zoom) / totalMeasures;
+                const measureDur = (60 / album.bpm!) * 4;
+                const totalMeasures = Math.ceil((duration - bpmOffset) / measureDur) + 1;
+                const pxPerMeasure = (1500 * zoom) / (duration / measureDur);
                 const step = pxPerMeasure < 8 ? 8 : pxPerMeasure < 16 ? 4 : pxPerMeasure < 30 ? 2 : 1;
-                return Array.from({ length: totalMeasures + 1 }).map((_, m) => {
+                return Array.from({ length: totalMeasures }).map((_, m) => {
                   if (m % step !== 0) return null;
-                  const t = m * measureDur;
-                  if (t > duration) return null;
+                  const t = bpmOffset + m * measureDur;
+                  if (t < 0 || t > duration) return null;
                   const pct = (t / duration) * 100;
                   return (
                     <div key={m} className="absolute top-0 bottom-0 pointer-events-none z-10"
-                      style={{ left: `${pct}%`, width: 1, backgroundColor: "rgba(255,255,255,0.15)" }} />
+                      style={{ left: `${pct}%`, width: 1, backgroundColor: "rgba(251,191,36,0.2)" }} />
                   );
                 });
               })()}

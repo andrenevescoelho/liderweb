@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Disc3, Plus, Search, Pencil, Loader2, CheckCircle2, Clock,
-  X, Music2, AlertCircle, RefreshCw, Wand2, Trash2,
+  X, Music2, AlertCircle, RefreshCw, Wand2, Trash2, ImagePlus, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -58,6 +58,8 @@ export default function MultitracksAdminPage() {
   const [processingMsg, setProcessingMsg] = useState("");
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState("");
+  const [coverResults, setCoverResults] = useState<{ url: string; thumb: string; source: string }[]>([]);
+  const [searchingCover, setSearchingCover] = useState(false);
 
   // Ao colar/sair do campo de URL, tenta extrair metadados automaticamente
   const handleDriveUrlBlur = async (url: string) => {
@@ -118,7 +120,7 @@ export default function MultitracksAdminPage() {
     if (status === "authenticated") fetchAlbums();
   }, [status, fetchAlbums]);
 
-  const openNew = () => { setForm(EMPTY_FORM); setEditingId(null); setShowForm(true); };
+  const openNew = () => { setForm(EMPTY_FORM); setEditingId(null); setShowForm(true); setCoverResults([]); };
 
   const openEdit = (album: Album) => {
     setForm({
@@ -135,7 +137,7 @@ export default function MultitracksAdminPage() {
     setShowForm(true);
   };
 
-  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_FORM); setProcessingMsg(""); setParseMsg(""); };
+  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_FORM); setProcessingMsg(""); setParseMsg(""); setCoverResults([]); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +208,29 @@ export default function MultitracksAdminPage() {
       else toast.error(data.error || "Erro ao excluir");
     } catch { toast.error("Erro ao excluir"); }
     finally { setSaving(false); }
+  };
+
+  const searchCover = async () => {
+    if (!form.title || !form.artist) {
+      toast.error("Preencha título e artista antes de buscar a capa");
+      return;
+    }
+    setSearchingCover(true);
+    setCoverResults([]);
+    try {
+      const res = await fetch(`/api/multitracks/cover-search?title=${encodeURIComponent(form.title)}&artist=${encodeURIComponent(form.artist)}`);
+      const data = await res.json();
+      if (res.ok && data.results?.length > 0) {
+        setCoverResults(data.results);
+        toast.success(`${data.results.length} capas encontradas`);
+      } else {
+        toast.error("Nenhuma capa encontrada — adicione manualmente");
+      }
+    } catch {
+      toast.error("Erro ao buscar capas");
+    } finally {
+      setSearchingCover(false);
+    }
   };
 
   const analyzeMarkers = async (album: Album) => {
@@ -400,9 +425,76 @@ export default function MultitracksAdminPage() {
                   <label className="text-sm font-medium">Gênero</label>
                   <Input value={form.genre} onChange={(e) => setForm((f) => ({ ...f, genre: e.target.value }))} placeholder="Ex: Gospel, Worship" />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">URL da Capa</label>
-                  <Input value={form.coverUrl} onChange={(e) => setForm((f) => ({ ...f, coverUrl: e.target.value }))} placeholder="https://..." />
+                <div className="space-y-1.5 col-span-2">
+                  <label className="text-sm font-medium">Capa do álbum</label>
+
+                  {/* Preview + busca */}
+                  <div className="flex gap-3 items-start">
+                    {/* Preview */}
+                    <div className="h-20 w-20 flex-shrink-0 rounded-lg overflow-hidden bg-muted border border-border flex items-center justify-center">
+                      {form.coverUrl ? (
+                        <img src={form.coverUrl} alt="Capa" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
+                      ) : (
+                        <Music2 className="h-8 w-8 text-muted-foreground/30" />
+                      )}
+                    </div>
+
+                    <div className="flex-1 space-y-2">
+                      {/* Input manual */}
+                      <Input
+                        value={form.coverUrl}
+                        onChange={(e) => { setForm((f) => ({ ...f, coverUrl: e.target.value })); setCoverResults([]); }}
+                        placeholder="Cole uma URL de imagem manualmente..."
+                      />
+                      {/* Botão buscar */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={searchCover}
+                        disabled={searchingCover || !form.title || !form.artist}
+                        className="w-full"
+                      >
+                        {searchingCover
+                          ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Buscando capas...</>
+                          : <><Search className="mr-2 h-3.5 w-3.5" />Buscar capa automaticamente</>}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Grid de resultados */}
+                  {coverResults.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      <p className="text-xs text-muted-foreground">Clique numa capa para selecioná-la:</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {coverResults.map((r, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => { setForm((f) => ({ ...f, coverUrl: r.url })); setCoverResults([]); toast.success("Capa selecionada!"); }}
+                            className={cn(
+                              "relative rounded-lg overflow-hidden border-2 transition-all hover:scale-105",
+                              form.coverUrl === r.url ? "border-primary" : "border-transparent hover:border-primary/50"
+                            )}
+                            title={r.source}
+                          >
+                            <img src={r.thumb} alt={r.source} className="w-full aspect-square object-cover" />
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors" />
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 opacity-0 hover:opacity-100 transition-opacity">
+                              <p className="text-[8px] text-white truncate">{r.source.split("—")[0].trim()}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCoverResults([])}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Fechar resultados
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
