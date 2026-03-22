@@ -2,88 +2,114 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Music, Users, Calendar, Headphones, Star } from "lucide-react";
+import { Check, X, Loader2, Disc3, Brain, Users, Scissors, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const PLANS = [
   {
     id: "free",
     name: "Gratuito",
-    description: "Para conhecer a plataforma",
+    tagline: "Para conhecer a plataforma",
     price: 0,
-    userLimit: 10,
+    stripePriceId: null,
     isFree: true,
-    features: [
-      "Até 10 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Suporte por email",
-    ],
+    members: 10,
+    color: "#64748B",
+    features: {
+      gestao: true,
+      professor: false,
+      multitracks: 0,
+      split: 0,
+    },
   },
   {
-    id: "basico",
-    name: "Básico",
-    description: "Ideal para ministérios pequenos",
+    id: "starter",
+    name: "Starter",
+    tagline: "Para ministérios que querem crescer",
     price: 29.90,
-    userLimit: 15,
-    features: [
-      "Até 15 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte por email",
-    ],
+    stripePriceId: "price_1TDZ1bCvzhcHqHLHkRRwYD2A",
+    members: 15,
+    color: "#14B8A6",
+    features: {
+      gestao: true,
+      professor: true,
+      multitracks: 0,
+      split: 0,
+    },
   },
   {
-    id: "intermediario",
-    name: "Intermediário",
-    description: "Para ministérios em crescimento",
-    price: 49.90,
-    userLimit: 30,
+    id: "pro",
+    name: "Pro",
+    tagline: "Para ministérios em crescimento",
+    price: 69.90,
+    stripePriceId: "price_1TDZ2oCvzhcHqHLHVUoZBhtY",
+    members: 25,
     popular: true,
-    features: [
-      "Até 30 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte prioritário",
-    ],
+    color: "#14B8A6",
+    features: {
+      gestao: true,
+      professor: true,
+      multitracks: 3,
+      split: 0,
+    },
   },
   {
     id: "avancado",
     name: "Avançado",
-    description: "Para grandes ministérios",
-    price: 99.90,
-    userLimit: 100,
-    features: [
-      "Até 100 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte VIP",
-    ],
+    tagline: "Para grandes ministérios",
+    price: 119.90,
+    stripePriceId: "price_1TDZ3CCvzhcHqHLHNpyidjNa",
+    members: 40,
+    color: "#8B5CF6",
+    features: {
+      gestao: true,
+      professor: true,
+      multitracks: 5,
+      split: 3,
+    },
   },
   {
-    id: "enterprise",
-    name: "Enterprise",
-    description: "Para igrejas com múltiplos ministérios",
-    price: 149.90,
-    userLimit: 0,
-    features: [
-      "Usuários ilimitados",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte dedicado",
-      "Onboarding personalizado",
-    ],
+    id: "igreja",
+    name: "Igreja",
+    tagline: "Para igrejas com múltiplos ministérios",
+    price: 199.90,
+    stripePriceId: "price_1TDZ3XCvzhcHqHLHQlysv1cC",
+    members: 80,
+    color: "#8B5CF6",
+    features: {
+      gestao: true,
+      professor: true,
+      multitracks: 10,
+      split: 10,
+    },
+  },
+];
+
+const EXTRAS = [
+  {
+    icon: <Disc3 className="h-5 w-5" />,
+    title: "Multitrack Adicional",
+    description: "Aluguel extra além da cota mensal do plano.",
+    price: "R$ 9,90",
+    unit: "por track",
+    color: "#14B8A6",
+  },
+  {
+    icon: <Scissors className="h-5 w-5" />,
+    title: "Split Adicional",
+    description: "Solicite um split extra. Fica no acervo para reutilização.",
+    price: "R$ 19,90",
+    unit: "por split",
+    color: "#8B5CF6",
+  },
+  {
+    icon: <Zap className="h-5 w-5" />,
+    title: "Split do Acervo",
+    description: "Acesse um split já processado por outro ministério.",
+    price: "R$ 4,90",
+    unit: "por acesso",
+    color: "#F59E0B",
   },
 ];
 
@@ -91,178 +117,198 @@ export default function PlanosPage() {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
 
-  const handleSelectPlan = async (planId: string) => {
-    setLoading(planId);
+  const handleSelect = async (plan: typeof PLANS[0]) => {
+    if (plan.isFree) { router.push("/register"); return; }
+    setLoading(plan.id);
     try {
-      const res = await fetch("/api/subscription/checkout", {
+      const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ priceId: plan.stripePriceId }),
       });
-
       const data = await res.json();
-
-      if (data.url) {
-        window.location.href = data.url;
-      } else if (data.needsGroup) {
-        // Redirecionar para criar grupo primeiro
-        router.push(`/signup?plan=${planId}`);
-      } else {
-        alert(data.error || "Erro ao processar. Tente novamente.");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao processar. Tente novamente.");
-    } finally {
-      setLoading(null);
-    }
+      if (data.url) window.location.href = data.url;
+    } catch { /* silent */ }
+    finally { setLoading(null); }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900">
+    <div className="min-h-screen bg-[#0a0f1e] text-slate-200">
       {/* Header */}
-      <header className="container mx-auto px-4 py-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Music className="w-8 h-8 text-white" />
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-white">Líder Web</span>
-              <span className="text-xs text-purple-300">By Multitrack Gospel</span>
-            </div>
-          </div>
-          <Button
-            variant="secondary"
-            onClick={() => router.push("/login")}
-          >
-            Entrar
-          </Button>
+      <div className="border-b border-white/5 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <img src="/favicon.svg" alt="Líder Web" className="h-8 w-8" />
+          <span className="font-bold text-white">Líder Web</span>
+          <span className="text-xs text-slate-500">by multitrackgospel.com</span>
         </div>
-      </header>
+        <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
+          Entrar
+        </Button>
+      </div>
 
-      {/* Hero */}
-      <section className="container mx-auto px-4 py-12 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-          Gerencie seu Ministério de Louvor
-        </h1>
-        <p className="text-xl text-purple-200 mb-8 max-w-2xl mx-auto">
-          Escalas, repertórios, cifras e muito mais. Tudo em um só lugar para sua equipe de louvor.
-        </p>
-
-        {/* Features */}
-        <div className="flex flex-wrap justify-center gap-6 mb-12">
-          <div className="flex items-center gap-2 text-white">
-            <Users className="w-5 h-5 text-purple-300" />
-            <span>Gestão de Equipe</span>
-          </div>
-          <div className="flex items-center gap-2 text-white">
-            <Music className="w-5 h-5 text-purple-300" />
-            <span>Cifras com Transposição</span>
-          </div>
-          <div className="flex items-center gap-2 text-white">
-            <Calendar className="w-5 h-5 text-purple-300" />
-            <span>Escalas Automatizadas</span>
-          </div>
-          <div className="flex items-center gap-2 text-white">
-            <Headphones className="w-5 h-5 text-purple-300" />
-            <span>Upload de Áudio</span>
+      <div className="max-w-6xl mx-auto px-4 py-16">
+        {/* Hero */}
+        <div className="text-center mb-14">
+          <h1 className="text-4xl font-bold text-white mb-4">Escolha seu Plano</h1>
+          <p className="text-slate-400 text-lg max-w-xl mx-auto">
+            Ferramentas completas para gestão e desenvolvimento musical do seu ministério de louvor.
+          </p>
+          <div className="inline-flex items-center gap-2 mt-5 rounded-full border border-teal-500/30 bg-teal-500/10 px-4 py-1.5 text-sm text-teal-400">
+            ✦ 7 dias de teste grátis em todos os planos pagos
           </div>
         </div>
-      </section>
 
-      {/* Pricing */}
-      <section className="container mx-auto px-4 pb-20">
-        <h2 className="text-3xl font-bold text-white text-center mb-4">
-          Escolha seu Plano
-        </h2>
-        <p className="text-purple-200 text-center mb-10">
-          7 dias de teste grátis em todos os planos. Cancele quando quiser.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+        {/* Plans grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-16">
           {PLANS.map((plan) => (
-            <Card
+            <div
               key={plan.id}
-              className={`relative overflow-hidden transition-transform hover:scale-105 ${
+              className={cn(
+                "relative rounded-2xl border p-5 flex flex-col",
                 plan.popular
-                  ? "border-2 border-yellow-400 shadow-xl shadow-yellow-400/20"
-                  : "border-purple-700"
-              }`}
+                  ? "border-teal-500 bg-teal-500/5"
+                  : plan.id === "avancado" || plan.id === "igreja"
+                  ? "border-violet-500/40 bg-violet-500/5"
+                  : "border-white/8 bg-white/3"
+              )}
             >
               {plan.popular && (
-                <div className="absolute top-0 right-0">
-                  <Badge className="rounded-none rounded-bl-lg bg-yellow-400 text-yellow-900 font-semibold">
-                    <Star className="w-3 h-3 mr-1" /> Mais Popular
-                  </Badge>
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-teal-500 px-3 py-0.5 text-[10px] font-bold text-teal-950 whitespace-nowrap">
+                  ⭐ Mais Popular
                 </div>
               )}
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
-                  {plan.name}
-                </CardTitle>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {plan.description}
-                </p>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="mb-6">
-                  {(plan as any).isFree ? (
-                    <span className="text-4xl font-bold text-green-600">
-                      Grátis
+
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">{plan.name}</p>
+                <p className="text-[11px] text-slate-500 min-h-[32px] leading-tight">{plan.tagline}</p>
+              </div>
+
+              <div className="mb-5">
+                {plan.isFree ? (
+                  <span className="text-3xl font-bold text-teal-400">Grátis</span>
+                ) : (
+                  <>
+                    <span className="text-3xl font-bold text-white">
+                      R$ {Math.floor(plan.price)}<span className="text-lg">,{String(plan.price.toFixed(2)).split(".")[1]}</span>
                     </span>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-bold text-purple-600">
-                        R${plan.price.toFixed(2).replace(".", ",")}
-                      </span>
-                      <span className="text-gray-500">/mês</span>
-                    </>
-                  )}
-                </div>
+                    <span className="text-xs text-slate-500 block mt-0.5">/mês</span>
+                  </>
+                )}
+              </div>
 
-                <ul className="space-y-3 mb-6 text-left">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm">
-                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      <span className="text-gray-700 dark:text-gray-300">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
+              <Button
+                size="sm"
+                className={cn(
+                  "w-full mb-5 text-xs",
+                  plan.popular ? "bg-teal-500 hover:bg-teal-600 text-teal-950" :
+                  plan.id === "avancado" || plan.id === "igreja" ? "bg-violet-600 hover:bg-violet-700 text-white" :
+                  plan.isFree ? "bg-white/10 hover:bg-white/15 text-white" : "bg-white/10 hover:bg-white/15 text-white"
+                )}
+                onClick={() => handleSelect(plan)}
+                disabled={loading === plan.id}
+              >
+                {loading === plan.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
+                  plan.isFree ? "Começar Grátis" : "Começar Teste Grátis"}
+              </Button>
 
-                <Button
-                  className={`w-full ${
-                    plan.popular
-                      ? "bg-yellow-400 hover:bg-yellow-500 text-yellow-900"
-                      : (plan as any).isFree
-                      ? "bg-green-600 hover:bg-green-700 text-white"
-                      : ""
-                  }`}
-                  onClick={() => handleSelectPlan(plan.id)}
-                  disabled={loading !== null}
-                >
-                  {loading === plan.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (plan as any).isFree ? (
-                    "Começar Grátis"
-                  ) : (
-                    "Começar Teste Grátis"
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+              <div className="h-px bg-white/8 mb-4" />
+
+              {/* Features */}
+              <div className="space-y-2.5 flex-1">
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mb-2">Gestão</p>
+                <FeatureRow ok label={`Até ${plan.members} membros`} highlight />
+                <FeatureRow ok label="Músicas e cifras" />
+                <FeatureRow ok label="Escalas ilimitadas" />
+                <FeatureRow ok label="Ensaios" />
+                <FeatureRow ok label="Chat do grupo" />
+
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mt-3 mb-2">Módulos Premium</p>
+                <FeatureRow ok={plan.features.professor} label="Professor IA" tag={plan.features.professor ? "IA" : undefined} />
+                <FeatureRow
+                  ok={plan.features.multitracks > 0}
+                  label={plan.features.multitracks > 0 ? `${plan.features.multitracks} Multitracks/mês` : "Multitracks"}
+                  tag={plan.features.multitracks > 0 ? "NOVO" : undefined}
+                />
+                <FeatureRow
+                  ok={plan.features.split > 0}
+                  label={plan.features.split > 0 ? `${plan.features.split} Splits/mês` : "Split de músicas"}
+                />
+              </div>
+            </div>
           ))}
         </div>
 
-        <p className="text-center text-purple-300 mt-8 text-sm">
-          Todos os planos incluem 7 dias de teste grátis. Você só será cobrado após o período de teste.
-        </p>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-purple-700 py-8">
-        <div className="container mx-auto px-4 text-center text-purple-300">
-          <p>© 2025 Líder Web by Multitrack Gospel. Todos os direitos reservados.</p>
+        {/* Extras */}
+        <div className="rounded-2xl border border-white/8 bg-white/2 p-8 mb-12">
+          <h2 className="text-lg font-bold text-white mb-2">Recursos Adicionais</h2>
+          <p className="text-sm text-slate-500 mb-6">Precisou de mais? Contrate avulso sem precisar mudar de plano.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {EXTRAS.map((extra, i) => (
+              <div key={i} className="rounded-xl border border-white/8 bg-[#0a0f1e] p-5">
+                <div className="flex items-center gap-2 mb-3" style={{ color: extra.color }}>
+                  {extra.icon}
+                  <h3 className="text-sm font-semibold text-white">{extra.title}</h3>
+                </div>
+                <p className="text-xs text-slate-500 mb-4 leading-relaxed">{extra.description}</p>
+                <div className="text-xl font-bold" style={{ color: extra.color }}>
+                  {extra.price} <span className="text-xs text-slate-500 font-normal">{extra.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </footer>
+
+        {/* Split info */}
+        <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-8">
+          <div className="flex items-start gap-5">
+            <div className="text-3xl flex-shrink-0">✂️</div>
+            <div>
+              <h3 className="text-base font-bold text-white mb-2">Como funciona o Split Compartilhado?</h3>
+              <p className="text-sm text-slate-400 leading-relaxed max-w-2xl">
+                Quando um ministério solicita o split de uma música, o arquivo processado fica no acervo LiderWeb.
+                Outro ministério que quiser a mesma música paga um valor menor para acessar o split já pronto.
+              </p>
+              <div className="grid grid-cols-3 gap-3 mt-5">
+                {[
+                  { num: "①", title: "Ministério A", desc: "Solicita split da música X e paga R$ 19,90" },
+                  { num: "②", title: "Acervo LiderWeb", desc: "Split processado e armazenado com segurança" },
+                  { num: "③", title: "Ministério B", desc: "Acessa o mesmo split por R$ 4,90" },
+                ].map((step, i) => (
+                  <div key={i} className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-4">
+                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-1">{step.num} {step.title}</p>
+                    <p className="text-xs text-slate-400">{step.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-center text-xs text-slate-600 mt-10">
+          © {new Date().getFullYear()} Líder Web by Multitrack Gospel. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FeatureRow({ ok, label, highlight, tag }: { ok: boolean; label: string; highlight?: boolean; tag?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      {ok ? (
+        <Check className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
+      ) : (
+        <X className="h-3.5 w-3.5 text-slate-700 flex-shrink-0" />
+      )}
+      <span className={cn("text-[11px] leading-tight", ok ? highlight ? "text-white font-medium" : "text-slate-300" : "text-slate-600")}>
+        {label}
+      </span>
+      {tag && (
+        <span className={cn(
+          "text-[9px] font-bold px-1 py-0.5 rounded",
+          tag === "IA" ? "bg-violet-500/20 text-violet-400" : "bg-teal-500/20 text-teal-400"
+        )}>{tag}</span>
+      )}
     </div>
   );
 }
