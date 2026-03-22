@@ -250,7 +250,10 @@ export default function MultitracksPlayerPage() {
   const [recordingShortcut, setRecordingShortcut] = useState<number | null>(null);
   const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
   const [draggingMarker, setDraggingMarker] = useState<number | null>(null);
+  const [showBpmGrid, setShowBpmGrid] = useState(false);
+  const [addingMarker, setAddingMarker] = useState(false);
   const shortcutsRef = useRef<Record<number, string>>({});
+  const userIdRef = useRef<string>("");
 
   // Carregar atalhos do localStorage
   useEffect(() => {
@@ -267,6 +270,24 @@ export default function MultitracksPlayerPage() {
     shortcutsRef.current = newShortcuts;
     try { localStorage.setItem(`marker-shortcuts-${albumId}`, JSON.stringify(newShortcuts)); } catch {}
   }, [albumId]);
+
+  // Salvar configs de stems por usuário
+  const saveStemConfigs = useCallback((newStems: StemTrack[]) => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    try {
+      const configs = newStems.map((s) => ({ volume: s.volume, pan: s.pan, muted: s.muted }));
+      localStorage.setItem(`stem-configs-${userId}-${albumId}`, JSON.stringify(configs));
+    } catch {}
+  }, [albumId]);
+
+  const updateStemAndSave = useCallback((i: number, updates: Partial<StemTrack>) => {
+    setStems((prev) => {
+      const next = prev.map((s, idx) => idx === i ? { ...s, ...updates } : s);
+      saveStemConfigs(next);
+      return next;
+    });
+  }, [saveStemConfigs]);
 
   const saveMarkers = useCallback(async (newMarkers: Marker[]) => {
     try {
@@ -315,12 +336,21 @@ export default function MultitracksPlayerPage() {
           ...rawStems.filter((s) => !isPriority(s.name)),
         ];
 
+        // Carregar configs salvas do usuário
+        const userId = (session?.user as any)?.id || "";
+        userIdRef.current = userId;
+        let savedConfigs: { volume: number; pan: number; muted: boolean }[] = [];
+        try {
+          const raw = localStorage.getItem(`stem-configs-${userId}-${albumId}`);
+          if (raw) savedConfigs = JSON.parse(raw);
+        } catch {}
+
         setStems(sorted.map((s, i) => ({
           name: s.name,
           url: s.url,
-          volume: 1,
-          pan: 0,
-          muted: false,
+          volume: savedConfigs[i]?.volume ?? 1,
+          pan: savedConfigs[i]?.pan ?? 0,
+          muted: savedConfigs[i]?.muted ?? false,
           solo: false,
           loading: true,
           ready: false,
@@ -602,13 +632,17 @@ export default function MultitracksPlayerPage() {
     });
   }, [stems]);
 
-  const updateStem = (i: number, updates: Partial<StemTrack>) =>
-    setStems((prev) => prev.map((s, idx) => idx === i ? { ...s, ...updates } : s));
+  const updateStem = (i: number, updates: Partial<StemTrack>) => updateStemAndSave(i, updates);
 
-  const toggleMute = (i: number) => updateStem(i, { muted: !stems[i].muted, solo: false });
-  const toggleSolo = (i: number) => setStems((prev) => prev.map((s, idx) => ({
-    ...s, solo: idx === i ? !s.solo : false, muted: false,
-  })));
+  const toggleMute = (i: number) => updateStemAndSave(i, { muted: !stems[i].muted, solo: false });
+  const toggleSolo = (i: number) => {
+    const isSolo = stems[i]?.solo;
+    setStems((prev) => {
+      const next = prev.map((s, idx) => ({ ...s, solo: idx === i ? !isSolo : false, muted: false }));
+      saveStemConfigs(next);
+      return next;
+    });
+  };
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
   const progress = duration > 0 ? currentTime / duration : 0;
@@ -673,16 +707,31 @@ export default function MultitracksPlayerPage() {
         </div>
       )}
 
-      {/* Régua de tempo */}
+      {/* Régua de tempo + grade BPM */}
       {duration > 0 && (
-        <div className="flex flex-shrink-0 border-b border-border/40 bg-black/30 h-5">
-          <div className="flex-shrink-0 w-44" />
+        <div className="flex flex-shrink-0 border-b border-border/40 bg-black/30 h-6">
+          {/* Controles lado esquerdo */}
+          <div className="flex-shrink-0 w-44 flex items-center px-2 gap-1">
+            {album.bpm && (
+              <button
+                onClick={() => setShowBpmGrid((v) => !v)}
+                className={cn(
+                  "text-[9px] px-1.5 py-0.5 rounded transition-colors",
+                  showBpmGrid ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+                title="Mostrar grade de BPM"
+              >
+                ♩ BPM
+              </button>
+            )}
+          </div>
           <div className="flex-shrink-0 w-36" />
           <div className="flex-1 relative overflow-hidden pr-3">
             <div className="absolute inset-0" style={{
               width: `${zoom * 100}%`,
               transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)`,
             }}>
+              {/* Linhas de tempo (a cada 30s/15s/5s) */}
               {Array.from({ length: Math.ceil(duration / (zoom < 2 ? 30 : zoom < 4 ? 15 : 5)) + 1 }).map((_, i) => {
                 const interval = zoom < 2 ? 30 : zoom < 4 ? 15 : 5;
                 const t = i * interval;
@@ -697,6 +746,32 @@ export default function MultitracksPlayerPage() {
                   </div>
                 );
               })}
+
+              {/* Grade de BPM */}
+              {showBpmGrid && album.bpm && (() => {
+                const bpm = album.bpm;
+                const beatDuration = 60 / bpm; // segundos por beat
+                const totalBeats = Math.floor(duration / beatDuration);
+                const beatsPerMeasure = 4;
+                return Array.from({ length: totalBeats + 1 }).map((_, beat) => {
+                  const t = beat * beatDuration;
+                  if (t > duration) return null;
+                  const pct = (t / duration) * 100;
+                  const isMeasureStart = beat % beatsPerMeasure === 0;
+                  const measureNumber = Math.floor(beat / beatsPerMeasure) + 1;
+                  return (
+                    <div key={`beat-${beat}`} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pct}%` }}>
+                      <div className={cn("w-px h-full", isMeasureStart ? "bg-white/25" : "bg-white/08")} />
+                      {isMeasureStart && (
+                        <span className="absolute bottom-0 text-[7px] text-muted-foreground/40 tabular-nums" style={{ left: 1 }}>
+                          {measureNumber}
+                        </span>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+
               {/* Playhead na régua */}
               <div className="absolute top-0 bottom-0 w-px bg-primary/80 z-10"
                 style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
@@ -706,23 +781,35 @@ export default function MultitracksPlayerPage() {
       )}
 
       {/* Faixa de marcações + controles zoom — alinhada com waveform */}
-      {markers.length > 0 && (
-        <div className="flex-shrink-0 border-b border-border/50 bg-black/20">
-          {/* Barra de controles: zoom + shortcuts */}
-          <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30">
-            <div className="flex-shrink-0 w-44" />
-            <div className="flex-shrink-0 w-36" />
-            <div className="flex-1 flex items-center gap-2">
-              <span className="text-[9px] text-muted-foreground">Zoom:</span>
-              <button onClick={() => setZoom((z) => Math.max(1, z / 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">−</button>
-              <span className="text-[9px] text-muted-foreground tabular-nums w-8 text-center">{zoom.toFixed(1)}x</span>
-              <button onClick={() => setZoom((z) => Math.min(8, z * 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">+</button>
-              {zoom > 1 && (
-                <input type="range" min={0} max={1} step={0.001} value={scrollLeft}
-                  onChange={(e) => setScrollLeft(Number(e.target.value))}
-                  className="w-24 accent-primary h-1 ml-1" title="Scroll" />
+      <div className="flex-shrink-0 border-b border-border/50 bg-black/20">
+        {/* Barra de controles: zoom + shortcuts */}
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30">
+          <div className="flex-shrink-0 w-44" />
+          <div className="flex-shrink-0 w-36" />
+          <div className="flex-1 flex items-center gap-2">
+            <span className="text-[9px] text-muted-foreground">Zoom:</span>
+            <button onClick={() => setZoom((z) => Math.max(1, z / 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">−</button>
+            <span className="text-[9px] text-muted-foreground tabular-nums w-8 text-center">{zoom.toFixed(1)}x</span>
+            <button onClick={() => setZoom((z) => Math.min(8, z * 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">+</button>
+            {zoom > 1 && (
+              <input type="range" min={0} max={1} step={0.001} value={scrollLeft}
+                onChange={(e) => setScrollLeft(Number(e.target.value))}
+                className="w-24 accent-primary h-1 ml-1" title="Scroll" />
+            )}
+            <button onClick={() => { setZoom(1); setScrollLeft(0); }} className="text-[9px] text-muted-foreground hover:text-foreground ml-1">Reset</button>
+            {/* Botão adicionar marker */}
+            <button
+              onClick={() => setAddingMarker((v) => !v)}
+              className={cn(
+                "ml-2 text-[9px] px-2 py-0.5 rounded flex items-center gap-1 transition-colors",
+                addingMarker
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 animate-pulse"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
               )}
-              <button onClick={() => { setZoom(1); setScrollLeft(0); }} className="text-[9px] text-muted-foreground hover:text-foreground ml-1">Reset</button>
+              title="Clique para ativar modo de adição de marker, depois clique na timeline"
+            >
+              + Marker {addingMarker && "— clique na faixa"}
+            </button>
               <div className="ml-auto">
                 <button
                   onClick={() => setShowShortcutsPanel((v) => !v)}
@@ -772,7 +859,27 @@ export default function MultitracksPlayerPage() {
           <div className="flex h-8">
             <div className="flex-shrink-0 w-44" />
             <div className="flex-shrink-0 w-36" />
-            <div className="flex-1 relative overflow-hidden pr-3" ref={waveformAreaRef}>
+            <div
+              className={cn("flex-1 relative overflow-hidden pr-3", addingMarker && "cursor-crosshair")}
+              ref={waveformAreaRef}
+              onClick={(e) => {
+                if (!addingMarker) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ratio = (e.clientX - rect.left) / rect.width;
+                const newTime = Math.max(0, Math.min(duration, (ratio / zoom + scrollLeft * (zoom - 1) / zoom) * duration));
+                const roundedTime = Math.round(newTime * 10) / 10;
+                const newMarker: Marker = {
+                  label: `Marker ${markers.length + 1}`,
+                  time: roundedTime,
+                  color: STEM_COLORS[markers.length % STEM_COLORS.length],
+                };
+                const updated = [...markers, newMarker].sort((a, b) => a.time - b.time);
+                setMarkers(updated);
+                saveMarkers(updated);
+                setAddingMarker(false);
+                toast(`Marker adicionado em ${formatTime(roundedTime)} — duplo clique para renomear`, { duration: 2500, icon: "📍" });
+              }}
+            >
               {/* Container com zoom */}
               <div className="absolute inset-0" style={{ width: `${zoom * 100}%`, transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)` }}>
                 {markers.map((marker, i) => {
@@ -872,7 +979,6 @@ export default function MultitracksPlayerPage() {
             </div>
           </div>
         </div>
-      )}
       <div className="flex-1 overflow-y-auto" onWheel={(e) => {
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
@@ -950,6 +1056,23 @@ export default function MultitracksPlayerPage() {
                   </div>
                 )}
               </div>
+              {/* Grade BPM sobreposta */}
+              {showBpmGrid && album?.bpm && (() => {
+                const bpm = album.bpm!;
+                const beatDur = 60 / bpm;
+                const totalBeats = Math.floor(duration / beatDur);
+                const bpMeasure = 4;
+                return Array.from({ length: totalBeats + 1 }).map((_, beat) => {
+                  const t = beat * beatDur;
+                  if (t > duration) return null;
+                  const isMeasure = beat % bpMeasure === 0;
+                  const pct = (t / duration) * 100;
+                  return (
+                    <div key={beat} className="absolute top-0 bottom-0 pointer-events-none z-10"
+                      style={{ left: `${pct}%`, width: 1, backgroundColor: isMeasure ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.05)" }} />
+                  );
+                });
+              })()}
               {/* Playhead */}
               <div className="absolute top-0 bottom-0 w-px bg-white/40 pointer-events-none z-10"
                 style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
