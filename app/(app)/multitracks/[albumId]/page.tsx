@@ -238,6 +238,8 @@ export default function MultitracksPlayerPage() {
   const [duration, setDuration] = useState(0);
   const [cachedStems, setCachedStems] = useState<Set<number>>(new Set());
   const [selectedStem, setSelectedStem] = useState<number | null>(null);
+  const [scheduledJump, setScheduledJump] = useState<{ markerIndex: number; label: string; color: string } | null>(null);
+  const scheduledJumpRef = useRef<{ markerIndex: number; sectionEndTime: number } | null>(null);
 
   useEffect(() => { pruneExpiredCache(); }, []);
 
@@ -249,6 +251,11 @@ export default function MultitracksPlayerPage() {
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
   const animFrameRef = useRef<number>(0);
+  const markersRef = useRef<Marker[]>([]);
+  const stemsRef = useRef<StemTrack[]>([]);
+
+  useEffect(() => { markersRef.current = markers; }, [markers]);
+  useEffect(() => { stemsRef.current = stems; }, [stems]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -352,21 +359,83 @@ export default function MultitracksPlayerPage() {
     const tick = () => {
       if (!audioCtxRef.current) return;
       const t = audioCtxRef.current.currentTime - startTimeRef.current;
-      setCurrentTime(Math.min(t, duration));
+      const clipped = Math.min(t, duration);
+      setCurrentTime(clipped);
+
+      // Verificar scheduled jump
+      if (scheduledJumpRef.current && t >= scheduledJumpRef.current.sectionEndTime) {
+        const targetIdx = scheduledJumpRef.current.markerIndex;
+        scheduledJumpRef.current = null;
+        setScheduledJump(null);
+        const targetTime = markersRef.current[targetIdx]?.time ?? 0;
+        offsetRef.current = targetTime;
+        // Reagendar próximo tick com novo offset
+        if (audioCtxRef.current) {
+          startTimeRef.current = audioCtxRef.current.currentTime - targetTime;
+          // Reiniciar sources
+          sourceNodesRef.current.forEach((n) => { try { n.stop(); } catch {} });
+          sourceNodesRef.current = [];
+          const hasSolo = stemsRef.current.some((s: StemTrack) => s.solo);
+          stemsRef.current.forEach((stem: StemTrack, i: number) => {
+            const buf = buffersRef.current[i];
+            if (!buf || !audioCtxRef.current) return;
+            const source = audioCtxRef.current.createBufferSource();
+            source.buffer = buf;
+            const gain = gainNodesRef.current[i] || audioCtxRef.current.createGain();
+            gainNodesRef.current[i] = gain;
+            gain.gain.value = (stem.muted || (hasSolo && !stem.solo)) ? 0 : stem.volume;
+            const panner = panNodesRef.current[i] || audioCtxRef.current.createStereoPanner();
+            panNodesRef.current[i] = panner;
+            panner.pan.value = stem.pan;
+            source.connect(gain);
+            gain.connect(panner);
+            panner.connect(audioCtxRef.current.destination);
+            source.start(0, targetTime);
+            sourceNodesRef.current[i] = source;
+          });
+        }
+        animFrameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       if (t < duration) { animFrameRef.current = requestAnimationFrame(tick); }
-      else { setIsPlaying(false); setCurrentTime(0); offsetRef.current = 0; }
+      else { setIsPlaying(false); setCurrentTime(0); offsetRef.current = 0; scheduledJumpRef.current = null; setScheduledJump(null); }
     };
     animFrameRef.current = requestAnimationFrame(tick);
   }, [stems, duration, stopAll]);
 
+  // Calcula quando a seção atual termina (início da próxima seção)
+  const getCurrentSectionEnd = useCallback((t: number): number => {
+    const sorted = [...markers].sort((a, b) => a.time - b.time);
+    const nextSection = sorted.find((m) => m.time > t + 0.5);
+    return nextSection ? nextSection.time : duration;
+  }, [markers, duration]);
+
   const jumpToMarker = useCallback((index: number) => {
     const marker = markers[index];
     if (!marker) return;
-    offsetRef.current = marker.time;
-    setCurrentTime(marker.time);
-    if (isPlaying) { stopAll(); playAll(marker.time); }
-    toast(`↩ ${marker.label}`, { duration: 1500, icon: "🎵" });
-  }, [markers, isPlaying, stopAll, playAll]);
+
+    // Se já tem um jump agendado para o mesmo marker, cancela
+    if (scheduledJumpRef.current?.markerIndex === index) {
+      scheduledJumpRef.current = null;
+      setScheduledJump(null);
+      toast("Repetição cancelada", { duration: 1200, icon: "✕" });
+      return;
+    }
+
+    // Se estiver tocando, agenda para o fim da seção atual
+    if (isPlaying) {
+      const sectionEnd = getCurrentSectionEnd(offsetRef.current);
+      scheduledJumpRef.current = { markerIndex: index, sectionEndTime: sectionEnd };
+      setScheduledJump({ markerIndex: index, label: marker.label, color: marker.color });
+      toast(`⏭ Vai repetir "${marker.label}" ao fim desta seção`, { duration: 2000, icon: "🔁" });
+    } else {
+      // Se pausado, pula direto
+      offsetRef.current = marker.time;
+      setCurrentTime(marker.time);
+      toast(`↩ ${marker.label}`, { duration: 1500, icon: "🎵" });
+    }
+  }, [markers, isPlaying, getCurrentSectionEnd]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -397,7 +466,13 @@ export default function MultitracksPlayerPage() {
             setStems((prev) => prev.map((s, idx) => ({ ...s, solo: idx === selectedStem ? !isSolo : false, muted: false })));
           }
           break;
-        default:
+        case "Escape":
+          if (scheduledJumpRef.current) {
+            scheduledJumpRef.current = null;
+            setScheduledJump(null);
+            toast("Repetição cancelada", { duration: 1200 });
+          }
+          break;
           // 1-9 para marcações
           if (e.code.startsWith("Digit")) {
             const n = parseInt(e.code.replace("Digit", "")) - 1;
@@ -585,6 +660,26 @@ export default function MultitracksPlayerPage() {
 
       {/* Transport bar — fixo no rodapé */}
       <div className="border-t border-border bg-card px-5 py-3 flex-shrink-0">
+
+        {/* Scheduled jump indicator */}
+        {scheduledJump && (
+          <div className="flex items-center justify-between mb-2 rounded-lg px-3 py-1.5 text-xs"
+            style={{ backgroundColor: scheduledJump.color + "20", border: `1px solid ${scheduledJump.color}40` }}>
+            <div className="flex items-center gap-2">
+              <span className="animate-pulse text-base">🔁</span>
+              <span style={{ color: scheduledJump.color }} className="font-semibold">
+                Repetindo "{scheduledJump.label}" ao fim desta seção
+              </span>
+            </div>
+            <button
+              onClick={() => { scheduledJumpRef.current = null; setScheduledJump(null); toast("Repetição cancelada", { duration: 1200 }); }}
+              className="rounded px-2 py-0.5 text-[10px] font-semibold hover:bg-white/10 transition-colors"
+              style={{ color: scheduledJump.color }}
+            >
+              Cancelar ✕
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-4">
           {/* Buttons */}
           <div className="flex items-center gap-2">
