@@ -574,15 +574,22 @@ export default function MultitracksPlayerPage() {
     if (isPlaying) { stopAll(); playAll(t); }
   };
 
-  // Clique no waveform
-  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>, stemIdx: number) => {
+  // Calcula o tempo real considerando zoom e scroll
+  const getTimeFromClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    const t = ratio * duration;
+    // Compensar zoom e scroll
+    const scrollOffset = scrollLeft * (zoom - 1) / zoom;
+    return Math.max(0, Math.min(duration, (ratio / zoom + scrollOffset) * duration));
+  }, [zoom, scrollLeft, duration]);
+
+  // Clique no waveform
+  const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const t = getTimeFromClick(e);
     offsetRef.current = t;
     setCurrentTime(t);
     if (isPlaying) { stopAll(); playAll(t); }
-  };
+  }, [getTimeFromClick, isPlaying, stopAll, playAll]);
 
   // Atualizar gains e pan em tempo real
   useEffect(() => {
@@ -883,19 +890,34 @@ export default function MultitracksPlayerPage() {
               <PanKnob value={stem.pan} onChange={(v) => updateStem(i, { pan: v })} />
             </div>
 
-            {/* Waveform */}
-            <div className="flex-1 cursor-pointer py-1 pr-3 relative"
-              onClick={(e) => { e.stopPropagation(); handleWaveformClick(e, i); }}>
-              {stem.loading ? (
-                <div className="h-12 flex items-center px-2">
-                  <div className="h-1 w-full rounded bg-muted animate-pulse" />
-                </div>
-              ) : stem.waveformData ? (
-                <WaveformBar data={stem.waveformData} progress={progress} color={stem.color} />
-              ) : (
-                <div className="h-12 flex items-center px-2">
-                  <div className="h-1 w-full rounded" style={{ backgroundColor: stem.color + "40" }} />
-                </div>
+            {/* Waveform com zoom */}
+            <div className="flex-1 relative overflow-hidden py-1 pr-3 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); handleWaveformClick(e); }}>
+              {/* Container escalado pelo zoom */}
+              <div
+                className="absolute inset-y-1 right-3"
+                style={{
+                  width: `${zoom * 100}%`,
+                  transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)`,
+                  pointerEvents: "none",
+                }}
+              >
+                {stem.loading ? (
+                  <div className="h-full flex items-center px-2">
+                    <div className="h-1 w-full rounded bg-muted animate-pulse" />
+                  </div>
+                ) : stem.waveformData ? (
+                  <WaveformBar data={stem.waveformData} progress={zoom > 1 ? (currentTime / duration * zoom - scrollLeft * (zoom - 1)) : progress} color={stem.color} />
+                ) : (
+                  <div className="h-full flex items-center px-2">
+                    <div className="h-1 w-full rounded" style={{ backgroundColor: stem.color + "40" }} />
+                  </div>
+                )}
+              </div>
+              {/* Playhead linha vertical */}
+              {zoom > 1 && (
+                <div className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none"
+                  style={{ left: `${Math.max(0, Math.min(100, (currentTime / duration * zoom - scrollLeft * (zoom - 1)) * 100))}%` }} />
               )}
             </div>
           </div>
