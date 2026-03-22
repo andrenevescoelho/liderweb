@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,7 +135,18 @@ export default function AdminPage() {
   const { data: session, status } = useSession() || {};
   const sessionUser = session?.user as SessionUser | undefined;
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("groups");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const tab = searchParams?.get("tab");
+    if (tab === "users" || tab === "subscriptions" || tab === "groups") return tab;
+    return "groups";
+  });
+
+  // Sincronizar com mudanças na URL
+  useEffect(() => {
+    const tab = searchParams?.get("tab");
+    if (tab === "users" || tab === "subscriptions" || tab === "groups") setActiveTab(tab);
+  }, [searchParams]);
 
   // Groups state
   const [groups, setGroups] = useState<Group[]>([]);
@@ -552,56 +563,35 @@ export default function AdminPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Shield className="h-6 w-6" />
-            Administração
+            <Shield className="h-6 w-6 text-primary" />
+            {activeTab === "groups" ? "Grupos" : activeTab === "users" ? "Membros" : "Assinaturas"}
           </h1>
-          <p className="text-muted-foreground">Gerencie grupos e usuários do sistema</p>
+          <p className="text-muted-foreground text-sm">
+            {activeTab === "groups" ? "Gerencie os grupos da plataforma" : activeTab === "users" ? "Gerencie os usuários da plataforma" : "Gerencie assinaturas e planos"}
+          </p>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-border">
-        <nav className="flex gap-4 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("groups")}
-            className={`pb-2 px-1 font-medium transition-colors border-b-2 whitespace-nowrap ${
-              activeTab === "groups"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Building2 className="h-4 w-4 inline-block mr-2" />
-            Grupos ({groups.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("users")}
-            className={`pb-2 px-1 font-medium transition-colors border-b-2 whitespace-nowrap ${
-              activeTab === "users"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Users className="h-4 w-4 inline-block mr-2" />
-            Usuários ({users.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("subscriptions")}
-            className={`pb-2 px-1 font-medium transition-colors border-b-2 whitespace-nowrap ${
-              activeTab === "subscriptions"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <CreditCard className="h-4 w-4 inline-block mr-2" />
-            Assinaturas ({subscriptionsData?.stats?.total ?? 0})
-          </button>
-        </nav>
+        {/* Resumo rápido */}
+        <div className="flex gap-3">
+          <div className="rounded-xl border border-border bg-card px-4 py-2 text-center">
+            <p className="text-2xl font-bold text-primary">{groups.length}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Grupos</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card px-4 py-2 text-center">
+            <p className="text-2xl font-bold text-primary">{subscriptionsData?.stats?.active ?? "—"}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ativos</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card px-4 py-2 text-center">
+            <p className="text-2xl font-bold text-primary">{subscriptionsData?.stats?.total ?? "—"}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
+          </div>
+        </div>
       </div>
 
       {/* Groups Tab */}
       {activeTab === "groups" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">{groups.length} grupo{groups.length !== 1 ? "s" : ""} cadastrado{groups.length !== 1 ? "s" : ""}</p>
             <Button onClick={() => handleOpenGroupModal()}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Grupo
@@ -611,76 +601,61 @@ export default function AdminPage() {
           {groups.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
-                <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <Building2 className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <p>Nenhum grupo cadastrado</p>
-                <p className="text-sm">Crie o primeiro grupo para começar</p>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {groups.map((group) => {
                 const admin = group.users.find((u) => u.role === "ADMIN");
+                const sub = (group as any).subscription;
                 return (
-                  <Card key={group.id}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <Building2 className="h-5 w-5" />
-                            {group.name}
-                          </CardTitle>
-                          {group.description && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {group.description}
-                            </p>
+                  <Card key={group.id} className={`transition-all hover:shadow-md ${!group.active ? "opacity-50" : ""}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Building2 className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate">{group.name}</p>
+                            {admin && <p className="text-xs text-muted-foreground truncate">{admin.name}</p>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <Badge variant={group.active ? "success" : "danger"} className="text-[10px]">
+                            {group.active ? "Ativo" : "Inativo"}
+                          </Badge>
+                          {sub?.plan?.name && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                              {sub.plan.name}
+                            </span>
                           )}
                         </div>
-                        <Badge variant={group.active ? "success" : "danger"}>
-                          {group.active ? "Ativo" : "Inativo"}
-                        </Badge>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-2 text-sm mb-4">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Users className="h-4 w-4" />
-                          {group._count.users} membros
-                        </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Music className="h-4 w-4" />
-                          {group._count.songs} músicas
-                        </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <ListMusic className="h-4 w-4" />
-                          {group._count.setlists} setlists
-                        </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          {group._count.schedules} escalas
-                        </div>
+
+                      <div className="grid grid-cols-4 gap-1 mb-3">
+                        {[
+                          { icon: <Users className="h-3 w-3" />, val: group._count.users, label: "membros" },
+                          { icon: <Music className="h-3 w-3" />, val: group._count.songs, label: "músicas" },
+                          { icon: <ListMusic className="h-3 w-3" />, val: group._count.setlists, label: "sets" },
+                          { icon: <Calendar className="h-3 w-3" />, val: group._count.schedules, label: "escalas" },
+                        ].map((stat) => (
+                          <div key={stat.label} className="rounded-lg bg-muted/50 px-2 py-1.5 text-center">
+                            <div className="flex justify-center text-muted-foreground mb-0.5">{stat.icon}</div>
+                            <p className="text-sm font-bold">{stat.val}</p>
+                            <p className="text-[9px] text-muted-foreground">{stat.label}</p>
+                          </div>
+                        ))}
                       </div>
-                      {admin && (
-                        <div className="text-sm border-t pt-2">
-                          <span className="text-muted-foreground">Admin:</span>{" "}
-                          <span className="font-medium">{admin.name}</span>
-                        </div>
-                      )}
-                      <div className="flex gap-2 mt-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => handleOpenGroupModal(group)}
-                        >
-                          <Pencil className="h-4 w-4 mr-1" />
-                          Editar
+
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleOpenGroupModal(group)}>
+                          <Pencil className="h-3.5 w-3.5 mr-1" />Editar
                         </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => handleDeleteGroup(group.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
+                        <Button variant="danger" size="sm" onClick={() => handleDeleteGroup(group.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </CardContent>
@@ -695,16 +670,13 @@ export default function AdminPage() {
       {/* Users Tab */}
       {activeTab === "users" && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4 justify-between">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome ou email..."
                 value={userSearch}
-                onChange={(e) => {
-                  setUserSearch(e.target.value);
-                  fetchUsers(e.target.value);
-                }}
+                onChange={(e) => { setUserSearch(e.target.value); fetchUsers(e.target.value); }}
                 className="pl-10"
               />
             </div>
@@ -716,84 +688,78 @@ export default function AdminPage() {
 
           {loadingUsers ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : users.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
-                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <p>Nenhum usuário encontrado</p>
               </CardContent>
             </Card>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 font-medium">Nome</th>
-                    <th className="text-left py-3 px-4 font-medium">Email</th>
-                    <th className="text-left py-3 px-4 font-medium">Função</th>
-                    <th className="text-left py-3 px-4 font-medium">Grupo</th>
-                    <th className="text-right py-3 px-4 font-medium">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b border-border hover:bg-muted/50">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-sm font-medium text-primary">
-                              {user.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <span className="font-medium">{user.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">{user.email}</td>
-                      <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
-                      <td className="py-3 px-4">
-                        {user.group ? (
-                          <span className="flex items-center gap-1">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                            {user.group.name}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2 justify-end">
-                          {user.id !== sessionUser?.id && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenUserModal(user)}
-                                title="Editar usuário"
-                              >
-                                <UserCog className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteUser(user.id)}
-                                title="Excluir usuário"
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </>
-                          )}
-                          {user.id === sessionUser?.id && (
-                            <span className="text-xs text-muted-foreground italic">Você</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Usuário</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Função</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Grupo</th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {users.map((user) => (
+                        <tr key={user.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <span className="text-sm font-bold text-primary">
+                                  {user.name.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{user.name}</p>
+                                <p className="text-xs text-muted-foreground">{user.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
+                          <td className="py-3 px-4">
+                            {user.group ? (
+                              <div className="flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="text-sm">{user.group.name}</span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">Sem grupo</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-1 justify-end">
+                              {user.id !== sessionUser?.id ? (
+                                <>
+                                  <Button variant="ghost" size="sm" onClick={() => handleOpenUserModal(user)} title="Editar">
+                                    <UserCog className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(user.id)} title="Excluir">
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic px-2">Você</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
@@ -803,49 +769,21 @@ export default function AdminPage() {
         <div className="space-y-6">
           {/* Stats Cards */}
           {subscriptionsData?.stats && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
-                <CardContent className="p-4 text-center">
-                  <CheckCircle className="h-6 w-6 mx-auto mb-1 opacity-80" />
-                  <p className="text-2xl font-bold">{subscriptionsData.stats.active}</p>
-                  <p className="text-xs opacity-80">Ativos</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-                <CardContent className="p-4 text-center">
-                  <Clock className="h-6 w-6 mx-auto mb-1 opacity-80" />
-                  <p className="text-2xl font-bold">{subscriptionsData.stats.trialing}</p>
-                  <p className="text-xs opacity-80">Em Teste</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white">
-                <CardContent className="p-4 text-center">
-                  <AlertTriangle className="h-6 w-6 mx-auto mb-1 opacity-80" />
-                  <p className="text-2xl font-bold">{subscriptionsData.stats.pastDue}</p>
-                  <p className="text-xs opacity-80">Pag. Pendente</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white">
-                <CardContent className="p-4 text-center">
-                  <XCircle className="h-6 w-6 mx-auto mb-1 opacity-80" />
-                  <p className="text-2xl font-bold">{subscriptionsData.stats.canceled}</p>
-                  <p className="text-xs opacity-80">Cancelados</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-gray-500 to-gray-600 text-white">
-                <CardContent className="p-4 text-center">
-                  <Building2 className="h-6 w-6 mx-auto mb-1 opacity-80" />
-                  <p className="text-2xl font-bold">{subscriptionsData.stats.noSubscription}</p>
-                  <p className="text-xs opacity-80">Sem Plano</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                <CardContent className="p-4 text-center">
-                  <Crown className="h-6 w-6 mx-auto mb-1 opacity-80" />
-                  <p className="text-2xl font-bold">{subscriptionsData.stats.total}</p>
-                  <p className="text-xs opacity-80">Total</p>
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { icon: <CheckCircle className="h-5 w-5" />, val: subscriptionsData.stats.active, label: "Ativos", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
+                { icon: <Clock className="h-5 w-5" />, val: subscriptionsData.stats.trialing, label: "Em Teste", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
+                { icon: <AlertTriangle className="h-5 w-5" />, val: subscriptionsData.stats.pastDue, label: "Pag. Pendente", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
+                { icon: <XCircle className="h-5 w-5" />, val: subscriptionsData.stats.canceled, label: "Cancelados", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
+                { icon: <Building2 className="h-5 w-5" />, val: subscriptionsData.stats.noSubscription, label: "Sem Plano", color: "text-muted-foreground", bg: "bg-muted/50 border-border" },
+                { icon: <Crown className="h-5 w-5" />, val: subscriptionsData.stats.total, label: "Total", color: "text-primary", bg: "bg-primary/10 border-primary/20" },
+              ].map((s) => (
+                <div key={s.label} className={`rounded-xl border p-4 text-center ${s.bg}`}>
+                  <div className={`flex justify-center mb-1 ${s.color}`}>{s.icon}</div>
+                  <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{s.label}</p>
+                </div>
+              ))}
             </div>
           )}
 
