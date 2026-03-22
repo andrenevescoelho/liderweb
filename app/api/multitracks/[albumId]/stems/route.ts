@@ -49,6 +49,7 @@ export async function GET(
         coverUrl: rental.album.coverUrl,
       },
       stems: stemsWithUrls,
+      markers: (rental.album as any).markers ?? [],
       expiresAt: rental.expiresAt,
     });
   } catch (err) {

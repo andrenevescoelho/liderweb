@@ -104,6 +104,8 @@ export const PERMISSIONS: PermissionDefinition[] = [
   { key: "technical.multitrack.upload", label: "Upload de multitrack", category: "technical", premium: true },
   { key: "technical.multitrack.download", label: "Download de multitrack", category: "technical", premium: true },
   { key: "technical.playback.library.manage", label: "Gerenciar biblioteca de playback", category: "technical", premium: true },
+  { key: "multitrack.view", label: "Visualizar catálogo de multitracks", category: "technical", premium: true },
+  { key: "multitrack.rent", label: "Alugar multitracks", category: "technical", premium: true },
   { key: "technical.multitrack.link", label: "Vincular música ao Multitrack Gospel", category: "technical", premium: true },
   { key: "technical.bpm.change", label: "Alterar BPM", category: "technical", premium: true },
   { key: "technical.guide.download", label: "Baixar guia individual", category: "technical", premium: true },

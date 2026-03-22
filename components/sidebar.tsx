@@ -93,7 +93,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       items: [
         { label: "Músicas", href: "/songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.musicas > 0 ? String(badges.musicas) : undefined },
         { label: "Metrônomo", href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
-        { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "NOVO" },
+        { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
       ],
     },
