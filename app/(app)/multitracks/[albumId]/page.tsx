@@ -241,7 +241,32 @@ export default function MultitracksPlayerPage() {
   const [scheduledJump, setScheduledJump] = useState<{ markerIndex: number; label: string; color: string } | null>(null);
   const scheduledJumpRef = useRef<{ markerIndex: number; sectionEndTime: number } | null>(null);
   const waveformAreaRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [editingMarker, setEditingMarker] = useState<number | null>(null);
+  const [editingMarkerTime, setEditingMarkerTime] = useState<string>("");
+  const [zoom, setZoom] = useState(1);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [shortcuts, setShortcuts] = useState<Record<number, string>>({});
+  const [recordingShortcut, setRecordingShortcut] = useState<number | null>(null);
+  const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
+  const [draggingMarker, setDraggingMarker] = useState<number | null>(null);
+  const shortcutsRef = useRef<Record<number, string>>({});
+
+  // Carregar atalhos do localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`marker-shortcuts-${albumId}`);
+      if (saved) { const p = JSON.parse(saved); setShortcuts(p); shortcutsRef.current = p; }
+    } catch {}
+  }, [albumId]);
+
+  useEffect(() => { shortcutsRef.current = shortcuts; }, [shortcuts]);
+
+  const saveShortcuts = useCallback((newShortcuts: Record<number, string>) => {
+    setShortcuts(newShortcuts);
+    shortcutsRef.current = newShortcuts;
+    try { localStorage.setItem(`marker-shortcuts-${albumId}`, JSON.stringify(newShortcuts)); } catch {}
+  }, [albumId]);
 
   const saveMarkers = useCallback(async (newMarkers: Marker[]) => {
     try {
@@ -452,6 +477,22 @@ export default function MultitracksPlayerPage() {
   // Atalhos de teclado
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      // Modo de gravação de atalho
+      if (recordingShortcut !== null) {
+        e.preventDefault();
+        if (e.code === "Escape") { setRecordingShortcut(null); return; }
+        const key = e.key.toUpperCase();
+        // Remover qualquer atalho existente para essa tecla
+        const cleaned = Object.fromEntries(
+          Object.entries(shortcutsRef.current).filter(([, v]) => v !== key)
+        );
+        const newShortcuts = { ...cleaned, [recordingShortcut]: key };
+        saveShortcuts(newShortcuts);
+        setRecordingShortcut(null);
+        toast(`Atalho "${key}" atribuído a "${markersRef.current[recordingShortcut]?.label}"`, { duration: 2000, icon: "⌨️" });
+        return;
+      }
+
       // Ignorar se estiver em input/textarea
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
 
@@ -468,6 +509,14 @@ export default function MultitracksPlayerPage() {
         case "ArrowRight":
           e.preventDefault();
           { const t = Math.min(duration, currentTime + 5); offsetRef.current = t; setCurrentTime(t); if (isPlaying) { stopAll(); playAll(t); } }
+          break;
+        case "Equal": case "NumpadAdd":
+          e.preventDefault();
+          setZoom((z) => Math.min(8, z * 1.5));
+          break;
+        case "Minus": case "NumpadSubtract":
+          e.preventDefault();
+          setZoom((z) => Math.max(1, z / 1.5));
           break;
         case "KeyM":
           if (selectedStem !== null) updateStem(selectedStem, { muted: !stems[selectedStem]?.muted, solo: false });
@@ -486,7 +535,15 @@ export default function MultitracksPlayerPage() {
           }
           break;
         default:
-          // 1-9 para marcações
+          // Verificar atalhos customizados primeiro
+          const pressedKey = e.key.toUpperCase();
+          const customIdx = Object.entries(shortcutsRef.current).find(([, k]) => k === pressedKey)?.[0];
+          if (customIdx !== undefined) {
+            e.preventDefault();
+            jumpToMarker(parseInt(customIdx));
+            break;
+          }
+          // 1-9 fallback para markers sem atalho customizado
           if (e.code.startsWith("Digit")) {
             e.preventDefault();
             const n = parseInt(e.code.replace("Digit", "")) - 1;
@@ -496,7 +553,7 @@ export default function MultitracksPlayerPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker]);
+  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker, recordingShortcut, saveShortcuts]);
 
   const togglePlay = () => {
     if (isPlaying) { stopAll(); offsetRef.current = currentTime; setIsPlaying(false); }
@@ -609,61 +666,181 @@ export default function MultitracksPlayerPage() {
         </div>
       )}
 
-      {/* Faixa de marcações — alinhada com a waveform */}
+      {/* Faixa de marcações + controles zoom — alinhada com waveform */}
       {markers.length > 0 && (
-        <div className="flex flex-shrink-0 border-b border-border/50 bg-black/20 h-7">
-          {/* Offset igual ao controle lateral */}
-          <div className="flex-shrink-0 w-44" />
-          <div className="flex-shrink-0 w-36" />
-          {/* Área dos markers alinhada com waveform */}
-          <div className="flex-1 relative pr-3" ref={waveformAreaRef}>
-            {markers.map((marker, i) => (
-              <div
-                key={i}
-                className="absolute top-0 bottom-0 flex flex-col items-center"
-                style={{ left: `${(marker.time / duration) * 100}%`, transform: "translateX(-50%)" }}
-              >
-                {/* Pin vertical */}
-                <div className="w-px flex-1 opacity-40" style={{ backgroundColor: marker.color }} />
-                {/* Label clicável/editável */}
-                {editingMarker === i ? (
-                  <input
-                    autoFocus
-                    defaultValue={marker.label}
-                    className="absolute bottom-0 text-[9px] font-semibold px-1 rounded z-10 bg-card border"
-                    style={{ color: marker.color, borderColor: marker.color, width: 80 }}
-                    onBlur={(e) => {
-                      const newLabel = e.target.value.trim() || marker.label;
-                      const updated = markers.map((m, idx) => idx === i ? { ...m, label: newLabel } : m);
-                      setMarkers(updated);
-                      saveMarkers(updated);
-                      setEditingMarker(null);
-                    }}
-                    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditingMarker(null); }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <button
-                    className="absolute bottom-0 text-[9px] font-semibold px-1 py-0.5 rounded whitespace-nowrap transition-all hover:opacity-100"
-                    style={{
-                      backgroundColor: scheduledJump?.markerIndex === i ? marker.color + "55" : marker.color + "25",
-                      color: marker.color,
-                      border: `1px solid ${marker.color}${scheduledJump?.markerIndex === i ? "aa" : "44"}`,
-                      opacity: scheduledJump?.markerIndex === i ? 1 : 0.8,
-                    }}
-                    onClick={(e) => { e.stopPropagation(); jumpToMarker(i); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); setEditingMarker(i); }}
-                    title={`${i + 1}: ${marker.label} — Clique para agendar, duplo clique para editar nome\nArraste para ajustar tempo`}
-                  >
-                    {scheduledJump?.markerIndex === i ? "🔁 " : `${i + 1}. `}{marker.label}
-                  </button>
-                )}
+        <div className="flex-shrink-0 border-b border-border/50 bg-black/20">
+          {/* Barra de controles: zoom + shortcuts */}
+          <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30">
+            <div className="flex-shrink-0 w-44" />
+            <div className="flex-shrink-0 w-36" />
+            <div className="flex-1 flex items-center gap-2">
+              <span className="text-[9px] text-muted-foreground">Zoom:</span>
+              <button onClick={() => setZoom((z) => Math.max(1, z / 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">−</button>
+              <span className="text-[9px] text-muted-foreground tabular-nums w-8 text-center">{zoom.toFixed(1)}x</span>
+              <button onClick={() => setZoom((z) => Math.min(8, z * 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">+</button>
+              {zoom > 1 && (
+                <input type="range" min={0} max={1} step={0.001} value={scrollLeft}
+                  onChange={(e) => setScrollLeft(Number(e.target.value))}
+                  className="w-24 accent-primary h-1 ml-1" title="Scroll" />
+              )}
+              <button onClick={() => { setZoom(1); setScrollLeft(0); }} className="text-[9px] text-muted-foreground hover:text-foreground ml-1">Reset</button>
+              <div className="ml-auto">
+                <button
+                  onClick={() => setShowShortcutsPanel((v) => !v)}
+                  className="text-[9px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-muted-foreground flex items-center gap-1"
+                >
+                  ⌨️ Atalhos {showShortcutsPanel ? "▲" : "▼"}
+                </button>
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* Painel de atalhos */}
+          {showShortcutsPanel && (
+            <div className="flex border-b border-border/30 bg-black/30 overflow-x-auto">
+              <div className="flex-shrink-0 w-44" />
+              <div className="flex-shrink-0 w-36" />
+              <div className="flex-1 flex gap-2 px-2 py-1.5 flex-wrap">
+                {markers.map((marker, i) => (
+                  <div key={i} className="flex items-center gap-1 rounded border border-border/50 px-2 py-0.5 bg-card/50">
+                    <span className="text-[9px] truncate max-w-[60px]" style={{ color: marker.color }}>{marker.label}</span>
+                    <button
+                      onClick={() => setRecordingShortcut(recordingShortcut === i ? null : i)}
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[9px] font-mono font-bold min-w-[20px] text-center transition-colors",
+                        recordingShortcut === i
+                          ? "bg-amber-500 text-black animate-pulse"
+                          : shortcuts[i]
+                          ? "bg-primary/20 text-primary border border-primary/30"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      )}
+                      title={recordingShortcut === i ? "Pressione uma tecla..." : "Clique para definir atalho"}
+                    >
+                      {recordingShortcut === i ? "..." : shortcuts[i] || "+"}
+                    </button>
+                    {shortcuts[i] && (
+                      <button onClick={() => { const n = { ...shortcuts }; delete n[i]; saveShortcuts(n); }}
+                        className="text-[9px] text-muted-foreground hover:text-red-400">✕</button>
+                    )}
+                  </div>
+                ))}
+                <span className="text-[9px] text-muted-foreground self-center">ESC cancela gravação</span>
+              </div>
+            </div>
+          )}
+
+          {/* Faixa dos markers com zoom */}
+          <div className="flex h-8">
+            <div className="flex-shrink-0 w-44" />
+            <div className="flex-shrink-0 w-36" />
+            <div className="flex-1 relative overflow-hidden pr-3" ref={waveformAreaRef}>
+              {/* Container com zoom */}
+              <div className="absolute inset-0" style={{ width: `${zoom * 100}%`, transform: `translateX(-${scrollLeft * (zoom - 1) * 100 / zoom}%)` }}>
+                {markers.map((marker, i) => {
+                  const pct = (marker.time / duration) * 100;
+                  return (
+                    <div
+                      key={i}
+                      className="absolute top-0 bottom-0 flex flex-col items-center"
+                      style={{ left: `${pct}%`, transform: "translateX(-50%)" }}
+                    >
+                      {/* Pin draggable */}
+                      <div
+                        className="w-1 flex-1 cursor-ew-resize opacity-50 hover:opacity-100 transition-opacity"
+                        style={{ backgroundColor: marker.color }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const area = waveformAreaRef.current;
+                          if (!area) return;
+                          setDraggingMarker(i);
+                          const onMove = (ev: MouseEvent) => {
+                            const rect = area.getBoundingClientRect();
+                            const ratio = (ev.clientX - rect.left) / rect.width;
+                            const newTime = Math.max(0, Math.min(duration, (ratio / zoom + scrollLeft * (zoom - 1) / zoom) * duration));
+                            setMarkers((prev) => prev.map((m, idx) => idx === i ? { ...m, time: Math.round(newTime * 10) / 10 } : m));
+                          };
+                          const onUp = () => {
+                            setDraggingMarker(null);
+                            setMarkers((prev) => { saveMarkers(prev); return prev; });
+                            window.removeEventListener("mousemove", onMove);
+                            window.removeEventListener("mouseup", onUp);
+                          };
+                          window.addEventListener("mousemove", onMove);
+                          window.addEventListener("mouseup", onUp);
+                        }}
+                      />
+                      {/* Label */}
+                      <div className="absolute bottom-0 flex flex-col items-center">
+                        {editingMarker === i ? (
+                          <div className="flex gap-1 items-center z-20 bg-card border rounded px-1 py-0.5" style={{ borderColor: marker.color }}
+                            onClick={(e) => e.stopPropagation()}>
+                            <input
+                              autoFocus
+                              defaultValue={marker.label}
+                              className="text-[9px] font-semibold bg-transparent outline-none w-16"
+                              style={{ color: marker.color }}
+                              onBlur={(e) => {
+                                const newLabel = e.target.value.trim() || marker.label;
+                                const updated = markers.map((m, idx) => idx === i ? { ...m, label: newLabel } : m);
+                                setMarkers(updated); saveMarkers(updated); setEditingMarker(null);
+                              }}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditingMarker(null); e.stopPropagation(); }}
+                            />
+                            <span className="text-muted-foreground text-[8px]">|</span>
+                            <input
+                              value={editingMarkerTime}
+                              onChange={(e) => setEditingMarkerTime(e.target.value)}
+                              className="text-[9px] bg-transparent outline-none w-10 text-muted-foreground tabular-nums"
+                              placeholder="0:00"
+                              onBlur={(e) => {
+                                const parts = e.target.value.split(":").map(Number);
+                                const newTime = parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0];
+                                if (!isNaN(newTime) && newTime >= 0 && newTime <= duration) {
+                                  const updated = markers.map((m, idx) => idx === i ? { ...m, time: newTime } : m);
+                                  setMarkers(updated); saveMarkers(updated);
+                                }
+                                setEditingMarker(null);
+                              }}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditingMarker(null); e.stopPropagation(); }}
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            className="text-[9px] font-semibold px-1 py-0.5 rounded whitespace-nowrap transition-all hover:opacity-100 max-w-[80px] truncate"
+                            style={{
+                              backgroundColor: scheduledJump?.markerIndex === i ? marker.color + "55" : marker.color + "22",
+                              color: marker.color,
+                              border: `1px solid ${marker.color}${scheduledJump?.markerIndex === i ? "aa" : "44"}`,
+                              opacity: scheduledJump?.markerIndex === i ? 1 : 0.85,
+                            }}
+                            onClick={(e) => { e.stopPropagation(); jumpToMarker(i); }}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              setEditingMarker(i);
+                              setEditingMarkerTime(formatTime(marker.time));
+                            }}
+                            title={`${shortcuts[i] ? `[${shortcuts[i]}]` : `${i + 1}.`} ${marker.label} — ${formatTime(marker.time)}\nClique: agendar loop | Duplo: editar | Arraste o pin: mover`}
+                          >
+                            {shortcuts[i] ? `[${shortcuts[i]}]` : `${i + 1}.`} {marker.label}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" onWheel={(e) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          if (e.deltaY < 0) setZoom((z) => Math.min(8, z * 1.2));
+          else setZoom((z) => Math.max(1, z / 1.2));
+        }
+      }}>
         {stems.map((stem, i) => (
           <div
             key={i}
@@ -817,9 +994,13 @@ export default function MultitracksPlayerPage() {
           <span><kbd className="rounded bg-muted px-1">←</kbd><kbd className="rounded bg-muted px-1">→</kbd> ±5s</span>
           <span><kbd className="rounded bg-muted px-1">M</kbd> mute</span>
           <span><kbd className="rounded bg-muted px-1">S</kbd> solo</span>
-          {markers.length > 0 && <span><kbd className="rounded bg-muted px-1">1-9</kbd> marcações</span>}
+          <span><kbd className="rounded bg-muted px-1">+</kbd><kbd className="rounded bg-muted px-1">−</kbd> zoom</span>
+          {markers.length > 0 && <span><kbd className="rounded bg-muted px-1">1-9</kbd> markers | <kbd className="rounded bg-muted px-1">⌨️</kbd> customize</span>}
           {selectedStem !== null && (
-            <span className="text-primary/60">Canal selecionado: <span style={{ color: stems[selectedStem]?.color }}>{stems[selectedStem]?.name}</span></span>
+            <span className="text-primary/60">Canal: <span style={{ color: stems[selectedStem]?.color }}>{stems[selectedStem]?.name}</span></span>
+          )}
+          {recordingShortcut !== null && (
+            <span className="text-amber-400 animate-pulse">🎹 Pressione uma tecla para o marker "{markers[recordingShortcut]?.label}"</span>
           )}
         </div>
       </div>
