@@ -98,9 +98,9 @@ export async function POST(req: NextRequest) {
       targetScope,
       targetAudience,
       groupIds,
-      startsAt,
-      expiresAt,
-    },
+      startsAt: startsAt ? startsAt.toISOString() : null,
+      expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    } as any,
     ...context,
   });
 
