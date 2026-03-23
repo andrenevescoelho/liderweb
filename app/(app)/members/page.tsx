@@ -936,8 +936,8 @@ function MemberModal({
                       title={(permission as any).description || permission.label}
                     >
                       {permission.label}
-                      {permission.future ? " (futuro)" : ""}
-                      {permission.premium ? " • premium" : ""}
+                      {(permission as any).future ? " (futuro)" : ""}
+                      {(permission as any).premium ? " • premium" : ""}
                     </button>
                   ))}
                 </div>
