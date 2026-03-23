@@ -1,530 +1,503 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { Grid3x3, Loader2, Usb, ChevronDown } from "lucide-react";
+import { Loader2, Usb, Volume2, Volume1, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
 interface Pad {
   id: string; boardId: string; name: string; position: number;
-  type: "HOLD" | "LOOP" | "ONE_SHOT"; audioUrl: string | null;
-  color: string; volume: number; midiNote: number | null;
-  keyboardKey: string | null; loopSync: boolean;
+  type: "HOLD"|"LOOP"|"ONE_SHOT"; audioUrl: string|null;
+  color: string; volume: number; midiNote: number|null;
+  keyboardKey: string|null; loopSync: boolean;
 }
 interface PadBoard {
-  id: string; name: string; bpm: number | null; musicalKey: string | null;
+  id: string; name: string; bpm: number|null; musicalKey: string|null;
   color: string; cols: number; rows: number; pads: Pad[];
 }
 
-// Knob SVG rotativo
-function Knob({ value, min, max, onChange, color = "#8B5CF6", size = 44, label }: {
-  value: number; min: number; max: number; label: string;
-  onChange: (v: number) => void; color?: string; size?: number;
+const SEMITONES: Record<string,number> = {C:0,"C#":1,Db:1,D:2,"D#":3,Eb:3,E:4,F:5,"F#":6,Gb:6,G:7,"G#":8,Ab:8,A:9,"A#":10,Bb:10,B:11};
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+// Knob VST circular
+function Knob({ value, min, max, onChange, color="#8B5CF6", label, size=56 }: {
+  value:number; min:number; max:number; label:string;
+  onChange:(v:number)=>void; color?:string; size?:number;
 }) {
-  const pct = (value - min) / (max - min);
-  const angle = -140 + pct * 280;
-  const rad = (angle * Math.PI) / 180;
-  const cx = size / 2, cy = size / 2, r = size * 0.38;
-  const dotX = cx + r * 0.7 * Math.cos(rad);
-  const dotY = cy + r * 0.7 * Math.sin(rad);
-  const startRad = (-140 * Math.PI) / 180;
-  const endRad = rad;
-  const largeArc = Math.abs(angle - (-140)) > 180 ? 1 : 0;
-  const arcStart = { x: cx + r * Math.cos(startRad), y: cy + r * Math.sin(startRad) };
-  const arcEnd = { x: cx + r * Math.cos(endRad), y: cy + r * Math.sin(endRad) };
+  const pct = (value-min)/(max-min);
+  const angle = -135 + pct*270;
+  const rad = (angle*Math.PI)/180;
+  const cx=size/2, cy=size/2, r=size*0.37;
+  const dotX=cx+r*0.68*Math.cos(rad), dotY=cy+r*0.68*Math.sin(rad);
+  const startRad=(-135*Math.PI)/180;
+  const asx=cx+r*Math.cos(startRad), asy=cy+r*Math.sin(startRad);
+  const aex=cx+r*Math.cos(rad), aey=cy+r*Math.sin(rad);
+  const largeArc=Math.abs(angle+135)>180?1:0;
+  const dragging=useRef(false), startY=useRef(0), startVal=useRef(value);
 
-  const startY = useRef(0);
-  const startVal = useRef(value);
-  const dragging = useRef(false);
-
-  const onMouseDown = (e: React.MouseEvent) => {
+  const onMD=(e:React.MouseEvent)=>{
     e.preventDefault(); e.stopPropagation();
-    dragging.current = true;
-    startY.current = e.clientY;
-    startVal.current = value;
-    const range = max - min;
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current) return;
-      const delta = (startY.current - ev.clientY) / 120 * range;
-      onChange(Math.max(min, Math.min(max, startVal.current + delta)));
-    };
-    const onUp = () => { dragging.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    dragging.current=true; startY.current=e.clientY; startVal.current=value;
+    const range=max-min;
+    const onMove=(ev:MouseEvent)=>{ if(dragging.current) onChange(Math.max(min,Math.min(max,startVal.current+(startY.current-ev.clientY)/100*range))); };
+    const onUp=()=>{ dragging.current=false; window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp); };
+    window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
   };
-  const onDblClick = (e: React.MouseEvent) => { e.stopPropagation(); onChange((max + min) / 2); };
-
-  const displayVal = label === "Pitch" ? (value > 0 ? `+${value.toFixed(0)}` : value.toFixed(0))
-    : label === "Vol" ? `${Math.round(value * 100)}%`
-    : `${Math.round(pct * 100)}%`;
 
   return (
-    <div className="flex flex-col items-center gap-0.5 select-none" onMouseDown={onMouseDown} onDoubleClick={onDblClick}>
+    <div className="flex flex-col items-center gap-1 select-none" onMouseDown={onMD} onDoubleClick={()=>onChange((max+min)/2)}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="cursor-ns-resize">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={size * 0.07} strokeLinecap="round"
-          strokeDasharray={`${r * 2.44 * 280 / 360} ${r * 2 * Math.PI}`} strokeDashoffset={-r * 2 * Math.PI * 40 / 360}
-          transform={`rotate(-90 ${cx} ${cy})`} />
-        {pct > 0 && (
-          <path d={`M ${arcStart.x} ${arcStart.y} A ${r} ${r} 0 ${largeArc} 1 ${arcEnd.x} ${arcEnd.y}`}
-            fill="none" stroke={color} strokeWidth={size * 0.07} strokeLinecap="round" />
-        )}
-        <circle cx={cx} cy={cy} r={r * 0.6} fill="#1a1f2e" stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-        <circle cx={dotX} cy={dotY} r={size * 0.055} fill={color} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={size*0.09} strokeLinecap="round"/>
+        {pct>0.01&&<path d={`M ${asx} ${asy} A ${r} ${r} 0 ${largeArc} 1 ${aex} ${aey}`} fill="none" stroke={color} strokeWidth={size*0.09} strokeLinecap="round" opacity={0.9}/>}
+        <circle cx={cx} cy={cy} r={r*0.58} fill="#0f1117" stroke="rgba(255,255,255,0.07)" strokeWidth={1}/>
+        <circle cx={dotX} cy={dotY} r={size*0.055} fill={color}/>
+        <circle cx={cx} cy={cy} r={r*0.22} fill={color} opacity={0.3}/>
       </svg>
-      <span className="text-[8px] text-muted-foreground/60 tabular-nums leading-none">{displayVal}</span>
-      <span className="text-[8px] text-muted-foreground/40 leading-none">{label}</span>
+      <span className="text-[9px] text-white/40 uppercase tracking-widest">{label}</span>
     </div>
   );
 }
 
-// Fader vertical
-function Fader({ value, onChange, color }: { value: number; onChange: (v: number) => void; color: string }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
-
-  const getVal = (clientY: number) => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect) return value;
-    return Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height));
-  };
-
+// Waveform animada com visualizer
+function MiniWaveform({ color, playing, intensity=0.5 }: { color:string; playing:boolean; intensity?:number }) {
+  const bars = Array.from({length:40},(_,i)=>0.1+Math.abs(Math.sin(i*0.4+1.2)*Math.sin(i*0.15)*0.7));
   return (
-    <div className="flex flex-col items-center gap-1 h-20">
-      <div ref={trackRef} className="relative w-1.5 flex-1 rounded-full bg-white/5 cursor-pointer"
-        onMouseDown={e => {
-          e.preventDefault(); e.stopPropagation();
-          dragging.current = true;
-          onChange(getVal(e.clientY));
-          const onMove = (ev: MouseEvent) => { if (dragging.current) onChange(getVal(ev.clientY)); };
-          const onUp = () => { dragging.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-          window.addEventListener("mousemove", onMove);
-          window.addEventListener("mouseup", onUp);
-        }}>
-        <div className="absolute bottom-0 left-0 right-0 rounded-full transition-all" style={{ height: `${value * 100}%`, backgroundColor: color + "80" }} />
-        <div className="absolute left-1/2 -translate-x-1/2 w-4 h-2 rounded-sm bg-white/80 shadow-lg cursor-ns-resize"
-          style={{ bottom: `calc(${value * 100}% - 4px)` }} />
-      </div>
-      <span className="text-[8px] text-muted-foreground/50 tabular-nums">{Math.round(value * 100)}</span>
+    <div className="flex items-center gap-0.5 h-full w-full">
+      {bars.map((h,i)=>(
+        <div key={i} className="flex-1 rounded-full transition-all"
+          style={{
+            height:`${(playing ? h*intensity*1.4+0.1 : h*0.3)*100}%`,
+            backgroundColor:color,
+            opacity:playing?0.7:0.25,
+            transition:`height ${0.1+Math.random()*0.2}s ease`,
+          }}/>
+      ))}
     </div>
+  );
+}
+
+// Ícone do pad
+function PadIcon({ name, color, size=40 }: { name:string; color:string; size?:number }) {
+  const n=name.toLowerCase();
+  const s=size;
+  if(n.includes("warm")||n.includes("quente")) return (
+    <svg width={s} height={s} viewBox="0 0 40 40">
+      <circle cx="20" cy="24" r="12" fill={color+"20"} stroke={color} strokeWidth="1.5"/>
+      <path d="M20 10 C20 10 15 17 15 21 C15 25 20 27 20 27 C20 27 25 25 25 21 C25 17 20 10 20 10Z" fill={color} opacity={0.85}/>
+      <circle cx="20" cy="23" r="4" fill={color}/>
+    </svg>
+  );
+  if(n.includes("cinema")||n.includes("epic")||n.includes("drama")) return (
+    <svg width={s} height={s} viewBox="0 0 40 40">
+      <path d="M4 30 Q12 16 20 14 Q28 16 36 30" fill="none" stroke={color} strokeWidth="1.5" opacity={0.5}/>
+      <path d="M2 34 Q12 14 20 10 Q28 14 38 34" fill={color+"15"} stroke={color} strokeWidth="2"/>
+      {[6,12,20,28,34].map((x,i)=><circle key={i} cx={x} cy={30-Math.abs(x-20)*0.3} r="1.5" fill={color}/>)}
+    </svg>
+  );
+  if(n.includes("ambient")||n.includes("atmos")||n.includes("air")||n.includes("sky")) return (
+    <svg width={s} height={s} viewBox="0 0 40 40">
+      <ellipse cx="20" cy="26" rx="14" ry="7" fill={color+"20"} stroke={color} strokeWidth="1.5"/>
+      <ellipse cx="15" cy="22" rx="9" ry="6" fill={color+"25"} stroke={color} strokeWidth="1.5"/>
+      <ellipse cx="25" cy="20" rx="10" ry="7" fill={color+"30"} stroke={color} strokeWidth="1.5"/>
+      <ellipse cx="20" cy="16" rx="8" ry="6" fill={color+"40"} stroke={color} strokeWidth="1.5"/>
+    </svg>
+  );
+  if(n.includes("piano")||n.includes("teclado")||n.includes("keys")) return (
+    <svg width={s} height={s} viewBox="0 0 40 40">
+      <rect x="4" y="14" width="32" height="20" rx="2" fill={color+"15"} stroke={color} strokeWidth="1.5"/>
+      {[0,1,2,3,4].map(i=><line key={i} x1={10+i*5.5} y1="14" x2={10+i*5.5} y2="34" stroke={color} strokeWidth="1" opacity={0.4}/>)}
+      {[0,1,3].map(i=><rect key={i} x={8+i*5.5+(i>1?5.5:0)} y="14" width="3.5" height="13" rx="1" fill={color} opacity={0.8}/>)}
+    </svg>
+  );
+  if(n.includes("string")||n.includes("orquest")||n.includes("violin")) return (
+    <svg width={s} height={s} viewBox="0 0 40 40">
+      <path d="M20 6 Q28 14 28 20 Q28 30 20 34 Q12 30 12 20 Q12 14 20 6Z" fill={color+"20"} stroke={color} strokeWidth="1.5"/>
+      <line x1="20" y1="8" x2="20" y2="32" stroke={color} strokeWidth="1.5"/>
+      <line x1="14" y1="17" x2="26" y2="17" stroke={color} strokeWidth="1.5"/>
+      <line x1="13" y1="24" x2="27" y2="24" stroke={color} strokeWidth="1.5"/>
+    </svg>
+  );
+  return (
+    <svg width={s} height={s} viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="14" fill={color+"15"} stroke={color} strokeWidth="1.5"/>
+      <circle cx="20" cy="20" r="7" fill={color+"30"} stroke={color} strokeWidth="1"/>
+      <circle cx="20" cy="20" r="3" fill={color}/>
+    </svg>
   );
 }
 
 export default function PadsPage() {
   const { data: session, status } = useSession() || {};
   const [boards, setBoards] = useState<PadBoard[]>([]);
-  const [activeBoard, setActiveBoard] = useState<PadBoard | null>(null);
+  const [activeBoard, setActiveBoard] = useState<PadBoard|null>(null);
   const [loading, setLoading] = useState(true);
-  const [activePads, setActivePads] = useState<Set<number>>(new Set());
-  const [selectedPad, setSelectedPad] = useState<number | null>(null);
-  const [midiDevice, setMidiDevice] = useState<string | null>(null);
-  const [midiSupported, setMidiSupported] = useState(false);
-  const [showBoardPicker, setShowBoardPicker] = useState(false);
+  const [currentPad, setCurrentPad] = useState<Pad|null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [pitch, setPitch] = useState(0); // -12 a +12
+  const [bpm, setBpm] = useState(70);
+  const [masterVolume, setMasterVolume] = useState(0.8);
+  const [intensity, setIntensity] = useState(0.7);
+  const [atmosphere, setAtmosphere] = useState(0.3);
+  const [fadeIn, setFadeIn] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
+  const [fadeDuration, setFadeDuration] = useState(2);
+  const [modeCulto, setModeCulto] = useState(false);
+  const [midiDevice, setMidiDevice] = useState<string|null>(null);
 
-  // Controles por pad: vol, cutoff, reverb, pitch, mute
-  const [padControls, setPadControls] = useState<Record<number, {
-    volume: number; cutoff: number; reverb: number; pitch: number; mute: boolean;
-  }>>({});
-  const [globalPitch, setGlobalPitch] = useState(0);
+  const [fx, setFx] = useState({
+    reverb: 0.4, delay: 0.0, filter: 1.0, shimmer: 0.0,
+  });
 
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const buffersRef = useRef<Record<number, AudioBuffer>>({});
-  const sourceNodesRef = useRef<Record<number, AudioBufferSourceNode>>({});
-  const gainNodesRef = useRef<Record<number, GainNode>>({});
-  const filterNodesRef = useRef<Record<number, BiquadFilterNode>>({});
-  const reverbNodesRef = useRef<Record<number, ConvolverNode | GainNode>>({});
-  const reverbGainRef = useRef<Record<number, GainNode>>({});
-  const midiRef = useRef<MIDIAccess | null>(null);
-  const activeBoardRef = useRef<PadBoard | null>(null);
-  const padControlsRef = useRef(padControls);
-  const globalPitchRef = useRef(globalPitch);
+  const audioCtxRef = useRef<AudioContext|null>(null);
+  const buffersRef = useRef<Record<string,AudioBuffer>>({});
+  const sourceRef = useRef<AudioBufferSourceNode|null>(null);
+  const gainRef = useRef<GainNode|null>(null);
+  const masterGainRef = useRef<GainNode|null>(null);
+  const filterRef = useRef<BiquadFilterNode|null>(null);
+  const reverbGainRef = useRef<GainNode|null>(null);
+  const delayGainRef = useRef<GainNode|null>(null);
+  const reverbRef = useRef<ConvolverNode|null>(null);
+  const delayRef = useRef<DelayNode|null>(null);
+  const pitchRef = useRef(0);
+  const fadeInRef = useRef(false);
+  const fadeOutRef = useRef(false);
+  const fadeDurRef = useRef(2);
+  const fxRef = useRef(fx);
+  const masterVolRef = useRef(0.8);
 
-  useEffect(() => { activeBoardRef.current = activeBoard; }, [activeBoard]);
-  useEffect(() => { padControlsRef.current = padControls; }, [padControls]);
-  useEffect(() => { globalPitchRef.current = globalPitch; }, [globalPitch]);
+  useEffect(()=>{pitchRef.current=pitch; if(sourceRef.current) sourceRef.current.playbackRate.value=Math.pow(2,pitch/12);},[pitch]);
+  useEffect(()=>{fadeInRef.current=fadeIn;},[fadeIn]);
+  useEffect(()=>{fadeOutRef.current=fadeOut;},[fadeOut]);
+  useEffect(()=>{fadeDurRef.current=fadeDuration;},[fadeDuration]);
+  useEffect(()=>{fxRef.current=fx; applyFx(fx);},[fx]);
+  useEffect(()=>{masterVolRef.current=masterVolume; if(masterGainRef.current) masterGainRef.current.gain.value=masterVolume;},[masterVolume]);
 
-  const getControl = useCallback((pos: number, pad?: Pad) => ({
-    volume: padControls[pos]?.volume ?? pad?.volume ?? 1,
-    cutoff: padControls[pos]?.cutoff ?? 1,
-    reverb: padControls[pos]?.reverb ?? 0,
-    pitch: padControls[pos]?.pitch ?? 0,
-    mute: padControls[pos]?.mute ?? false,
-  }), [padControls]);
-
-  const updateControl = (pos: number, key: string, val: number | boolean) => {
-    setPadControls(prev => ({ ...prev, [pos]: { ...getControl(pos), [key]: val } }));
-    // Atualizar nó de áudio em tempo real
-    if (key === "volume" && gainNodesRef.current[pos]) {
-      gainNodesRef.current[pos].gain.value = (val as number);
-    }
-    if (key === "cutoff" && filterNodesRef.current[pos]) {
-      const freq = 200 + (val as number) * 18000;
-      filterNodesRef.current[pos].frequency.value = freq;
-    }
-    if (key === "reverb" && reverbGainRef.current[pos]) {
-      reverbGainRef.current[pos].gain.value = (val as number);
-    }
-    if (key === "pitch" && sourceNodesRef.current[pos]) {
-      sourceNodesRef.current[pos].playbackRate.value = Math.pow(2, (globalPitchRef.current + (val as number)) / 12);
-    }
-    if (key === "mute" && gainNodesRef.current[pos]) {
-      gainNodesRef.current[pos].gain.value = val ? 0 : (padControlsRef.current[pos]?.volume ?? 1);
-    }
+  const applyFx=(f:typeof fx)=>{
+    if(reverbGainRef.current) reverbGainRef.current.gain.value=f.reverb;
+    if(delayGainRef.current) delayGainRef.current.gain.value=f.delay;
+    if(filterRef.current) filterRef.current.frequency.value=200+f.filter*15800;
   };
 
-  // Criar impulso de reverb simples
-  const createReverbImpulse = (ctx: AudioContext, duration = 2, decay = 2) => {
-    const rate = ctx.sampleRate;
-    const length = rate * duration;
-    const impulse = ctx.createBuffer(2, length, rate);
-    for (let c = 0; c < 2; c++) {
-      const channel = impulse.getChannelData(c);
-      for (let i = 0; i < length; i++) {
-        channel[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
-      }
-    }
-    return impulse;
+  const createReverbBuf=(ctx:AudioContext)=>{
+    const buf=ctx.createBuffer(2,ctx.sampleRate*4,ctx.sampleRate);
+    for(let c=0;c<2;c++){const ch=buf.getChannelData(c);for(let i=0;i<buf.length;i++)ch[i]=(Math.random()*2-1)*Math.pow(1-i/buf.length,1.5);}
+    return buf;
   };
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    fetch("/api/pads").then(r => r.json()).then(d => {
-      setBoards(d.boards || []);
-      if (d.boards?.length > 0) setActiveBoard(d.boards[0]);
-    }).finally(() => setLoading(false));
-  }, [status]);
+  const initAudio=useCallback(()=>{
+    if(audioCtxRef.current) return;
+    const ctx=new AudioContext();
+    audioCtxRef.current=ctx;
+    const master=ctx.createGain(); master.gain.value=masterVolRef.current; master.connect(ctx.destination); masterGainRef.current=master;
+    const filter=ctx.createBiquadFilter(); filter.type="lowpass"; filter.frequency.value=20000; filter.Q.value=1; filter.connect(master); filterRef.current=filter;
+    const rev=ctx.createConvolver(); rev.buffer=createReverbBuf(ctx); reverbRef.current=rev;
+    const rg=ctx.createGain(); rg.gain.value=fxRef.current.reverb; rg.connect(master); reverbGainRef.current=rg; rev.connect(rg);
+    const del=ctx.createDelay(2); del.delayTime.value=0.35; delayRef.current=del;
+    const dg=ctx.createGain(); dg.gain.value=fxRef.current.delay; dg.connect(master); delayGainRef.current=dg; del.connect(dg);
+  },[]);
 
-  useEffect(() => {
-    if (!activeBoard) return;
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    buffersRef.current = {};
+  useEffect(()=>{
+    if(status!=="authenticated") return;
+    fetch("/api/pads").then(r=>r.json()).then(d=>{
+      const bs=d.boards||[];
+      setBoards(bs);
+      if(bs.length>0){setActiveBoard(bs[0]); if(bs[0].bpm) setBpm(bs[0].bpm);}
+    }).finally(()=>setLoading(false));
+  },[status]);
 
-    activeBoard.pads.forEach(pad => {
-      if (!pad.audioUrl) return;
-      fetch(pad.audioUrl)
-        .then(r => r.arrayBuffer())
-        .then(buf => ctx.decodeAudioData(buf))
-        .then(decoded => { buffersRef.current[pad.position] = decoded; })
-        .catch(err => console.warn(`[pads] Falhou carregar pad ${pad.position}:`, err));
+  useEffect(()=>{
+    if(!activeBoard) return;
+    initAudio();
+    const ctx=audioCtxRef.current!;
+    activeBoard.pads.forEach(pad=>{
+      if(!pad.audioUrl||buffersRef.current[pad.id]) return;
+      fetch(pad.audioUrl).then(r=>r.arrayBuffer()).then(b=>ctx.decodeAudioData(b))
+        .then(decoded=>{buffersRef.current[pad.id]=decoded;})
+        .catch(console.warn);
     });
-  }, [activeBoard?.id]);
+  },[activeBoard?.id,initAudio]);
 
-  useEffect(() => {
-    if (!navigator.requestMIDIAccess) { setMidiSupported(false); return; }
-    setMidiSupported(true);
-    navigator.requestMIDIAccess().then(midi => {
-      midiRef.current = midi;
-      connectMidi(midi);
-      midi.onstatechange = () => connectMidi(midi);
-    }).catch(() => {});
-  }, []);
+  useEffect(()=>{
+    if(!navigator.requestMIDIAccess) return;
+    (navigator as any).requestMIDIAccess().then((midi:any)=>{
+      const inputs=Array.from(midi.inputs.values()) as any[];
+      if(inputs.length) setMidiDevice(inputs[0].name);
+    }).catch(()=>{});
+  },[]);
 
-  const connectMidi = (midi: MIDIAccess) => {
-    const inputs = Array.from(midi.inputs.values());
-    if (!inputs.length) { setMidiDevice(null); return; }
-    setMidiDevice(inputs[0].name || "MIDI");
-    inputs.forEach(inp => { inp.onmidimessage = handleMidi; });
-  };
+  const playPad=useCallback((pad:Pad)=>{
+    const ctx=audioCtxRef.current;
+    if(!ctx){initAudio();setTimeout(()=>playPad(pad),80);return;}
+    if(ctx.state==="suspended") ctx.resume();
+    const buf=buffersRef.current[pad.id];
+    if(!buf){toast.error("Carregando áudio..."); return;}
 
-  const handleMidi = useCallback((e: MIDIMessageEvent) => {
-    const [s, note, vel] = e.data;
-    const cmd = s & 0xf0;
-    const isOn = cmd === 0x90 && vel > 0;
-    const isOff = cmd === 0x80 || (cmd === 0x90 && vel === 0);
-    const isCC = cmd === 0xb0;
-    const board = activeBoardRef.current;
-    if (!board) return;
-    if (isCC) {
-      const pad = board.pads.find(p => p.midiNote === note);
-      if (pad) updateControl(pad.position, "volume", vel / 127);
-      return;
+    if(gainRef.current&&sourceRef.current){
+      const og=gainRef.current, os=sourceRef.current;
+      const dur=fadeOutRef.current?fadeDurRef.current:0.05;
+      og.gain.setValueAtTime(og.gain.value,ctx.currentTime);
+      og.gain.linearRampToValueAtTime(0,ctx.currentTime+dur);
+      setTimeout(()=>{try{os.stop();}catch{}},dur*1000+100);
     }
-    const pad = board.pads.find(p => p.midiNote === note);
-    if (!pad) return;
-    if (isOn) triggerPad(pad, "on");
-    if (isOff && pad.type === "HOLD") triggerPad(pad, "off");
-  }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return;
-      const board = activeBoardRef.current;
-      if (!board) return;
-      const pad = board.pads.find(p => p.keyboardKey?.toLowerCase() === e.key.toLowerCase());
-      if (!pad) return;
-      if (e.type === "keydown" && !e.repeat) triggerPad(pad, "on");
-      if (e.type === "keyup" && pad.type === "HOLD") triggerPad(pad, "off");
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKey);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKey); };
-  }, []);
+    const source=ctx.createBufferSource();
+    source.buffer=buf; source.loop=true;
+    source.playbackRate.value=Math.pow(2,pitchRef.current/12);
 
-  const triggerPad = useCallback((pad: Pad, action: "on" | "off") => {
-    if (!pad.audioUrl) return;
-    const ctx = audioCtxRef.current;
-    if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume();
-    const buf = buffersRef.current[pad.position];
-    if (!buf) { toast.error(`Áudio do pad "${pad.name}" ainda carregando...`); return; }
-    const ctrl = padControlsRef.current[pad.position];
-    if (ctrl?.mute) return;
+    const gain=ctx.createGain();
+    const dur=fadeInRef.current?fadeDurRef.current:0.05;
+    gain.gain.setValueAtTime(0,ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(pad.volume,ctx.currentTime+dur);
 
-    if (pad.type === "LOOP") {
-      if (sourceNodesRef.current[pad.position]) {
-        try { sourceNodesRef.current[pad.position].stop(); } catch {}
-        delete sourceNodesRef.current[pad.position];
-        setActivePads(prev => { const n = new Set(prev); n.delete(pad.position); return n; });
-      } else {
-        playPad(pad, buf, ctx, true);
-        setActivePads(prev => new Set(prev).add(pad.position));
-      }
-    } else if (pad.type === "HOLD") {
-      if (action === "on") { playPad(pad, buf, ctx, true); setActivePads(prev => new Set(prev).add(pad.position)); }
-      else {
-        try { sourceNodesRef.current[pad.position]?.stop(); } catch {}
-        delete sourceNodesRef.current[pad.position];
-        setActivePads(prev => { const n = new Set(prev); n.delete(pad.position); return n; });
-      }
-    } else {
-      playPad(pad, buf, ctx, false);
-      setActivePads(prev => new Set(prev).add(pad.position));
-      setTimeout(() => setActivePads(prev => { const n = new Set(prev); n.delete(pad.position); return n; }), buf.duration * 1000);
-    }
-  }, []);
-
-  const playPad = (pad: Pad, buf: AudioBuffer, ctx: AudioContext, loop: boolean) => {
-    try { sourceNodesRef.current[pad.position]?.stop(); } catch {}
-    const ctrl = padControlsRef.current[pad.position];
-    const vol = ctrl?.volume ?? pad.volume ?? 1;
-    const cutoff = ctrl?.cutoff ?? 1;
-    const reverb = ctrl?.reverb ?? 0;
-    const pitch = ctrl?.pitch ?? 0;
-
-    const source = ctx.createBufferSource();
-    source.buffer = buf;
-    source.loop = loop;
-    source.playbackRate.value = Math.pow(2, (globalPitchRef.current + pitch) / 12);
-
-    // Gain
-    const gain = ctx.createGain();
-    gain.gain.value = vol;
-    gainNodesRef.current[pad.position] = gain;
-
-    // Filter (cutoff)
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 200 + cutoff * 18000;
-    filter.Q.value = 1;
-    filterNodesRef.current[pad.position] = filter;
-
-    // Reverb (convolver)
-    const convolver = ctx.createConvolver();
-    convolver.buffer = createReverbImpulse(ctx);
-    const reverbGain = ctx.createGain();
-    reverbGain.gain.value = reverb;
-    reverbGainRef.current[pad.position] = reverbGain;
-
-    const dryGain = ctx.createGain();
-    dryGain.gain.value = 1;
-
-    // Chain: source → filter → gain → dry + reverb → destination
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(dryGain);
-    gain.connect(convolver);
-    convolver.connect(reverbGain);
-    dryGain.connect(ctx.destination);
-    reverbGain.connect(ctx.destination);
+    const f=fxRef.current;
+    source.connect(gain);
+    gain.connect(filterRef.current!);
+    if(f.reverb>0&&reverbRef.current) gain.connect(reverbRef.current);
+    if(f.delay>0&&delayRef.current) gain.connect(delayRef.current);
 
     source.start();
-    sourceNodesRef.current[pad.position] = source;
-    source.onended = () => { if (!loop) delete sourceNodesRef.current[pad.position]; };
+    sourceRef.current=source; gainRef.current=gain;
+    setCurrentPad(pad); setIsPlaying(true);
+  },[initAudio]);
+
+  const stopPad=useCallback(()=>{
+    const ctx=audioCtxRef.current;
+    if(!ctx||!gainRef.current||!sourceRef.current) return;
+    const g=gainRef.current, s=sourceRef.current;
+    const dur=fadeOutRef.current?fadeDurRef.current:0.05;
+    g.gain.setValueAtTime(g.gain.value,ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0,ctx.currentTime+dur);
+    setTimeout(()=>{try{s.stop();}catch{};sourceRef.current=null;gainRef.current=null;},dur*1000+100);
+    setIsPlaying(false);
+  },[]);
+
+  const pitchToNote=(p:number)=>{
+    const idx=((Math.round(p))%12+12)%12;
+    return NOTE_NAMES[idx];
   };
 
-  if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if(loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
 
-  const board = activeBoard;
-  const totalPads = board ? board.cols * board.rows : 0;
-  const sel = selectedPad !== null ? board?.pads.find(p => p.position === selectedPad) : null;
-  const selCtrl = selectedPad !== null ? getControl(selectedPad, sel ?? undefined) : null;
+  const pads=activeBoard?.pads.filter(p=>p.audioUrl)||[];
 
+  // MODO CULTO — UI minimalista
+  if(modeCulto) return (
+    <div className="fixed inset-0 bg-[#080a0f] flex flex-col" style={{top:64}}>
+      <div className="flex items-center justify-between px-6 py-3 border-b border-white/5">
+        <span className="text-sm font-bold text-white/40">MODO CULTO</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Volume1 className="h-4 w-4 text-white/30"/>
+            <input type="range" min={0} max={1} step={0.01} value={masterVolume}
+              onChange={e=>setMasterVolume(Number(e.target.value))}
+              className="w-28 accent-primary h-1"/>
+            <Volume2 className="h-4 w-4 text-white/50"/>
+          </div>
+          <button onClick={()=>setModeCulto(false)} className="text-xs text-white/30 hover:text-white/60 border border-white/10 rounded-lg px-3 py-1.5">Sair</button>
+        </div>
+      </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Pads grandes */}
+        <div className="flex-1 p-6 grid gap-4" style={{gridTemplateColumns:`repeat(${Math.min(pads.length,3)}, 1fr)`}}>
+          {pads.map(pad=>{
+            const active=currentPad?.id===pad.id&&isPlaying;
+            return (
+              <button key={pad.id}
+                onClick={()=>{setCurrentPad(pad); if(isPlaying&&currentPad?.id!==pad.id) playPad(pad);}}
+                className="relative rounded-3xl flex flex-col items-center justify-center gap-4 transition-all border-2"
+                style={{
+                  background:active?`radial-gradient(circle, ${pad.color}30, ${pad.color}08)`:`radial-gradient(circle, ${pad.color}10, transparent)`,
+                  borderColor:active?pad.color:pad.color+"25",
+                  boxShadow:active?`0 0 60px ${pad.color}40`:undefined,
+                }}>
+                {active&&<div className="absolute inset-0 rounded-3xl animate-pulse opacity-5" style={{backgroundColor:pad.color}}/>}
+                <PadIcon name={pad.name} color={pad.color} size={60}/>
+                <p className="text-lg font-bold" style={{color:active?pad.color:"rgba(255,255,255,0.6)"}}>{pad.name}</p>
+              </button>
+            );
+          })}
+        </div>
+        {/* Pitch + Play */}
+        <div className="w-48 border-l border-white/5 flex flex-col items-center justify-center gap-6 p-6">
+          <div className="flex flex-col items-center gap-2 flex-1">
+            <span className="text-[10px] text-white/30 uppercase tracking-widest">Pitch</span>
+            <div className="flex-1 relative w-10 flex flex-col items-center">
+              <input type="range" min={-12} max={12} step={1} value={pitch}
+                onChange={e=>setPitch(Number(e.target.value))}
+                className="accent-primary" style={{writingMode:"vertical-lr",direction:"rtl",height:"100%",cursor:"pointer"}}/>
+            </div>
+            <div className="text-2xl font-black" style={{color:pitch!==0?"#8B5CF6":"rgba(255,255,255,0.3)"}}>
+              {pitch>0?`+${pitch}`:pitch}
+            </div>
+          </div>
+          <button onClick={()=>{if(currentPad){isPlaying?stopPad():playPad(currentPad);}}}
+            disabled={!currentPad}
+            className={cn("w-full py-5 rounded-2xl text-xl font-black border-2 transition-all",
+              isPlaying?"bg-red-500/20 border-red-500/50 text-red-400":"bg-primary/20 border-primary/50 text-primary",
+              !currentPad&&"opacity-20")}>
+            {isPlaying?"■":"▶"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // MODO NORMAL
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-background overflow-hidden">
+    <div className="flex h-[calc(100vh-64px)] bg-[#0b0d12] overflow-hidden">
 
-      {/* Header compacto */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50 flex-shrink-0">
-        <Grid3x3 className="h-5 w-5 text-primary flex-shrink-0" />
+      {/* GRID DE PADS (CENTRO - FOCO) */}
+      <div className="flex-1 flex flex-col p-5 gap-4 overflow-hidden">
 
-        {/* Board picker */}
-        {boards.length > 0 ? (
-          <div className="relative">
-            <button onClick={() => setShowBoardPicker(v => !v)}
-              className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-sm font-medium hover:bg-muted/80">
-              <span style={{ color: board?.color }}>{board?.name || "Selecionar board"}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        {/* Mini header */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <span className="text-sm font-black text-white/70">LIDERWEB</span>
+          <span className="text-sm font-semibold text-primary">Worship Pads</span>
+          {midiDevice&&<div className="flex items-center gap-1 text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-2 py-1"><Usb className="h-3 w-3"/>{midiDevice}</div>}
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={()=>setModeCulto(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary px-3 py-1.5 text-xs font-bold hover:bg-primary/20 transition-all">
+              <Zap className="h-3.5 w-3.5"/>Modo Culto
             </button>
-            {showBoardPicker && (
-              <div className="absolute top-full left-0 mt-1 z-50 rounded-xl border border-border bg-popover p-1 shadow-xl min-w-[160px]">
-                {boards.map(b => (
-                  <button key={b.id} onClick={() => { setActiveBoard(b); setShowBoardPicker(false); setPadControls({}); setActivePads(new Set()); setSelectedPad(null); }}
-                    className={cn("w-full text-left rounded-lg px-3 py-2 text-sm hover:bg-muted", b.id === board?.id && "bg-muted")}>
-                    <span style={{ color: b.color }}>{b.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-        ) : (
-          <span className="text-sm text-muted-foreground">Nenhum board disponível</span>
-        )}
+        </div>
 
-        {board?.bpm && <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono"><span className="text-primary font-bold">{board.bpm}</span> BPM</span>}
-        {board?.musicalKey && <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono font-bold">{board.musicalKey}</span>}
+        {/* BPM + Volume master */}
+        <div className="flex items-center gap-4 flex-shrink-0 bg-white/3 rounded-2xl px-4 py-2.5 border border-white/5">
+          <span className="text-xs font-bold text-white/30 uppercase tracking-widest">BPM</span>
+          <button onClick={()=>setBpm(v=>Math.max(40,v-1))} className="w-6 h-6 rounded-lg bg-white/5 text-white/40 hover:bg-white/10 text-sm flex items-center justify-center">−</button>
+          <span className="text-lg font-black text-white tabular-nums w-10 text-center">{bpm}</span>
+          <button onClick={()=>setBpm(v=>Math.min(200,v+1))} className="w-6 h-6 rounded-lg bg-white/5 text-white/40 hover:bg-white/10 text-sm flex items-center justify-center">+</button>
+          <div className="w-px h-5 bg-white/10 mx-1"/>
+          <Volume1 className="h-3.5 w-3.5 text-white/30"/>
+          <input type="range" min={0} max={1} step={0.01} value={masterVolume}
+            onChange={e=>setMasterVolume(Number(e.target.value))}
+            className="w-32 accent-primary h-1"/>
+          <Volume2 className="h-3.5 w-3.5 text-white/50"/>
+          <span className="text-xs text-white/30 tabular-nums">{Math.round(masterVolume*100)}%</span>
+        </div>
 
-        <div className="ml-auto flex items-center gap-3">
-          {/* Pitch global */}
-          <div className="flex items-center gap-1 rounded-lg border border-border px-2 py-1">
-            <span className="text-[10px] text-muted-foreground">Tom</span>
-            <button onClick={() => setGlobalPitch(v => Math.max(-6, v - 1))} className="w-5 h-5 rounded bg-muted text-xs text-muted-foreground hover:text-foreground flex items-center justify-center">−</button>
-            <span className={cn("text-xs font-bold tabular-nums w-6 text-center", globalPitch > 0 ? "text-emerald-400" : globalPitch < 0 ? "text-amber-400" : "text-muted-foreground")}>
-              {globalPitch > 0 ? `+${globalPitch}` : globalPitch}
+        {/* GRID PRINCIPAL */}
+        <div className="flex-1 grid gap-3 overflow-hidden" style={{gridTemplateColumns:`repeat(${Math.min(pads.length,activeBoard?.cols||4)},1fr)`,gridTemplateRows:`repeat(${Math.ceil(pads.length/(activeBoard?.cols||4))},1fr)`}}>
+          {pads.length===0?(
+            <div className="col-span-4 flex items-center justify-center text-white/20 text-sm">Nenhum timbre cadastrado.</div>
+          ):pads.map(pad=>{
+            const active=currentPad?.id===pad.id&&isPlaying;
+            const selected=currentPad?.id===pad.id;
+            return (
+              <button key={pad.id}
+                onClick={()=>{setCurrentPad(pad); if(isPlaying) playPad(pad);}}
+                className={cn("relative rounded-2xl flex flex-col items-center justify-center gap-2 border-2 transition-all hover:scale-[1.02]",active&&"scale-[0.97] hover:scale-[0.97]")}
+                style={{
+                  background:active
+                    ?`radial-gradient(ellipse at 50% 40%, ${pad.color}35, ${pad.color}08 70%)`
+                    :selected
+                    ?`radial-gradient(ellipse at 50% 40%, ${pad.color}18, transparent 70%)`
+                    :"rgba(255,255,255,0.02)",
+                  borderColor:active?pad.color:selected?pad.color+"55":"rgba(255,255,255,0.06)",
+                  boxShadow:active?`0 0 40px ${pad.color}35, inset 0 1px 0 ${pad.color}40`:selected?`0 0 20px ${pad.color}15`:"none",
+                }}>
+                {active&&<div className="absolute inset-0 rounded-2xl animate-pulse opacity-[0.07]" style={{backgroundColor:pad.color}}/>}
+                {/* Glow ring quando ativo */}
+                {active&&<div className="absolute inset-[-2px] rounded-2xl animate-pulse" style={{border:`1px solid ${pad.color}60`,opacity:0.5}}/>}
+                <PadIcon name={pad.name} color={pad.color} size={44}/>
+                <p className="text-sm font-bold text-center px-2 leading-tight" style={{color:active?pad.color:selected?"rgba(255,255,255,0.75)":"rgba(255,255,255,0.4)"}}>{pad.name}</p>
+                {active&&(
+                  <div className="flex gap-0.5 items-end h-3 px-2">
+                    {[0.4,0.9,0.6,1,0.5,0.8,0.3].map((h,i)=>(
+                      <div key={i} className="flex-1 rounded-full" style={{height:`${h*100}%`,backgroundColor:pad.color,opacity:0.8,animation:`pulse ${0.6+i*0.1}s ease-in-out infinite alternate`,animationDelay:`${i*0.08}s`}}/>
+                    ))}
+                  </div>
+                )}
+                {selected&&!active&&<span className="text-[8px] text-white/20">● selecionado</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* PLAYER MINI */}
+        <div className="flex-shrink-0 flex items-center gap-4 bg-white/3 rounded-2xl border border-white/5 px-4 py-3">
+          <div className="flex flex-col">
+            <span className="text-[9px] text-white/30 uppercase tracking-widest">Tocando</span>
+            <span className="text-sm font-semibold" style={{color:currentPad?.color||"rgba(255,255,255,0.3)"}}>
+              {currentPad?.name||"—"}
             </span>
-            <button onClick={() => setGlobalPitch(v => Math.min(6, v + 1))} className="w-5 h-5 rounded bg-muted text-xs text-muted-foreground hover:text-foreground flex items-center justify-center">+</button>
           </div>
-
-          {/* MIDI status */}
-          <div className={cn("flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px]",
-            midiDevice ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-border text-muted-foreground")}>
-            <Usb className="h-3 w-3" />
-            {midiDevice || (midiSupported ? "Sem MIDI" : "MIDI indisponível")}
+          <div className="flex-1 h-8 rounded-lg overflow-hidden bg-black/20 px-2 py-1">
+            <MiniWaveform color={currentPad?.color||"#444"} playing={isPlaying} intensity={intensity}/>
           </div>
+          {/* Play/Stop */}
+          <button onClick={()=>{if(!currentPad){toast.error("Selecione um timbre");return;} isPlaying?stopPad():playPad(currentPad);}}
+            className={cn("rounded-xl px-6 py-2.5 font-black text-sm border-2 transition-all whitespace-nowrap",
+              isPlaying?"bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25":"bg-primary/15 border-primary/40 text-primary hover:bg-primary/25",
+              !currentPad&&"opacity-30 cursor-not-allowed")}>
+            {isPlaying?"■ STOP":"▶ PLAY"}
+          </button>
+          {/* Fade toggles */}
+          <button onClick={()=>setFadeIn(v=>!v)}
+            className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-all",
+              fadeIn?"border-primary/40 bg-primary/15 text-primary":"border-white/10 text-white/30 hover:text-white/50")}>
+            ↑ FI
+          </button>
+          <button onClick={()=>setFadeOut(v=>!v)}
+            className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-all",
+              fadeOut?"border-primary/40 bg-primary/15 text-primary":"border-white/10 text-white/30 hover:text-white/50")}>
+            ↓ FO
+          </button>
+          <select value={fadeDuration} onChange={e=>setFadeDuration(Number(e.target.value))}
+            className="rounded-lg bg-white/5 border border-white/10 text-white/40 text-[10px] px-2 py-1.5">
+            {[1,2,3,5,8,10].map(v=><option key={v} value={v}>{v}s</option>)}
+          </select>
         </div>
       </div>
 
-      {/* Grid de pads — área principal */}
-      {board && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid gap-3 h-full" style={{ gridTemplateColumns: `repeat(${board.cols}, 1fr)`, gridTemplateRows: `repeat(${board.rows}, 1fr)` }}>
-            {Array.from({ length: totalPads }).map((_, pos) => {
-              const pad = board.pads.find(p => p.position === pos);
-              const isActive = activePads.has(pos);
-              const isSelected = selectedPad === pos;
-              const ctrl = getControl(pos, pad ?? undefined);
-              const hasAudio = !!pad?.audioUrl;
+      {/* PAINEL DIREITO — Controles */}
+      <div className="w-52 border-l border-white/5 flex flex-col gap-0 bg-black/20">
 
-              return (
-                <button
-                  key={pos}
-                  onMouseDown={e => { e.preventDefault(); if (hasAudio && pad) triggerPad(pad, "on"); setSelectedPad(pos); }}
-                  onMouseUp={() => pad?.type === "HOLD" && triggerPad(pad!, "off")}
-                  onMouseLeave={() => pad?.type === "HOLD" && isActive && triggerPad(pad!, "off")}
-                  onTouchStart={e => { e.preventDefault(); if (hasAudio && pad) { triggerPad(pad, "on"); setSelectedPad(pos); } }}
-                  onTouchEnd={() => pad?.type === "HOLD" && triggerPad(pad!, "off")}
-                  className={cn(
-                    "relative rounded-2xl border-2 flex flex-col items-center justify-center transition-all select-none min-h-[80px]",
-                    hasAudio ? "cursor-pointer" : "opacity-15 cursor-default border-dashed border-white/10",
-                    isActive && "scale-95",
-                    isSelected && hasAudio && "ring-2 ring-white/30 ring-offset-1 ring-offset-background",
-                    ctrl.mute && "opacity-30",
-                  )}
-                  style={hasAudio ? {
-                    backgroundColor: isActive ? pad!.color + "40" : pad!.color + "12",
-                    borderColor: isSelected ? pad!.color : isActive ? pad!.color + "80" : pad!.color + "35",
-                    boxShadow: isActive ? `0 0 24px ${pad!.color}50, inset 0 0 20px ${pad!.color}15` : "none",
-                  } : {}}
-                >
-                  {hasAudio && (
-                    <>
-                      {/* Tipo */}
-                      <span className="absolute top-2 right-2 text-[9px] font-bold opacity-40" style={{ color: pad!.color }}>
-                        {pad!.type === "LOOP" ? "∞" : pad!.type === "HOLD" ? "⏥" : "▶"}
-                      </span>
-                      {/* Atalhos */}
-                      {(pad!.keyboardKey || pad!.midiNote != null) && (
-                        <div className="absolute top-2 left-2 flex gap-0.5">
-                          {pad!.keyboardKey && <span className="text-[8px] font-bold uppercase px-1 rounded bg-black/40" style={{ color: pad!.color }}>{pad!.keyboardKey}</span>}
-                          {pad!.midiNote != null && <span className="text-[8px] font-bold px-1 rounded bg-black/40" style={{ color: pad!.color }}>{pad!.midiNote}</span>}
-                        </div>
-                      )}
-                      {/* Mute indicator */}
-                      {ctrl.mute && <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold text-red-400">MUTE</span>}
-                      {/* Pulso animado */}
-                      {isActive && (
-                        <div className="absolute inset-2 rounded-xl animate-pulse opacity-20" style={{ backgroundColor: pad!.color }} />
-                      )}
-                      {/* Nome */}
-                      <div className="h-3 w-3 rounded-full mb-1.5" style={{ backgroundColor: pad!.color, opacity: isActive ? 1 : 0.6 }} />
-                      <p className="text-xs font-semibold px-2 text-center leading-tight" style={{ color: pad!.color }}>{pad!.name}</p>
-                    </>
-                  )}
-                  {!hasAudio && <span className="text-[10px] text-white/15">{pos + 1}</span>}
-                </button>
-              );
-            })}
+        {/* PITCH SLIDER VERTICAL */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4 border-b border-white/5">
+          <span className="text-[9px] text-white/30 uppercase tracking-widest">Pitch / Tom</span>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 w-full">
+            <div className="text-3xl font-black tabular-nums" style={{color:pitch!==0?"#8B5CF6":"rgba(255,255,255,0.2)"}}>
+              {pitch>0?`+${pitch}`:pitch===0?"0":pitch}
+            </div>
+            <div className="text-xs text-white/30 font-mono">
+              {pitchToNote(pitch)}
+            </div>
+            <div className="flex-1 flex items-center justify-center w-full" style={{minHeight:120}}>
+              <input type="range" min={-12} max={12} step={1} value={pitch}
+                onChange={e=>setPitch(Number(e.target.value))}
+                className="accent-violet-500"
+                style={{writingMode:"vertical-lr",direction:"rtl",height:160,cursor:"pointer"}}/>
+            </div>
+            <button onClick={()=>setPitch(0)} className="text-[9px] text-white/20 hover:text-white/50 border border-white/10 rounded px-2 py-0.5">Reset</button>
           </div>
         </div>
-      )}
 
-      {/* Mixer fixo na parte inferior */}
-      {board && selectedPad !== null && sel && (
-        <div className="flex-shrink-0 border-t border-border/50 bg-card/80 backdrop-blur px-5 py-3">
-          <div className="flex items-center gap-6">
-            {/* Nome do pad selecionado */}
-            <div className="w-24 flex-shrink-0">
-              <div className="h-2 w-2 rounded-full mb-1" style={{ backgroundColor: sel.color }} />
-              <p className="text-xs font-semibold truncate" style={{ color: sel.color }}>{sel.name}</p>
-              <p className="text-[9px] text-muted-foreground">{sel.type === "LOOP" ? "Loop" : sel.type === "HOLD" ? "Hold" : "One Shot"}</p>
+        {/* KNOBS DE EFEITO */}
+        <div className="p-4 space-y-4">
+          <span className="text-[9px] text-white/30 uppercase tracking-widest block">Atmosfera</span>
+          <div className="grid grid-cols-2 gap-4 place-items-center">
+            <Knob value={fx.reverb} min={0} max={1} label="Reverb" color="#8B5CF6"
+              onChange={v=>setFx(p=>({...p,reverb:v}))}/>
+            <Knob value={fx.delay} min={0} max={1} label="Delay" color="#06B6D4"
+              onChange={v=>setFx(p=>({...p,delay:v}))}/>
+            <Knob value={fx.filter} min={0} max={1} label="Cutoff" color="#10B981"
+              onChange={v=>setFx(p=>({...p,filter:v}))}/>
+            <Knob value={fx.shimmer} min={0} max={1} label="Shimmer" color="#F59E0B"
+              onChange={v=>setFx(p=>({...p,shimmer:v}))}/>
+          </div>
+          <div className="space-y-2 pt-1">
+            <div className="flex justify-between">
+              <span className="text-[9px] text-white/30 uppercase tracking-widest">Intensidade</span>
+              <span className="text-[9px] text-white/40">{Math.round(intensity*100)}%</span>
             </div>
-
-            {/* Fader de volume */}
-            <div className="flex flex-col items-center gap-1">
-              <Fader value={selCtrl!.volume} color={sel.color}
-                onChange={v => updateControl(selectedPad, "volume", v)} />
-              <span className="text-[9px] text-muted-foreground">Vol</span>
-            </div>
-
-            <div className="w-px h-12 bg-border/50 flex-shrink-0" />
-
-            {/* Knobs */}
-            <div className="flex items-end gap-4">
-              <Knob value={selCtrl!.cutoff} min={0} max={1} label="Cutoff" color={sel.color}
-                onChange={v => updateControl(selectedPad, "cutoff", v)} />
-              <Knob value={selCtrl!.reverb} min={0} max={1} label="Reverb" color="#06B6D4"
-                onChange={v => updateControl(selectedPad, "reverb", v)} />
-              <Knob value={selCtrl!.pitch} min={-6} max={6} label="Pitch" color="#F59E0B"
-                onChange={v => updateControl(selectedPad, "pitch", Math.round(v))} />
-            </div>
-
-            <div className="w-px h-12 bg-border/50 flex-shrink-0" />
-
-            {/* Mute */}
-            <button
-              onClick={() => updateControl(selectedPad, "mute", !selCtrl!.mute)}
-              className={cn("rounded-xl px-4 py-2 text-xs font-bold transition-all",
-                selCtrl!.mute ? "bg-red-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80")}>
-              MUTE
-            </button>
-
-            {/* Reset */}
-            <button onClick={() => setPadControls(prev => { const n = { ...prev }; delete n[selectedPad]; return n; })}
-              className="text-[10px] text-muted-foreground/40 hover:text-muted-foreground">
-              Reset
-            </button>
-
-            <div className="ml-auto text-[10px] text-muted-foreground/30">
-              Clique num pad para selecionar · Arraste knobs verticalmente · Duplo clique = reset
-            </div>
+            <input type="range" min={0} max={1} step={0.01} value={intensity}
+              onChange={e=>setIntensity(Number(e.target.value))}
+              className="w-full accent-primary h-1"/>
           </div>
         </div>
-      )}
-
-      {/* Dica quando nenhum pad selecionado */}
-      {board && selectedPad === null && (
-        <div className="flex-shrink-0 border-t border-border/30 px-5 py-3 text-center text-[11px] text-muted-foreground/30">
-          Clique num pad para disparar e ver os controles · Alt+Scroll = pitch individual
-        </div>
-      )}
+      </div>
     </div>
   );
 }
