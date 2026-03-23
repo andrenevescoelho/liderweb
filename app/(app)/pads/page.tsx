@@ -31,8 +31,35 @@ export default function PadsPage() {
   const gainNodesRef = useRef<Record<number, GainNode>>({});
   const midiRef = useRef<MIDIAccess | null>(null);
   const activeBoardRef = useRef<PadBoard | null>(null);
+  const pitchRef = useRef(0); // semitons globais
+
+  // pitch em semitons: -6 a +6
+  const [globalPitch, setGlobalPitch] = useState(0);
+  // pitch individual por pad (posição -> semitons)
+  const [padPitches, setPadPitches] = useState<Record<number, number>>({});
+
+  // Notas musicais para exibir o tom resultante
+  const NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const semitoneToNote = (base: string, semis: number): string => {
+    const idx = NOTES.indexOf(base.replace("m","").replace("b","♭").replace("#","#"));
+    if (idx === -1) return base;
+    return NOTES[((idx + semis) % 12 + 12) % 12];
+  };
+
+  // playbackRate para N semitons
+  const semitonesToRate = (semis: number) => Math.pow(2, semis / 12);
 
   useEffect(() => { activeBoardRef.current = activeBoard; }, [activeBoard]);
+
+  // Sync pitchRef e atualizar sources ativos quando pitch muda
+  useEffect(() => {
+    pitchRef.current = globalPitch;
+    // Atualizar playbackRate de todos os sources ativos
+    Object.entries(sourceNodesRef.current).forEach(([pos, source]) => {
+      const padPitch = padPitches[Number(pos)] ?? 0;
+      source.playbackRate.value = semitonesToRate(globalPitch + padPitch);
+    });
+  }, [globalPitch, padPitches]);
 
   // Carregar boards
   useEffect(() => {
@@ -168,6 +195,8 @@ export default function PadsPage() {
     const source = ctx.createBufferSource();
     source.buffer = buf;
     source.loop = loop;
+    const totalPitch = pitchRef.current + (padPitches[pad.position] ?? 0);
+    source.playbackRate.value = semitonesToRate(totalPitch);
     const gain = gainNodesRef.current[pad.position] || ctx.createGain();
     gainNodesRef.current[pad.position] = gain;
     gain.gain.value = pad.volume;
@@ -221,11 +250,36 @@ export default function PadsPage() {
         </div>
       ) : (
         <>
-          {/* Info do board */}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {activeBoard.bpm && <span className="rounded bg-muted px-2 py-0.5 font-mono"><span className="text-primary font-bold">{activeBoard.bpm}</span> BPM</span>}
-            {activeBoard.musicalKey && <span className="rounded bg-muted px-2 py-0.5 font-mono font-bold text-foreground">{activeBoard.musicalKey}</span>}
-            <span>{activeBoard.cols}×{activeBoard.rows} · {activeBoard.pads.filter(p => p.audioUrl).length} pads carregados</span>
+          {/* Info do board + controle de tom */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {activeBoard.bpm && <span className="rounded bg-muted px-2 py-0.5 font-mono"><span className="text-primary font-bold">{activeBoard.bpm}</span> BPM</span>}
+              {activeBoard.musicalKey && (
+                <span className="rounded bg-muted px-2 py-0.5 font-mono font-bold text-foreground">
+                  {globalPitch !== 0
+                    ? semitoneToNote(activeBoard.musicalKey, globalPitch)
+                    : activeBoard.musicalKey}
+                </span>
+              )}
+              <span>{activeBoard.cols}×{activeBoard.rows} · {activeBoard.pads.filter(p => p.audioUrl).length} pads</span>
+            </div>
+
+            {/* Controle global de tom */}
+            <div className="flex items-center gap-1.5 ml-auto rounded-xl border border-border bg-card px-3 py-1.5">
+              <span className="text-[10px] text-muted-foreground font-medium mr-1">Tom:</span>
+              <button onClick={() => setGlobalPitch(v => Math.max(-6, v - 1))}
+                className="h-6 w-6 rounded-lg bg-muted hover:bg-muted/80 text-sm font-bold text-muted-foreground flex items-center justify-center">−</button>
+              <span className={cn("text-sm font-bold tabular-nums w-8 text-center",
+                globalPitch > 0 ? "text-emerald-400" : globalPitch < 0 ? "text-amber-400" : "text-muted-foreground")}>
+                {globalPitch > 0 ? `+${globalPitch}` : globalPitch}
+              </span>
+              <button onClick={() => setGlobalPitch(v => Math.min(6, v + 1))}
+                className="h-6 w-6 rounded-lg bg-muted hover:bg-muted/80 text-sm font-bold text-muted-foreground flex items-center justify-center">+</button>
+              {globalPitch !== 0 && (
+                <button onClick={() => setGlobalPitch(0)}
+                  className="ml-1 text-[10px] text-muted-foreground hover:text-foreground" title="Resetar tom">↺</button>
+              )}
+            </div>
           </div>
 
           {/* Grid de pads */}
@@ -244,6 +298,15 @@ export default function PadsPage() {
                   onMouseLeave={() => pad?.type === "HOLD" && isActive && triggerPad(pad, "off")}
                   onTouchStart={e => { e.preventDefault(); pad && triggerPad(pad, "on"); }}
                   onTouchEnd={() => pad?.type === "HOLD" && triggerPad(pad, "off")}
+                  onWheel={e => {
+                    if (!pad || !e.altKey) return;
+                    e.preventDefault();
+                    setPadPitches(prev => {
+                      const cur = prev[pos] ?? 0;
+                      const next = Math.max(-6, Math.min(6, cur + (e.deltaY < 0 ? 1 : -1)));
+                      return { ...prev, [pos]: next };
+                    });
+                  }}
                   className={cn(
                     "relative aspect-square rounded-2xl border-2 flex flex-col items-center justify-center p-3 text-center transition-all select-none",
                     hasAudio ? "cursor-pointer active:scale-95" : "opacity-20 cursor-not-allowed border-dashed border-border",
@@ -268,6 +331,13 @@ export default function PadsPage() {
                           {pad!.midiNote != null && <span className="text-[8px] font-bold px-1 rounded bg-black/30" style={{ color: pad!.color }}>{pad!.midiNote}</span>}
                         </div>
                       )}
+                      {/* Pitch individual */}
+                      {(padPitches[pos] ?? 0) !== 0 && (
+                        <div className="absolute bottom-2 right-2 text-[8px] font-bold px-1 rounded bg-black/40"
+                          style={{ color: pad!.color }}>
+                          {(padPitches[pos] ?? 0) > 0 ? `+${padPitches[pos]}` : padPitches[pos]}
+                        </div>
+                      )}
                       <div className="h-4 w-4 rounded-full mb-1.5 transition-transform" style={{ backgroundColor: pad!.color, transform: isActive ? "scale(1.3)" : "scale(1)" }} />
                       <p className="text-xs font-semibold leading-tight" style={{ color: isActive ? pad!.color : pad!.color + "cc" }}>{pad!.name}</p>
                     </>
@@ -279,10 +349,11 @@ export default function PadsPage() {
           </div>
 
           {/* Legenda */}
-          <div className="flex items-center gap-4 text-[10px] text-muted-foreground/50 pt-2">
+          <div className="flex items-center gap-4 text-[10px] text-muted-foreground/50 pt-2 flex-wrap">
             <span>▶ One Shot</span>
             <span>∞ Loop (toggle)</span>
             <span>⏥ Hold (segure)</span>
+            <span>Alt+Scroll = pitch por pad</span>
             <span className="ml-auto">Teclado, Mouse ou MIDI</span>
           </div>
         </>
