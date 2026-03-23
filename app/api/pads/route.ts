@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 
-// GET — listar boards (SUPERADMIN vê todos, outros veem os ativos)
+// GET — listar boards com URLs de proxy
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -17,7 +17,16 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ boards });
+  // Substituir audioUrl pela URL do proxy (não expõe R2 diretamente)
+  const boardsWithProxy = boards.map(board => ({
+    ...board,
+    pads: board.pads.map(pad => ({
+      ...pad,
+      audioUrl: pad.r2Key ? `/api/pads/audio?padId=${pad.id}` : null,
+    })),
+  }));
+
+  return NextResponse.json({ boards: boardsWithProxy });
 }
 
 // POST — criar board (SUPERADMIN)

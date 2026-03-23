@@ -114,9 +114,12 @@ export default function PadsAdminPage() {
     setAudioFile(null);
   };
 
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const savePad = async () => {
     if (!editingPad) return;
     setSaving(true);
+    setUploadProgress(0);
     try {
       const fd = new FormData();
       fd.append("boardId", editingPad.boardId);
@@ -128,16 +131,25 @@ export default function PadsAdminPage() {
       fd.append("midiNote", padForm.midiNote);
       fd.append("keyboardKey", padForm.keyboardKey);
       fd.append("loopSync", String(padForm.loopSync));
-      if (audioFile) fd.append("audio", audioFile);
+      if (audioFile) {
+        fd.append("audio", audioFile);
+        toast.loading(`Enviando ${(audioFile.size / 1024 / 1024).toFixed(1)}MB...`, { id: "upload" });
+      }
 
       const res = await fetch("/api/pads/pad", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      if (audioFile) toast.success("Áudio salvo!", { id: "upload" });
       toast.success("Pad salvo!");
       setEditingPad(null);
+      setAudioFile(null);
       fetchBoards();
-    } catch (e: any) { toast.error(e.message); }
-    finally { setSaving(false); }
+    } catch (e: any) {
+      toast.dismiss("upload");
+      toast.error(e.message || "Erro ao salvar pad");
+    }
+    finally { setSaving(false); setUploadProgress(0); }
   };
 
   const deletePad = async (padId: string) => {
@@ -411,6 +423,17 @@ export default function PadsAdminPage() {
               )}
 
               <div className="flex gap-2 pt-2">
+                {uploadProgress > 0 && uploadProgress < 100 && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Enviando áudio...</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full bg-primary transition-all rounded-full" style={{ width: `${uploadProgress}%` }} />
+                    </div>
+                  </div>
+                )}
                 <Button onClick={savePad} disabled={saving} className="flex-1">
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar Pad
                 </Button>
