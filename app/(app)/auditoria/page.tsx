@@ -29,7 +29,7 @@ interface AuditLogItem {
 }
 
 const actionColor = (action: string) => {
-  if (action.includes("FAILED") || action.includes("DELETED") || action.includes("DECLINED")) return "destructive" as const;
+  if (action.includes("FAILED") || action.includes("DELETED") || action.includes("DECLINED")) return "danger" as const;
   if (action.includes("UPDATED") || action.includes("CHANGED")) return "secondary" as const;
   if (action.includes("CREATED") || action.includes("SUCCESS") || action.includes("CONFIRMED")) return "default" as const;
   return "outline" as const;
