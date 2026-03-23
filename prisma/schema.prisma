@@ -897,3 +897,49 @@ model MultitracksUsage {
   @@unique([groupId, month, year])
   @@index([groupId, year, month])
 }
+
+enum PadType {
+  HOLD
+  LOOP
+  ONE_SHOT
+}
+
+model PadBoard {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  bpm         Int?
+  musicalKey  String?
+  color       String   @default("#8B5CF6")
+  isActive    Boolean  @default(true)
+  cols        Int      @default(4)
+  rows        Int      @default(4)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pads        Pad[]
+
+  @@index([isActive])
+}
+
+model Pad {
+  id          String   @id @default(cuid())
+  boardId     String
+  board       PadBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name        String
+  position    Int
+  type        PadType  @default(ONE_SHOT)
+  audioUrl    String?
+  r2Key       String?
+  color       String   @default("#6366F1")
+  volume      Float    @default(1.0)
+  midiNote    Int?
+  keyboardKey String?
+  loopSync    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([boardId, position])
+  @@index([boardId, isActive])
+}
