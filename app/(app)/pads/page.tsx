@@ -344,10 +344,10 @@ export default function PadsPage() {
 
   // MODO NORMAL
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-[#0b0d12] overflow-hidden">
+    <div className="flex bg-[#0b0d12] overflow-hidden" style={{height:"calc(100vh - 64px)"}}>
 
       {/* GRID DE PADS (CENTRO - FOCO) */}
-      <div className="flex-1 flex flex-col p-5 gap-4 overflow-hidden">
+      <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden min-w-0">
 
         {/* Mini header */}
         <div className="flex items-center gap-3 flex-shrink-0">
@@ -363,18 +363,18 @@ export default function PadsPage() {
         </div>
 
         {/* BPM + Volume master */}
-        <div className="flex items-center gap-4 flex-shrink-0 bg-white/3 rounded-2xl px-4 py-2.5 border border-white/5">
-          <span className="text-xs font-bold text-white/30 uppercase tracking-widest">BPM</span>
-          <button onClick={()=>setBpm(v=>Math.max(40,v-1))} className="w-6 h-6 rounded-lg bg-white/5 text-white/40 hover:bg-white/10 text-sm flex items-center justify-center">−</button>
-          <span className="text-lg font-black text-white tabular-nums w-10 text-center">{bpm}</span>
-          <button onClick={()=>setBpm(v=>Math.min(200,v+1))} className="w-6 h-6 rounded-lg bg-white/5 text-white/40 hover:bg-white/10 text-sm flex items-center justify-center">+</button>
-          <div className="w-px h-5 bg-white/10 mx-1"/>
-          <Volume1 className="h-3.5 w-3.5 text-white/30"/>
+        <div className="flex items-center gap-3 flex-shrink-0 bg-white/3 rounded-xl px-3 py-2 border border-white/5">
+          <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">BPM</span>
+          <button onClick={()=>setBpm(v=>Math.max(40,v-1))} className="w-5 h-5 rounded bg-white/5 text-white/40 hover:bg-white/10 text-xs flex items-center justify-center">−</button>
+          <span className="text-base font-black text-white tabular-nums w-9 text-center">{bpm}</span>
+          <button onClick={()=>setBpm(v=>Math.min(200,v+1))} className="w-5 h-5 rounded bg-white/5 text-white/40 hover:bg-white/10 text-xs flex items-center justify-center">+</button>
+          <div className="w-px h-4 bg-white/10 mx-1"/>
+          <Volume1 className="h-3 w-3 text-white/30"/>
           <input type="range" min={0} max={1} step={0.01} value={masterVolume}
             onChange={e=>setMasterVolume(Number(e.target.value))}
-            className="w-32 accent-primary h-1"/>
-          <Volume2 className="h-3.5 w-3.5 text-white/50"/>
-          <span className="text-xs text-white/30 tabular-nums">{Math.round(masterVolume*100)}%</span>
+            className="w-28 accent-primary h-1"/>
+          <Volume2 className="h-3 w-3 text-white/50"/>
+          <span className="text-[10px] text-white/30 tabular-nums">{Math.round(masterVolume*100)}%</span>
         </div>
 
         {/* GRID PRINCIPAL */}
@@ -416,78 +416,90 @@ export default function PadsPage() {
         </div>
 
         {/* PLAYER MINI */}
-        <div className="flex-shrink-0 flex items-center gap-4 bg-white/3 rounded-2xl border border-white/5 px-4 py-3">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-white/30 uppercase tracking-widest">Tocando</span>
-            <span className="text-sm font-semibold" style={{color:currentPad?.color||"rgba(255,255,255,0.3)"}}>
+        <div className="flex-shrink-0 flex items-center gap-3 bg-white/3 rounded-xl border border-white/5 px-3 py-2">
+          <div className="flex flex-col flex-shrink-0">
+            <span className="text-[8px] text-white/25 uppercase tracking-widest">Tocando</span>
+            <span className="text-xs font-semibold" style={{color:currentPad?.color||"rgba(255,255,255,0.3)"}}>
               {currentPad?.name||"—"}
             </span>
           </div>
-          <div className="flex-1 h-8 rounded-lg overflow-hidden bg-black/20 px-2 py-1">
+          <div className="flex-1 h-7 rounded-lg overflow-hidden bg-black/20 px-2 py-1 min-w-0">
             <MiniWaveform color={currentPad?.color||"#444"} playing={isPlaying} intensity={intensity}/>
           </div>
-          {/* Play/Stop */}
           <button onClick={()=>{if(!currentPad){toast.error("Selecione um timbre");return;} isPlaying?stopPad():playPad(currentPad);}}
-            className={cn("rounded-xl px-6 py-2.5 font-black text-sm border-2 transition-all whitespace-nowrap",
+            className={cn("rounded-lg px-4 py-2 font-black text-xs border-2 transition-all whitespace-nowrap flex-shrink-0",
               isPlaying?"bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25":"bg-primary/15 border-primary/40 text-primary hover:bg-primary/25",
               !currentPad&&"opacity-30 cursor-not-allowed")}>
             {isPlaying?"■ STOP":"▶ PLAY"}
           </button>
-          {/* Fade toggles */}
           <button onClick={()=>setFadeIn(v=>!v)}
-            className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-all",
-              fadeIn?"border-primary/40 bg-primary/15 text-primary":"border-white/10 text-white/30 hover:text-white/50")}>
+            className={cn("rounded px-2 py-1.5 text-[9px] font-bold border transition-all flex-shrink-0",
+              fadeIn?"border-primary/40 bg-primary/15 text-primary":"border-white/10 text-white/25 hover:text-white/50")}>
             ↑ FI
           </button>
           <button onClick={()=>setFadeOut(v=>!v)}
-            className={cn("rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-all",
-              fadeOut?"border-primary/40 bg-primary/15 text-primary":"border-white/10 text-white/30 hover:text-white/50")}>
+            className={cn("rounded px-2 py-1.5 text-[9px] font-bold border transition-all flex-shrink-0",
+              fadeOut?"border-primary/40 bg-primary/15 text-primary":"border-white/10 text-white/25 hover:text-white/50")}>
             ↓ FO
           </button>
           <select value={fadeDuration} onChange={e=>setFadeDuration(Number(e.target.value))}
-            className="rounded-lg bg-white/5 border border-white/10 text-white/40 text-[10px] px-2 py-1.5">
+            className="rounded bg-white/5 border border-white/10 text-white/35 text-[9px] px-1.5 py-1.5 flex-shrink-0">
             {[1,2,3,5,8,10].map(v=><option key={v} value={v}>{v}s</option>)}
           </select>
         </div>
       </div>
 
       {/* PAINEL DIREITO — Controles */}
-      <div className="w-52 border-l border-white/5 flex flex-col gap-0 bg-black/20">
+      <div className="w-52 border-l border-white/5 flex flex-col bg-black/20 overflow-hidden">
 
         {/* PITCH SLIDER VERTICAL */}
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4 border-b border-white/5">
-          <span className="text-[9px] text-white/30 uppercase tracking-widest">Pitch / Tom</span>
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 w-full">
-            <div className="text-3xl font-black tabular-nums" style={{color:pitch!==0?"#8B5CF6":"rgba(255,255,255,0.2)"}}>
-              {pitch>0?`+${pitch}`:pitch===0?"0":pitch}
-            </div>
-            <div className="text-xs text-white/30 font-mono">
+        <div className="flex flex-col items-center gap-2 p-3 border-b border-white/5" style={{flex:"0 0 auto", height:"55%"}}>
+          <span className="text-[9px] text-white/30 uppercase tracking-widest flex-shrink-0">Pitch / Tom</span>
+
+          {/* Nota atual — destaque principal */}
+          <div className="flex-shrink-0 flex flex-col items-center gap-0.5">
+            <div className={cn(
+              "text-4xl font-black tabular-nums leading-none transition-all",
+              pitch!==0?"text-violet-400 drop-shadow-[0_0_12px_rgba(139,92,246,0.8)]":"text-white/15"
+            )}>
               {pitchToNote(pitch)}
             </div>
-            <div className="flex-1 flex items-center justify-center w-full" style={{minHeight:120}}>
-              <input type="range" min={-12} max={12} step={1} value={pitch}
-                onChange={e=>setPitch(Number(e.target.value))}
-                className="accent-violet-500"
-                style={{writingMode:"vertical-lr",direction:"rtl",height:160,cursor:"pointer"}}/>
+            <div className={cn(
+              "text-lg font-bold tabular-nums transition-all",
+              pitch>0?"text-emerald-400":pitch<0?"text-amber-400":"text-white/20"
+            )}>
+              {pitch>0?`+${pitch}`:pitch===0?"0":pitch}
             </div>
-            <button onClick={()=>setPitch(0)} className="text-[9px] text-white/20 hover:text-white/50 border border-white/10 rounded px-2 py-0.5">Reset</button>
           </div>
+
+          {/* Slider vertical */}
+          <div className="flex-1 flex items-center justify-center w-full min-h-0">
+            <input type="range" min={-12} max={12} step={1} value={pitch}
+              onChange={e=>setPitch(Number(e.target.value))}
+              className="accent-violet-500"
+              style={{writingMode:"vertical-lr" as any,direction:"rtl",height:"100%",cursor:"pointer",maxHeight:140}}/>
+          </div>
+
+          <button onClick={()=>setPitch(0)}
+            className="flex-shrink-0 text-[9px] text-white/20 hover:text-white/50 border border-white/10 rounded px-2 py-0.5 transition-all">
+            Reset
+          </button>
         </div>
 
         {/* KNOBS DE EFEITO */}
-        <div className="p-4 space-y-4">
-          <span className="text-[9px] text-white/30 uppercase tracking-widest block">Atmosfera</span>
-          <div className="grid grid-cols-2 gap-4 place-items-center">
-            <Knob value={fx.reverb} min={0} max={1} label="Reverb" color="#8B5CF6"
+        <div className="flex flex-col gap-3 p-3 flex-1 overflow-hidden">
+          <span className="text-[9px] text-white/30 uppercase tracking-widest flex-shrink-0">Atmosfera</span>
+          <div className="grid grid-cols-2 gap-2 place-items-center flex-shrink-0">
+            <Knob value={fx.reverb} min={0} max={1} label="Reverb" color="#8B5CF6" size={50}
               onChange={v=>setFx(p=>({...p,reverb:v}))}/>
-            <Knob value={fx.delay} min={0} max={1} label="Delay" color="#06B6D4"
+            <Knob value={fx.delay} min={0} max={1} label="Delay" color="#06B6D4" size={50}
               onChange={v=>setFx(p=>({...p,delay:v}))}/>
-            <Knob value={fx.filter} min={0} max={1} label="Cutoff" color="#10B981"
+            <Knob value={fx.filter} min={0} max={1} label="Cutoff" color="#10B981" size={50}
               onChange={v=>setFx(p=>({...p,filter:v}))}/>
-            <Knob value={fx.shimmer} min={0} max={1} label="Shimmer" color="#F59E0B"
+            <Knob value={fx.shimmer} min={0} max={1} label="Shimmer" color="#F59E0B" size={50}
               onChange={v=>setFx(p=>({...p,shimmer:v}))}/>
           </div>
-          <div className="space-y-2 pt-1">
+          <div className="flex-shrink-0 space-y-1.5">
             <div className="flex justify-between">
               <span className="text-[9px] text-white/30 uppercase tracking-widest">Intensidade</span>
               <span className="text-[9px] text-white/40">{Math.round(intensity*100)}%</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { X } from "lucide-react";
@@ -8,6 +9,9 @@ import pkg from "../package.json";
 import { PendingAnnouncementModal } from "@/components/pending-announcement-modal";
 
 const APP_VERSION = `Versão ${pkg.version}`;
+
+// Rotas que precisam de fullscreen sem padding nem scroll
+const FULLSCREEN_ROUTES = ["/pads", "/multitracks"];
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -18,6 +22,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
+  const isFullscreen = FULLSCREEN_ROUTES.some(r => pathname?.startsWith(r));
 
   useEffect(() => {
     setMounted(true);
@@ -75,10 +81,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AppHeader onMenuClick={toggleSidebar} isMobile={isMobile} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="mx-auto w-full max-w-[1400px]">{children}</div>
+        <main className={isFullscreen ? "flex-1 overflow-hidden" : "flex-1 overflow-y-auto p-4 md:p-6"}>
+          {isFullscreen
+            ? children
+            : <div className="mx-auto w-full max-w-[1400px]">{children}</div>
+          }
         </main>
-        <footer className="px-4 pb-4 text-center text-xs text-muted-foreground md:px-6">{APP_VERSION}</footer>
+        {!isFullscreen && <footer className="px-4 pb-4 text-center text-xs text-muted-foreground md:px-6">{APP_VERSION}</footer>}
         <PendingAnnouncementModal />
       </div>
     </div>
