@@ -933,7 +933,7 @@ function MemberModal({
                           ? "bg-purple-600 text-white border-purple-600"
                           : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
                       }`}
-                      title={permission.description || permission.label}
+                      title={(permission as any).description || permission.label}
                     >
                       {permission.label}
                       {permission.future ? " (futuro)" : ""}
