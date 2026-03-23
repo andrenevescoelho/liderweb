@@ -5,14 +5,6 @@ import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
-// Aumentar limite de body para 50MB (arquivos WAV grandes)
-export const config = {
-  api: { bodyParser: false },
-};
-
-// Para App Router do Next.js 14
-export const maxDuration = 60;
-
 const s3 = new S3Client({
   region: process.env.AWS_REGION || "auto",
   endpoint: process.env.S3_ENDPOINT,
@@ -22,7 +14,7 @@ const s3 = new S3Client({
   },
 });
 
-// POST — criar/atualizar pad com upload de áudio
+// POST — criar/atualizar pad (aceita JSON com audioUrl já no R2, ou FormData com arquivo)
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -30,74 +22,73 @@ export async function POST(req: NextRequest) {
     const user = session.user as SessionUser;
     if (user.role !== "SUPERADMIN") return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
-    const formData = await req.formData();
-    const boardId = formData.get("boardId") as string;
-    const position = Number(formData.get("position"));
-    const name = (formData.get("name") as string)?.trim() || `Pad ${position + 1}`;
-    const type = (formData.get("type") as string) || "ONE_SHOT";
-    const color = (formData.get("color") as string) || "#6366F1";
-    const volume = Number(formData.get("volume") || 1);
-    const midiNote = formData.get("midiNote") ? Number(formData.get("midiNote")) : null;
-    const keyboardKey = (formData.get("keyboardKey") as string) || null;
-    const loopSync = formData.get("loopSync") === "true";
-    const file = formData.get("audio") as File | null;
+    const contentType = req.headers.get("content-type") || "";
+    let boardId: string, position: number, name: string, type: string;
+    let color: string, volume: number, midiNote: number | null;
+    let keyboardKey: string | null, loopSync: boolean;
+    let audioUrl: string | null = null, r2Key: string | null = null;
+
+    if (contentType.includes("application/json")) {
+      // JSON — audioUrl já resolvida (via presigned URL ou outro método)
+      const body = await req.json();
+      boardId = body.boardId; position = Number(body.position);
+      name = body.name || `Pad ${position + 1}`; type = body.type || "ONE_SHOT";
+      color = body.color || "#6366F1"; volume = Number(body.volume ?? 1);
+      midiNote = body.midiNote ?? null; keyboardKey = body.keyboardKey || null;
+      loopSync = body.loopSync === true;
+      audioUrl = body.audioUrl || null; r2Key = body.r2Key || null;
+    } else {
+      // FormData — upload direto (para arquivos até ~20MB)
+      const fd = await req.formData();
+      boardId = fd.get("boardId") as string; position = Number(fd.get("position"));
+      name = (fd.get("name") as string)?.trim() || `Pad ${position + 1}`;
+      type = (fd.get("type") as string) || "ONE_SHOT";
+      color = (fd.get("color") as string) || "#6366F1";
+      volume = Number(fd.get("volume") ?? 1);
+      midiNote = fd.get("midiNote") ? Number(fd.get("midiNote")) : null;
+      keyboardKey = (fd.get("keyboardKey") as string) || null;
+      loopSync = fd.get("loopSync") === "true";
+      const file = fd.get("audio") as File | null;
+
+      if (file && file.size > 0) {
+        const ext = file.name.split(".").pop() || "mp3";
+        r2Key = `pads/${boardId}/${position}_${Date.now()}.${ext}`;
+        const arrayBuffer = await file.arrayBuffer();
+        console.log(`[pads/pad] Upload: ${r2Key} (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+        await s3.send(new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME!,
+          Key: r2Key,
+          Body: Buffer.from(arrayBuffer),
+          ContentType: file.type || "audio/mpeg",
+        }));
+        audioUrl = r2Key; // só armazenamos a key, URL é gerada pelo proxy
+        console.log(`[pads/pad] Upload OK: ${r2Key}`);
+      }
+    }
 
     if (!boardId) return NextResponse.json({ error: "boardId obrigatório" }, { status: 400 });
 
-    console.log(`[pads/pad] Salvando pad ${position} do board ${boardId}, arquivo: ${file?.name ?? "nenhum"} (${file?.size ?? 0} bytes)`);
-
-    let audioUrl: string | null = null;
-    let r2Key: string | null = null;
-
-    // Upload do áudio se fornecido
-    if (file && file.size > 0) {
-      const ext = file.name.split(".").pop() || "wav";
-      r2Key = `pads/${boardId}/${position}_${Date.now()}.${ext}`;
-      const arrayBuffer = await file.arrayBuffer();
-      
-      console.log(`[pads/pad] Enviando para R2: ${r2Key} (${arrayBuffer.byteLength} bytes)`);
-      
-      await s3.send(new PutObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME!,
-        Key: r2Key,
-        Body: Buffer.from(arrayBuffer),
-        ContentType: file.type || "audio/wav",
-        ACL: "public-read" as any,
-      }));
-
-      // URL pública do R2 — usar endpoint público se disponível
-      const publicEndpoint = process.env.R2_PUBLIC_URL || process.env.S3_ENDPOINT;
-      audioUrl = `${publicEndpoint}/${process.env.AWS_BUCKET_NAME}/${r2Key}`;
-      console.log(`[pads/pad] Upload OK: ${audioUrl}`);
-    }
-
-    // Verificar se já existe o pad nessa posição
     const existing = await prisma.pad.findUnique({ where: { boardId_position: { boardId, position } } });
 
     let pad;
     if (existing) {
-      if (file && file.size > 0 && existing.r2Key) {
+      if (r2Key && existing.r2Key && existing.r2Key !== r2Key) {
         try { await s3.send(new DeleteObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME!, Key: existing.r2Key })); } catch {}
       }
       pad = await prisma.pad.update({
         where: { boardId_position: { boardId, position } },
-        data: {
-          name, type: type as any, color, volume, midiNote, keyboardKey, loopSync,
-          ...(audioUrl && { audioUrl, r2Key }),
-        },
+        data: { name, type: type as any, color, volume, midiNote, keyboardKey, loopSync, ...(r2Key && { r2Key, audioUrl: r2Key }) },
       });
     } else {
       pad = await prisma.pad.create({
-        data: { boardId, name, position, type: type as any, color, volume, midiNote, keyboardKey, loopSync, audioUrl, r2Key },
+        data: { boardId, name, position, type: type as any, color, volume, midiNote, keyboardKey, loopSync, audioUrl: r2Key || null, r2Key: r2Key || null },
       });
     }
 
-    console.log(`[pads/pad] Pad salvo: ${pad.id}`);
     return NextResponse.json({ pad });
-
   } catch (err: any) {
     console.error("[pads/pad] Erro:", err?.message || err);
-    return NextResponse.json({ error: err?.message || "Erro interno ao salvar pad" }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Erro interno" }, { status: 500 });
   }
 }
 

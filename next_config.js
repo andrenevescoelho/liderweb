@@ -14,21 +14,6 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: { unoptimized: true },
-  // Aumentar limite de upload para 50MB (áudios WAV)
-  serverExternalPackages: [],
 };
 
-// Configurar body size limit via headers
-const withBodySizeLimit = (config) => {
-  return {
-    ...config,
-    experimental: {
-      ...config.experimental,
-      serverActions: {
-        bodySizeLimit: '50mb',
-      },
-    },
-  };
-};
-
-module.exports = withBodySizeLimit(nextConfig);
+module.exports = nextConfig;
