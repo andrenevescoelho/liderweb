@@ -252,7 +252,8 @@ export default function MultitracksPlayerPage() {
   const [draggingMarker, setDraggingMarker] = useState<number | null>(null);
   const [showBpmGrid, setShowBpmGrid] = useState(false);
   const [addingMarker, setAddingMarker] = useState(false);
-  const [bpmOffset, setBpmOffset] = useState(0); // segundos de offset do 1º tempo
+  const [bpmOffset, setBpmOffset] = useState(0);
+  const [showMixer, setShowMixer] = useState(false); // segundos de offset do 1º tempo
   const rulerRef = useRef<HTMLDivElement>(null);
   const shortcutsRef = useRef<Record<number, string>>({});
   const userIdRef = useRef<string>("");
@@ -307,12 +308,15 @@ export default function MultitracksPlayerPage() {
   const sourceNodesRef = useRef<AudioBufferSourceNode[]>([]);
   const gainNodesRef = useRef<GainNode[]>([]);
   const panNodesRef = useRef<StereoPannerNode[]>([]);
+  const analyserNodesRef = useRef<AnalyserNode[]>([]);
   const buffersRef = useRef<AudioBuffer[]>([]);
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
   const animFrameRef = useRef<number>(0);
+  const levelAnimRef = useRef<number>(0);
   const markersRef = useRef<Marker[]>([]);
   const stemsRef = useRef<StemTrack[]>([]);
+  const [stemLevels, setStemLevels] = useState<number[]>([]);
 
   useEffect(() => { markersRef.current = markers; }, [markers]);
   useEffect(() => { stemsRef.current = stems; }, [stems]);
@@ -400,6 +404,8 @@ export default function MultitracksPlayerPage() {
     sourceNodesRef.current.forEach((n) => { try { n.stop(); } catch {} });
     sourceNodesRef.current = [];
     cancelAnimationFrame(animFrameRef.current);
+    cancelAnimationFrame(levelAnimRef.current);
+    setStemLevels([]);
   }, []);
 
   const playAll = useCallback((offset = 0) => {
@@ -423,12 +429,38 @@ export default function MultitracksPlayerPage() {
       panNodesRef.current[i] = panner;
       panner.pan.value = stem.pan;
 
+      // Analyser para VU meter
+      const analyser = analyserNodesRef.current[i] || ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyserNodesRef.current[i] = analyser;
+
       source.connect(gain);
-      gain.connect(panner);
+      gain.connect(analyser);
+      analyser.connect(panner);
       panner.connect(ctx.destination);
       source.start(0, offset);
       sourceNodesRef.current[i] = source;
     });
+
+    // Loop de leitura de níveis
+    const dataArray = new Uint8Array(32);
+    const readLevels = () => {
+      const levels = analyserNodesRef.current.map((analyser, i) => {
+        if (!analyser) return 0;
+        analyser.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for (let k = 0; k < dataArray.length; k++) {
+          const v = (dataArray[k] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        const s = stemsRef.current[i];
+        return (s?.muted) ? 0 : rms * 4;
+      });
+      setStemLevels(levels);
+      levelAnimRef.current = requestAnimationFrame(readLevels);
+    };
+    levelAnimRef.current = requestAnimationFrame(readLevels);
 
     startTimeRef.current = ctx.currentTime - offset;
     const tick = () => {
@@ -565,6 +597,10 @@ export default function MultitracksPlayerPage() {
             setStems((prev) => prev.map((s, idx) => ({ ...s, solo: idx === selectedStem ? !isSolo : false, muted: false })));
           }
           break;
+        case "KeyX":
+          e.preventDefault();
+          setShowMixer(v => !v);
+          break;
         case "Escape":
           if (scheduledJumpRef.current) {
             scheduledJumpRef.current = null;
@@ -697,6 +733,14 @@ export default function MultitracksPlayerPage() {
           {expiresAt && (
             <span className="text-xs text-muted-foreground">{daysLeft}d restantes</span>
           )}
+          <button
+            onClick={() => setShowMixer(v => !v)}
+            className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
+              showMixer ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+            )}
+            title="Mixer (X)">
+            🎛 Mixer
+          </button>
         </div>
       </div>
 
@@ -1051,14 +1095,28 @@ export default function MultitracksPlayerPage() {
               </div>
             </div>
 
-            {/* Volume + Pan */}
-            <div className="flex items-center gap-3 px-2 flex-shrink-0 w-36" onClick={(e) => e.stopPropagation()}>
+            {/* Volume + Pan + VU */}
+            <div className="flex items-center gap-2 px-2 flex-shrink-0 w-44" onClick={(e) => e.stopPropagation()}>
               <div className="flex flex-col gap-0.5 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="text-[9px] text-muted-foreground w-4">VOL</span>
                   <input type="range" min={0} max={1} step={0.01} value={stem.volume}
                     onChange={(e) => updateStem(i, { volume: Number(e.target.value) })}
-                    className="w-16 accent-primary h-1" disabled={stem.muted} />
+                    className="w-14 accent-primary h-1" disabled={stem.muted} />
+                </div>
+                {/* VU meter horizontal */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] text-muted-foreground w-4">VU</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-75"
+                      style={{
+                        width: `${Math.min(100, (stemLevels[i] || 0) * 100)}%`,
+                        backgroundColor: (stemLevels[i] || 0) > 0.8 ? "#ef4444"
+                          : (stemLevels[i] || 0) > 0.5 ? "#f59e0b"
+                          : stem.color,
+                        opacity: stem.muted ? 0.2 : 0.9,
+                      }}/>
+                  </div>
                 </div>
               </div>
               <PanKnob value={stem.pan} onChange={(v) => updateStem(i, { pan: v })} />
@@ -1210,6 +1268,7 @@ export default function MultitracksPlayerPage() {
           <span><kbd className="rounded bg-muted px-1">M</kbd> mute</span>
           <span><kbd className="rounded bg-muted px-1">S</kbd> solo</span>
           <span><kbd className="rounded bg-muted px-1">+</kbd><kbd className="rounded bg-muted px-1">−</kbd> zoom</span>
+          <span><kbd className="rounded bg-muted px-1">X</kbd> mixer</span>
           {markers.length > 0 && <span><kbd className="rounded bg-muted px-1">1-9</kbd> markers | <kbd className="rounded bg-muted px-1">⌨️</kbd> customize</span>}
           {selectedStem !== null && (
             <span className="text-primary/60">Canal: <span style={{ color: stems[selectedStem]?.color }}>{stems[selectedStem]?.name}</span></span>
@@ -1219,6 +1278,174 @@ export default function MultitracksPlayerPage() {
           )}
         </div>
       </div>
+
+      {/* MIXER FLUTUANTE */}
+      {showMixer && (
+        <div className="fixed bottom-[120px] left-1/2 -translate-x-1/2 z-50 flex flex-col rounded-2xl border border-white/10 bg-[#0f1117]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+          style={{maxWidth:"calc(100vw - 32px)", width: Math.max(stems.length * 80 + 32, 400)}}>
+          {/* Header do mixer */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/8 bg-black/30">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-white/70 uppercase tracking-widest">Mixer</span>
+              <span className="text-[10px] text-white/30">{stems.length} canais</span>
+            </div>
+            <button onClick={() => setShowMixer(false)} className="text-white/30 hover:text-white/60 text-xs border border-white/10 rounded px-2 py-0.5">✕ X</button>
+          </div>
+
+          {/* Canais */}
+          <div className="flex overflow-x-auto">
+            {stems.map((stem, idx) => {
+              const isSoloing = stems.some(s => s.solo);
+              const isAudible = stem.solo || (!isSoloing && !stem.muted);
+              return (
+                <div key={idx} className="flex flex-col items-center gap-2 px-3 py-3 border-r border-white/5 flex-shrink-0"
+                  style={{width:80}}>
+
+                  {/* Nome editável */}
+                  <div className="w-full text-center">
+                    <p className="text-[9px] font-bold truncate w-full text-center"
+                      style={{color: isAudible ? stem.color : "rgba(255,255,255,0.2)"}}>
+                      {stem.name}
+                    </p>
+                  </div>
+
+                  {/* EQ simples + VU em tempo real */}
+                  <div className="flex gap-0.5 items-end h-5 w-full justify-center">
+                    {[0,1,2,3,4,5,6].map((bi)=>{
+                      const level = stemLevels[idx] || 0;
+                      const barH = isAudible ? Math.min(1, level * (0.4 + bi * 0.08) + 0.1) : 0.1;
+                      return (
+                        <div key={bi} className="flex-1 rounded-sm transition-none"
+                          style={{
+                            height:`${barH*100}%`,
+                            backgroundColor: level > 0.8 ? "#ef4444"
+                              : level > 0.5 ? "#f59e0b"
+                              : isAudible ? stem.color : "rgba(255,255,255,0.08)",
+                          }}/>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pan knob */}
+                  <div className="flex flex-col items-center gap-0.5">
+                    <div className="relative w-8 h-8">
+                      <svg viewBox="0 0 32 32" className="w-8 h-8 cursor-ew-resize"
+                        onMouseDown={e=>{
+                          e.preventDefault();
+                          const startX=e.clientX, startPan=stem.pan;
+                          const onMove=(ev:MouseEvent)=>{
+                            const delta=(ev.clientX-startX)/60;
+                            updateStem(idx,{pan:Math.max(-1,Math.min(1,startPan+delta))});
+                          };
+                          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+                          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+                        }}
+                        onDoubleClick={()=>updateStem(idx,{pan:0})}>
+                        <circle cx="16" cy="16" r="12" fill="#1a1f2e" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+                        <circle cx="16" cy="16" r="8" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2"/>
+                        {/* Indicador pan */}
+                        <circle
+                          cx={16 + stem.pan * 7}
+                          cy="16"
+                          r="2.5"
+                          fill={isAudible?stem.color:"rgba(255,255,255,0.2)"}/>
+                        {/* Linha central */}
+                        <line x1="16" y1="8" x2="16" y2="12" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+                      </svg>
+                    </div>
+                    <span className="text-[8px] text-white/25 tabular-nums">
+                      {stem.pan===0?"C":stem.pan>0?`R${Math.round(stem.pan*100)}`:`L${Math.round(Math.abs(stem.pan)*100)}`}
+                    </span>
+                  </div>
+
+                  {/* Fader vertical + VU lateral */}
+                  <div className="flex items-center gap-1 h-24">
+                    {/* VU bar fina */}
+                    <div className="w-1 h-full rounded-full bg-white/5 overflow-hidden flex flex-col-reverse">
+                      <div className="w-full rounded-full transition-none"
+                        style={{
+                          height:`${Math.min(100,(stemLevels[idx]||0)*100)}%`,
+                          backgroundColor:(stemLevels[idx]||0)>0.8?"#ef4444":(stemLevels[idx]||0)>0.5?"#f59e0b":stem.color,
+                          opacity: isAudible ? 0.9 : 0.1,
+                        }}/>
+                    </div>
+                    <div className="relative h-full flex flex-col items-center justify-center"
+                      style={{width:16}}>
+                      <div className="relative w-1.5 h-full rounded-full bg-white/5">
+                        <div className="absolute bottom-0 left-0 right-0 rounded-full transition-all"
+                          style={{height:`${stem.volume*100}%`, backgroundColor:isAudible?stem.color+"60":"rgba(255,255,255,0.1)"}}/>
+                        <div className="absolute left-1/2 -translate-x-1/2 w-4 h-2.5 rounded bg-white/80 shadow cursor-ns-resize border border-white/20"
+                          style={{bottom:`calc(${stem.volume*100}% - 5px)`}}
+                          onMouseDown={e=>{
+                            e.preventDefault();
+                            const el=e.currentTarget.parentElement!;
+                            const rect=el.getBoundingClientRect();
+                            const onMove=(ev:MouseEvent)=>{
+                              const v=Math.max(0,Math.min(1,1-(ev.clientY-rect.top)/rect.height));
+                              updateStem(idx,{volume:v});
+                              if(gainNodesRef.current[idx]) gainNodesRef.current[idx].gain.value = stem.muted?0:v;
+                            };
+                            const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+                            window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+                          }}/>
+                      </div>
+                    </div>
+                    {/* dB scale */}
+                    <div className="flex flex-col justify-between h-full text-[7px] text-white/20 leading-none">
+                      <span>0</span>
+                      <span>-6</span>
+                      <span>-12</span>
+                      <span>-24</span>
+                      <span>-∞</span>
+                    </div>
+                  </div>
+
+                  {/* Valor volume */}
+                  <span className="text-[8px] text-white/30 tabular-nums">{Math.round(stem.volume*100)}</span>
+
+                  {/* M / S */}
+                  <div className="flex gap-1 w-full">
+                    <button
+                      onClick={()=>updateStem(idx,{muted:!stem.muted, solo:false})}
+                      className={cn("flex-1 rounded text-[9px] font-black py-1 transition-all border",
+                        stem.muted?"bg-red-500/30 border-red-500/50 text-red-400":"border-white/10 text-white/30 hover:text-white/60")}>
+                      M
+                    </button>
+                    <button
+                      onClick={()=>setStems(prev=>prev.map((s,i)=>({...s,solo:i===idx?!stem.solo:false,muted:false})))}
+                      className={cn("flex-1 rounded text-[9px] font-black py-1 transition-all border",
+                        stem.solo?"bg-amber-500/30 border-amber-500/50 text-amber-400":"border-white/10 text-white/30 hover:text-white/60")}>
+                      S
+                    </button>
+                  </div>
+
+                  {/* Cor do canal */}
+                  <div className="h-1 w-full rounded-full opacity-60" style={{backgroundColor:stem.color}}/>
+                </div>
+              );
+            })}
+
+            {/* Master */}
+            <div className="flex flex-col items-center gap-2 px-3 py-3 flex-shrink-0 bg-white/3 border-l border-white/10" style={{width:70}}>
+              <p className="text-[9px] font-black text-white/50 uppercase tracking-widest">Master</p>
+              <div className="h-4 w-full"/>
+              <div className="h-8 w-full"/>
+              <div className="relative h-24 w-4">
+                <div className="w-1.5 h-full rounded-full bg-white/5 mx-auto relative">
+                  <div className="absolute bottom-0 left-0 right-0 rounded-full bg-primary/40" style={{height:"80%"}}/>
+                  <div className="absolute left-1/2 -translate-x-1/2 w-4 h-2.5 rounded bg-white shadow cursor-ns-resize border border-white/20" style={{bottom:"calc(80% - 5px)"}}/>
+                </div>
+              </div>
+              <span className="text-[8px] text-white/30">100</span>
+              <div className="flex gap-1 w-full">
+                <div className="flex-1 rounded border border-white/5 py-1"/>
+                <div className="flex-1 rounded border border-white/5 py-1"/>
+              </div>
+              <div className="h-1 w-full rounded-full bg-primary/40"/>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
