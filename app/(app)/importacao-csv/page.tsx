@@ -176,7 +176,15 @@ export default function CsvImportPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Importação CSV</h1>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10">
+            <Table className="w-5 h-5 text-cyan-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Importação CSV</h1>
+            <p className="text-sm text-muted-foreground">Valide e importe dados em lote para o sistema</p>
+          </div>
+        </div>
         <p className="text-sm text-muted-foreground">Valide o arquivo antes de salvar e confirme a importação somente após revisar erros e avisos.</p>
       </div>
 

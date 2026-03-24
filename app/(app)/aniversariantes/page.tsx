@@ -1,5 +1,6 @@
 "use client";
 
+import { Cake } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { useSession } from "next-auth/react";
@@ -92,8 +93,15 @@ export default function AniversariantesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Aniversariantes</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Consulte aniversariantes do mês e próximos aniversários.</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500/10">
+              <Cake className="w-5 h-5 text-pink-500" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Aniversariantes</h1>
+              <p className="text-sm text-muted-foreground">Consulte aniversariantes do mês e próximos aniversários</p>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3">

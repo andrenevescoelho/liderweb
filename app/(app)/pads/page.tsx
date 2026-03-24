@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2, Usb, Volume2, Volume1, Zap } from "lucide-react";
+import { Loader2, Usb, Volume2, Volume1, Zap, Grid3x3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
@@ -351,9 +351,14 @@ export default function PadsPage() {
 
         {/* Mini header */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="text-sm font-black text-white/70">LIDERWEB</span>
-          <span className="text-sm font-semibold text-primary">Worship Pads</span>
-          {midiDevice&&<div className="flex items-center gap-1 text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-2 py-1"><Usb className="h-3 w-3"/>{midiDevice}</div>}
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 flex-shrink-0">
+            <Grid3x3 className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight leading-tight">Worship Pads</h1>
+            <p className="text-xs text-muted-foreground leading-tight">Pads e atmosferas ao vivo</p>
+          </div>
+          {midiDevice&&<div className="flex items-center gap-1 text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-2 py-1 ml-1"><Usb className="h-3 w-3"/>{midiDevice}</div>}
           <div className="ml-auto flex items-center gap-2">
             <button onClick={()=>setModeCulto(true)}
               className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary px-3 py-1.5 text-xs font-bold hover:bg-primary/20 transition-all">

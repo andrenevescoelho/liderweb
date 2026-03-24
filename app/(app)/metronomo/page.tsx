@@ -174,12 +174,14 @@ export default function MetronomoPage() {
 
   return (
     <div className="space-y-6 max-w-xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Timer className="h-7 w-7 text-primary" />
-          Metrônomo
-        </h1>
-        <p className="text-muted-foreground mt-1">Ferramenta de tempo para ensaios e práticas.</p>
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
+          <Timer className="w-5 h-5 text-emerald-500" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Metrônomo</h1>
+          <p className="text-sm text-muted-foreground">Ferramenta de tempo para ensaios e práticas</p>
+        </div>
       </div>
 
       {/* Visualização do pulso */}

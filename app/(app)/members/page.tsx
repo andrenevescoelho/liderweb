@@ -215,8 +215,13 @@ export default function MembersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <Users className="w-8 h-8 text-purple-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Membros</h1>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
+            <Users className="w-5 h-5 text-purple-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Membros</h1>
+            <p className="text-sm text-muted-foreground">Gerencie os membros do seu ministério</p>
+          </div>
         </div>
         <div className="flex gap-2">
           {canEdit && (
