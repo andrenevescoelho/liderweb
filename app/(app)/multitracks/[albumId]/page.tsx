@@ -8,6 +8,9 @@ import { Loader2, ArrowLeft, Play, Pause, SkipBack, SkipForward, Volume2 } from 
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
+// SoundTouchNode carregado de /public como módulo browser — sem passar pelo webpack/SSR
+let SoundTouchNode: any = null;
+
 interface StemTrack {
   name: string;
   url: string;
@@ -52,6 +55,17 @@ const STEM_COLORS = [
 
 // Stems que ficam sempre no topo
 const PRIORITY_STEMS = ["click", "guia", "guide", "clik"];
+
+// Stems rítmicos que NÃO recebem transpose (mantém pitch original)
+const RHYTHMIC_STEMS = ["click", "clik", "clique", "guia", "guide", "drum", "drums", "bateria", "perc", "loop", "beat", "fx"];
+function isRhythmicStem(name: string) {
+  return RHYTHMIC_STEMS.some((r) => name.toLowerCase().includes(r));
+}
+
+const DISPLAY_NOTES = ["C","Db","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const SEMITONES_MAP: Record<string,number> = {
+  C:0,"C#":1,Db:1,D:2,"D#":3,Eb:3,E:4,F:5,"F#":6,Gb:6,G:7,"G#":8,Ab:8,A:9,"A#":10,Bb:10,B:11
+};
 
 function isPriority(name: string) {
   return PRIORITY_STEMS.some((p) => name.toLowerCase().includes(p));
@@ -272,6 +286,8 @@ export default function MultitracksPlayerPage() {
   const [addingMarker, setAddingMarker] = useState(false);
   const [bpmOffset, setBpmOffset] = useState(0);
   const [showMixer, setShowMixer] = useState(false);
+  const [transpose, setTranspose] = useState(0);
+  const transposeRef = useRef(0);
   const [mixerPos, setMixerPos] = useState({ x: 0, y: 0 });
   const [mixerSize, setMixerSize] = useState({ w: 0, h: 340 });
   const [mixerInitialized, setMixerInitialized] = useState(false);
@@ -332,6 +348,8 @@ export default function MultitracksPlayerPage() {
   const gainNodesRef = useRef<GainNode[]>([]);
   const panNodesRef = useRef<StereoPannerNode[]>([]);
   const analyserNodesRef = useRef<AnalyserNode[]>([]);
+  const soundTouchNodesRef = useRef<SoundTouchNode[]>([]); // AudioWorklet nodes para pitch
+  const workletReadyRef = useRef(false); // true após audioWorklet.addModule
   const buffersRef = useRef<AudioBuffer[]>([]);
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
@@ -343,6 +361,37 @@ export default function MultitracksPlayerPage() {
 
   useEffect(() => { markersRef.current = markers; }, [markers]);
   useEffect(() => { stemsRef.current = stems; }, [stems]);
+
+  // Registrar o AudioWorklet processor uma vez quando o contexto estiver pronto
+  const ensureWorklet = useCallback(async (ctx: AudioContext) => {
+    if (workletReadyRef.current) return true;
+    try {
+      // Carrega o SoundTouchNode de /public — import de URL bypassa o webpack
+      if (!SoundTouchNode) {
+        const m = await import(/* webpackIgnore: true */ '/soundtouch-node.js');
+        SoundTouchNode = m.SoundTouchNode;
+      }
+      await SoundTouchNode.register(ctx, '/soundtouch-processor.js');
+      workletReadyRef.current = true;
+      return true;
+    } catch (err) {
+      console.warn('[worklet] Falhou ao registrar processor:', err);
+      return false;
+    }
+  }, []);
+
+  // Atualizar pitch em tempo real nos SoundTouchNodes ativos
+  useEffect(() => {
+    transposeRef.current = transpose;
+    soundTouchNodesRef.current.forEach((stNode, i) => {
+      if (!stNode) return;
+      const stem = stemsRef.current[i];
+      if (!stem || isRhythmicStem(stem.name)) return;
+      stNode.pitchSemitones.value = transpose;
+    });
+  }, [transpose]);
+
+  const playAllRef = useRef<(offset?: number) => void>(() => {});
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -398,6 +447,9 @@ export default function MultitracksPlayerPage() {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
 
+    // Registrar o AudioWorklet processor (necessário para o SoundTouchNode)
+    ensureWorklet(ctx);
+
     // Carregar todos os stems e depois gerar waveforms com a duração máxima
     const loadAll = async () => {
       const decodePromises = stems.map(async (stem, i) => {
@@ -443,6 +495,8 @@ export default function MultitracksPlayerPage() {
   const stopAll = useCallback(() => {
     sourceNodesRef.current.forEach((n) => { try { n.stop(); } catch {} });
     sourceNodesRef.current = [];
+    soundTouchNodesRef.current.forEach((n) => { try { n?.disconnect(); } catch {} });
+    soundTouchNodesRef.current = [];
     cancelAnimationFrame(animFrameRef.current);
     cancelAnimationFrame(levelAnimRef.current);
     setStemLevels([]);
@@ -458,23 +512,47 @@ export default function MultitracksPlayerPage() {
     stems.forEach((stem, i) => {
       const buf = buffersRef.current[i];
       if (!buf) return;
-      const source = ctx.createBufferSource();
-      source.buffer = buf;
 
-      const gain = gainNodesRef.current[i] || ctx.createGain();
+      const gain = ctx.createGain();
       gainNodesRef.current[i] = gain;
       gain.gain.value = (stem.muted || (hasSolo && !stem.solo)) ? 0 : stem.volume;
 
-      const panner = panNodesRef.current[i] || ctx.createStereoPanner();
+      const panner = ctx.createStereoPanner();
       panNodesRef.current[i] = panner;
       panner.pan.value = stem.pan;
 
-      // Analyser para VU meter
-      const analyser = analyserNodesRef.current[i] || ctx.createAnalyser();
+      const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyserNodesRef.current[i] = analyser;
 
-      source.connect(gain);
+      const source = ctx.createBufferSource();
+      source.buffer = buf;
+
+      const isRhythmic = isRhythmicStem(stem.name);
+
+      if (!isRhythmic && workletReadyRef.current) {
+        // Stem harmônico: SoundTouchNode no audio thread — pitch real sem alterar tempo
+        try {
+          const stNode = new SoundTouchNode(ctx);
+          stNode.pitchSemitones.value = transposeRef.current;
+          if (offset > 0) {
+            // seek: playbackRate não afeta o pitch no SoundTouchNode
+            source.playbackRate.value = 1;
+          }
+          source.connect(stNode);
+          stNode.connect(gain);
+          soundTouchNodesRef.current[i] = stNode;
+        } catch {
+          // fallback se SoundTouchNode falhar
+          source.connect(gain);
+          soundTouchNodesRef.current[i] = null as any;
+        }
+      } else {
+        // Stem rítmico OU worklet não pronto: direto no gain
+        source.connect(gain);
+        soundTouchNodesRef.current[i] = null as any;
+      }
+
       gain.connect(analyser);
       analyser.connect(panner);
       panner.connect(ctx.destination);
@@ -519,24 +597,42 @@ export default function MultitracksPlayerPage() {
         // Reagendar próximo tick com novo offset
         if (audioCtxRef.current) {
           startTimeRef.current = audioCtxRef.current.currentTime - targetTime;
-          // Reiniciar sources
           sourceNodesRef.current.forEach((n) => { try { n.stop(); } catch {} });
           sourceNodesRef.current = [];
+          soundTouchNodesRef.current.forEach((n) => { try { n?.disconnect(); } catch {} });
+          soundTouchNodesRef.current = [];
+          const ctx = audioCtxRef.current;
           const hasSolo = stemsRef.current.some((s: StemTrack) => s.solo);
           stemsRef.current.forEach((stem: StemTrack, i: number) => {
             const buf = buffersRef.current[i];
-            if (!buf || !audioCtxRef.current) return;
-            const source = audioCtxRef.current.createBufferSource();
+            if (!buf || !ctx) return;
+            const source = ctx.createBufferSource();
             source.buffer = buf;
-            const gain = gainNodesRef.current[i] || audioCtxRef.current.createGain();
+            const gain = ctx.createGain();
             gainNodesRef.current[i] = gain;
             gain.gain.value = (stem.muted || (hasSolo && !stem.solo)) ? 0 : stem.volume;
-            const panner = panNodesRef.current[i] || audioCtxRef.current.createStereoPanner();
+            const panner = ctx.createStereoPanner();
             panNodesRef.current[i] = panner;
             panner.pan.value = stem.pan;
-            source.connect(gain);
+
+            if (!isRhythmicStem(stem.name) && workletReadyRef.current) {
+              try {
+                const stNode = new SoundTouchNode(ctx);
+                stNode.pitchSemitones.value = transposeRef.current;
+                source.connect(stNode);
+                stNode.connect(gain);
+                soundTouchNodesRef.current[i] = stNode;
+              } catch {
+                source.connect(gain);
+                soundTouchNodesRef.current[i] = null as any;
+              }
+            } else {
+              source.connect(gain);
+              soundTouchNodesRef.current[i] = null as any;
+            }
+
             gain.connect(panner);
-            panner.connect(audioCtxRef.current.destination);
+            panner.connect(ctx.destination);
             source.start(0, targetTime);
             sourceNodesRef.current[i] = source;
           });
@@ -550,6 +646,9 @@ export default function MultitracksPlayerPage() {
     };
     animFrameRef.current = requestAnimationFrame(tick);
   }, [stems, duration, stopAll]);
+
+  // Manter playAllRef sempre atualizado
+  useEffect(() => { playAllRef.current = playAll; }, [playAll]);
 
   // Calcula quando a seção atual termina (início da próxima seção)
   const getCurrentSectionEnd = useCallback((t: number): number => {
@@ -640,6 +739,12 @@ export default function MultitracksPlayerPage() {
         case "KeyX":
           e.preventDefault();
           setShowMixer(v => !v);
+          break;
+        case "Comma": // Shift+< diminui tom
+          if (e.shiftKey) { e.preventDefault(); setTranspose(v => Math.max(-6, v - 1)); }
+          break;
+        case "Period": // Shift+> aumenta tom
+          if (e.shiftKey) { e.preventDefault(); setTranspose(v => Math.min(6, v + 1)); }
           break;
         case "Escape":
           if (scheduledJumpRef.current) {
@@ -763,6 +868,11 @@ export default function MultitracksPlayerPage() {
           {album.musicalKey && (
             <span className="flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs font-mono font-semibold text-foreground">
               {album.musicalKey}
+              {transpose !== 0 && (
+                <span className={cn("ml-1", transpose > 0 ? "text-emerald-400" : "text-amber-400")}>
+                  → {DISPLAY_NOTES[(SEMITONES_MAP[album.musicalKey.replace("m","").trim()] + transpose + 12) % 12]}
+                </span>
+              )}
             </span>
           )}
           {album.bpm && (
@@ -773,6 +883,22 @@ export default function MultitracksPlayerPage() {
           {expiresAt && (
             <span className="text-xs text-muted-foreground">{daysLeft}d restantes</span>
           )}
+          {/* Controle de Tom */}
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-1.5 py-0.5">
+            <span className="text-[10px] text-muted-foreground font-medium mr-0.5">Tom</span>
+            <button onClick={() => setTranspose(v => Math.max(-6, v - 1))}
+              className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">−</button>
+            <span className={cn("text-xs font-bold tabular-nums w-6 text-center",
+              transpose > 0 ? "text-emerald-400" : transpose < 0 ? "text-amber-400" : "text-muted-foreground")}>
+              {transpose > 0 ? `+${transpose}` : transpose}
+            </span>
+            <button onClick={() => setTranspose(v => Math.min(6, v + 1))}
+              className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">+</button>
+            {transpose !== 0 && (
+              <button onClick={() => setTranspose(0)}
+                className="h-4 w-4 rounded flex items-center justify-center text-[9px] text-muted-foreground/50 hover:text-muted-foreground ml-0.5" title="Resetar tom">↺</button>
+            )}
+          </div>
           <button
             onClick={() => setShowMixer(v => !v)}
             className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
@@ -1309,6 +1435,7 @@ export default function MultitracksPlayerPage() {
           <span><kbd className="rounded bg-muted px-1">S</kbd> solo</span>
           <span><kbd className="rounded bg-muted px-1">+</kbd><kbd className="rounded bg-muted px-1">−</kbd> zoom</span>
           <span><kbd className="rounded bg-muted px-1">X</kbd> mixer</span>
+          <span><kbd className="rounded bg-muted px-1">Shift+&lt;</kbd><kbd className="rounded bg-muted px-1">Shift+&gt;</kbd> tom</span>
           {markers.length > 0 && <span><kbd className="rounded bg-muted px-1">1-9</kbd> markers | <kbd className="rounded bg-muted px-1">⌨️</kbd> customize</span>}
           {selectedStem !== null && (
             <span className="text-primary/60">Canal: <span style={{ color: stems[selectedStem]?.color }}>{stems[selectedStem]?.name}</span></span>
