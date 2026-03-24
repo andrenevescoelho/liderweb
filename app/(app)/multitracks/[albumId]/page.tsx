@@ -527,6 +527,12 @@ export default function MultitracksPlayerPage() {
     if (ctx.state === "suspended") ctx.resume();
     stopAll();
 
+    // Agendar início para um instante futuro fixo — dá tempo ao AudioWorklet inicializar
+    // Todos os stems (rítmicos e harmônicos) abrem no exato mesmo instante
+    const hasTranspose = transposeRef.current !== 0;
+    const startDelay = hasTranspose ? 0.1 : 0; // 100ms de margem quando há worklet ativo
+    const startAt = ctx.currentTime + startDelay;
+
     const hasSolo = stems.some((s) => s.solo);
     stems.forEach((stem, i) => {
       const buf = buffersRef.current[i];
@@ -562,7 +568,7 @@ export default function MultitracksPlayerPage() {
           soundTouchNodesRef.current[i] = null as any;
         }
       } else {
-        // Rítmico OU transpose = 0: AudioBufferSourceNode direto — zero latência, zero desalinhamento
+        // Rítmico OU transpose = 0: AudioBufferSourceNode direto
         source.connect(gain);
         soundTouchNodesRef.current[i] = null as any;
       }
@@ -570,9 +576,13 @@ export default function MultitracksPlayerPage() {
       gain.connect(analyser);
       analyser.connect(panner);
       panner.connect(ctx.destination);
-      source.start(0, offset);
+      // Todos iniciam no mesmo instante agendado
+      source.start(startAt, offset);
       sourceNodesRef.current[i] = source;
     });
+
+    // Ajustar startTimeRef para compensar o delay agendado
+    startTimeRef.current = ctx.currentTime + startDelay - offset;
 
     // Loop de leitura de níveis
     const dataArray = new Uint8Array(32);
@@ -594,7 +604,7 @@ export default function MultitracksPlayerPage() {
     };
     levelAnimRef.current = requestAnimationFrame(readLevels);
 
-    startTimeRef.current = ctx.currentTime - offset;
+    // startTimeRef já foi calculado acima considerando o startDelay
     const tick = () => {
       if (!audioCtxRef.current) return;
       const t = audioCtxRef.current.currentTime - startTimeRef.current;
@@ -610,12 +620,14 @@ export default function MultitracksPlayerPage() {
         offsetRef.current = targetTime;
         // Reagendar próximo tick com novo offset
         if (audioCtxRef.current) {
-          startTimeRef.current = audioCtxRef.current.currentTime - targetTime;
           sourceNodesRef.current.forEach((n) => { try { n.stop(); } catch {} });
           sourceNodesRef.current = [];
           soundTouchNodesRef.current.forEach((n) => { try { n?.disconnect(); } catch {} });
           soundTouchNodesRef.current = [];
           const ctx = audioCtxRef.current;
+          const jumpDelay = transposeRef.current !== 0 ? 0.1 : 0;
+          const jumpStartAt = ctx.currentTime + jumpDelay;
+          startTimeRef.current = jumpStartAt - targetTime;
           const hasSolo = stemsRef.current.some((s: StemTrack) => s.solo);
           stemsRef.current.forEach((stem: StemTrack, i: number) => {
             const buf = buffersRef.current[i];
@@ -647,7 +659,7 @@ export default function MultitracksPlayerPage() {
 
             gain.connect(panner);
             panner.connect(ctx.destination);
-            source.start(0, targetTime);
+            source.start(jumpStartAt, targetTime);
             sourceNodesRef.current[i] = source;
           });
         }
