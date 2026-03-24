@@ -527,11 +527,15 @@ export default function MultitracksPlayerPage() {
     if (ctx.state === "suspended") ctx.resume();
     stopAll();
 
-    // Agendar início para um instante futuro fixo — dá tempo ao AudioWorklet inicializar
-    // Todos os stems (rítmicos e harmônicos) abrem no exato mesmo instante
     const hasTranspose = transposeRef.current !== 0;
-    const startDelay = hasTranspose ? 0.1 : 0; // 100ms de margem quando há worklet ativo
-    const startAt = ctx.currentTime + startDelay;
+
+    // O SoundTouchNode (phase vocoder) tem latência interna de buffering.
+    // Medimos essa latência e compensamos os stems rítmicos com um DelayNode,
+    // fazendo todos abrirem no mesmo instante perceptível.
+    // A latência típica do SoundTouch é ~4096 samples / sampleRate ≈ 93ms a 44100Hz.
+    const soundtouchLatency = hasTranspose
+      ? (4096 / ctx.sampleRate) + (ctx.outputLatency || 0)
+      : 0;
 
     const hasSolo = stems.some((s) => s.solo);
     stems.forEach((stem, i) => {
@@ -556,7 +560,7 @@ export default function MultitracksPlayerPage() {
       const isRhythmic = isRhythmicStem(stem.name);
 
       if (!isRhythmic && transposeRef.current !== 0 && workletReadyRef.current) {
-        // Stem harmônico COM transpose ativo: SoundTouchNode — pitch real sem alterar tempo
+        // Harmônico com transpose: passa pelo SoundTouchNode
         try {
           const stNode = new SoundTouchNode(ctx);
           stNode.pitchSemitones.value = transposeRef.current;
@@ -567,8 +571,15 @@ export default function MultitracksPlayerPage() {
           source.connect(gain);
           soundTouchNodesRef.current[i] = null as any;
         }
+      } else if (isRhythmic && hasTranspose && soundtouchLatency > 0) {
+        // Rítmico com transpose ativo: atrasa pelo mesmo tempo do SoundTouchNode
+        const delay = ctx.createDelay(soundtouchLatency + 0.01);
+        delay.delayTime.value = soundtouchLatency;
+        source.connect(delay);
+        delay.connect(gain);
+        soundTouchNodesRef.current[i] = null as any;
       } else {
-        // Rítmico OU transpose = 0: AudioBufferSourceNode direto
+        // Sem transpose ou fallback: direto
         source.connect(gain);
         soundTouchNodesRef.current[i] = null as any;
       }
@@ -576,13 +587,11 @@ export default function MultitracksPlayerPage() {
       gain.connect(analyser);
       analyser.connect(panner);
       panner.connect(ctx.destination);
-      // Todos iniciam no mesmo instante agendado
-      source.start(startAt, offset);
+      source.start(0, offset);
       sourceNodesRef.current[i] = source;
     });
 
-    // Ajustar startTimeRef para compensar o delay agendado
-    startTimeRef.current = ctx.currentTime + startDelay - offset;
+    startTimeRef.current = ctx.currentTime - offset;
 
     // Loop de leitura de níveis
     const dataArray = new Uint8Array(32);
@@ -625,9 +634,9 @@ export default function MultitracksPlayerPage() {
           soundTouchNodesRef.current.forEach((n) => { try { n?.disconnect(); } catch {} });
           soundTouchNodesRef.current = [];
           const ctx = audioCtxRef.current;
-          const jumpDelay = transposeRef.current !== 0 ? 0.1 : 0;
-          const jumpStartAt = ctx.currentTime + jumpDelay;
-          startTimeRef.current = jumpStartAt - targetTime;
+          const hasTransposeJump = transposeRef.current !== 0;
+          const stLatency = hasTransposeJump ? (4096 / ctx.sampleRate) + (ctx.outputLatency || 0) : 0;
+          startTimeRef.current = ctx.currentTime - targetTime;
           const hasSolo = stemsRef.current.some((s: StemTrack) => s.solo);
           stemsRef.current.forEach((stem: StemTrack, i: number) => {
             const buf = buffersRef.current[i];
@@ -652,6 +661,12 @@ export default function MultitracksPlayerPage() {
                 source.connect(gain);
                 soundTouchNodesRef.current[i] = null as any;
               }
+            } else if (isRhythmicStem(stem.name) && hasTransposeJump && stLatency > 0) {
+              const delay = ctx.createDelay(stLatency + 0.01);
+              delay.delayTime.value = stLatency;
+              source.connect(delay);
+              delay.connect(gain);
+              soundTouchNodesRef.current[i] = null as any;
             } else {
               source.connect(gain);
               soundTouchNodesRef.current[i] = null as any;
@@ -659,7 +674,7 @@ export default function MultitracksPlayerPage() {
 
             gain.connect(panner);
             panner.connect(ctx.destination);
-            source.start(jumpStartAt, targetTime);
+            source.start(0, targetTime);
             sourceNodesRef.current[i] = source;
           });
         }
