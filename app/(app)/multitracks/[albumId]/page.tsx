@@ -380,17 +380,6 @@ export default function MultitracksPlayerPage() {
     }
   }, []);
 
-  // Atualizar pitch em tempo real nos SoundTouchNodes ativos
-  useEffect(() => {
-    transposeRef.current = transpose;
-    soundTouchNodesRef.current.forEach((stNode, i) => {
-      if (!stNode) return;
-      const stem = stemsRef.current[i];
-      if (!stem || isRhythmicStem(stem.name)) return;
-      stNode.pitchSemitones.value = transpose;
-    });
-  }, [transpose]);
-
   const playAllRef = useRef<(offset?: number) => void>(() => {});
 
   useEffect(() => {
@@ -502,6 +491,36 @@ export default function MultitracksPlayerPage() {
     setStemLevels([]);
   }, []);
 
+  // Atualizar pitch em tempo real nos SoundTouchNodes ativos.
+  // Se transpose cruzou o zero (0→N ou N→0), reinicia para recriar os nodes.
+  const prevTransposeRef = useRef(0);
+  useEffect(() => {
+    const prev = prevTransposeRef.current;
+    prevTransposeRef.current = transpose;
+    transposeRef.current = transpose;
+
+    const wasZero = prev === 0;
+    const isZero = transpose === 0;
+    const crossedZero = wasZero !== isZero;
+
+    if (crossedZero && sourceNodesRef.current.some(Boolean)) {
+      const offset = audioCtxRef.current
+        ? Math.max(0, audioCtxRef.current.currentTime - startTimeRef.current)
+        : offsetRef.current;
+      stopAll();
+      setTimeout(() => playAllRef.current(offset), 20);
+      return;
+    }
+
+    // Atualizar pitch nos SoundTouchNodes existentes (sem reiniciar)
+    soundTouchNodesRef.current.forEach((stNode, i) => {
+      if (!stNode) return;
+      const stem = stemsRef.current[i];
+      if (!stem || isRhythmicStem(stem.name)) return;
+      stNode.pitchSemitones.value = transpose;
+    });
+  }, [transpose, stopAll]);
+
   const playAll = useCallback((offset = 0) => {
     const ctx = audioCtxRef.current;
     if (!ctx || buffersRef.current.length === 0) return;
@@ -530,25 +549,20 @@ export default function MultitracksPlayerPage() {
 
       const isRhythmic = isRhythmicStem(stem.name);
 
-      if (!isRhythmic && workletReadyRef.current) {
-        // Stem harmônico: SoundTouchNode no audio thread — pitch real sem alterar tempo
+      if (!isRhythmic && transposeRef.current !== 0 && workletReadyRef.current) {
+        // Stem harmônico COM transpose ativo: SoundTouchNode — pitch real sem alterar tempo
         try {
           const stNode = new SoundTouchNode(ctx);
           stNode.pitchSemitones.value = transposeRef.current;
-          if (offset > 0) {
-            // seek: playbackRate não afeta o pitch no SoundTouchNode
-            source.playbackRate.value = 1;
-          }
           source.connect(stNode);
           stNode.connect(gain);
           soundTouchNodesRef.current[i] = stNode;
         } catch {
-          // fallback se SoundTouchNode falhar
           source.connect(gain);
           soundTouchNodesRef.current[i] = null as any;
         }
       } else {
-        // Stem rítmico OU worklet não pronto: direto no gain
+        // Rítmico OU transpose = 0: AudioBufferSourceNode direto — zero latência, zero desalinhamento
         source.connect(gain);
         soundTouchNodesRef.current[i] = null as any;
       }
@@ -615,7 +629,7 @@ export default function MultitracksPlayerPage() {
             panNodesRef.current[i] = panner;
             panner.pan.value = stem.pan;
 
-            if (!isRhythmicStem(stem.name) && workletReadyRef.current) {
+            if (!isRhythmicStem(stem.name) && transposeRef.current !== 0 && workletReadyRef.current) {
               try {
                 const stNode = new SoundTouchNode(ctx);
                 stNode.pitchSemitones.value = transposeRef.current;
