@@ -57,19 +57,37 @@ function isPriority(name: string) {
   return PRIORITY_STEMS.some((p) => name.toLowerCase().includes(p));
 }
 
-async function generateWaveform(buffer: AudioBuffer, samples = 200): Promise<number[]> {
+async function generateWaveform(buffer: AudioBuffer, samples = 200, totalDuration?: number): Promise<number[]> {
   const raw = buffer.getChannelData(0);
-  const blockSize = Math.floor(raw.length / samples);
+  const sampleRate = buffer.sampleRate;
+  const bufferDuration = buffer.duration;
+
+  // Se há duração total, calcular offset e tamanho proporcional
+  const total = totalDuration || bufferDuration;
+  const ratio = bufferDuration / total; // fração do tempo total que este stem ocupa
+  const stemSamples = Math.round(samples * ratio); // quantas barras representa o áudio real
+  const paddingEnd = samples - stemSamples; // barras de silêncio no final (se houver)
+
+  const blockSize = Math.max(1, Math.floor(raw.length / Math.max(stemSamples, 1)));
   const waveform: number[] = [];
-  for (let i = 0; i < samples; i++) {
+
+  for (let i = 0; i < stemSamples; i++) {
     let sum = 0;
+    const start = i * blockSize;
     for (let j = 0; j < blockSize; j++) {
-      sum += Math.abs(raw[i * blockSize + j]);
+      sum += Math.abs(raw[Math.min(start + j, raw.length - 1)]);
     }
     waveform.push(sum / blockSize);
   }
+
+  // Normalizar apenas pelo pico real do sinal
   const max = Math.max(...waveform, 0.001);
-  return waveform.map((v) => v / max);
+  const normalized = waveform.map((v) => v / max);
+
+  // Preencher com zeros o silêncio no final
+  for (let i = 0; i < paddingEnd; i++) normalized.push(0);
+
+  return normalized;
 }
 
 function WaveformBar({ data, progress, color }: { data: number[]; progress: number; color: string }) {
@@ -380,29 +398,46 @@ export default function MultitracksPlayerPage() {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
 
-    stems.forEach((stem, i) => {
-      if (!stem.loading) return;
-      fetchWithCache(stem.url)
-        .then((buf) => {
+    // Carregar todos os stems e depois gerar waveforms com a duração máxima
+    const loadAll = async () => {
+      const decodePromises = stems.map(async (stem, i) => {
+        if (!stem.loading) return;
+        try {
+          const buf = await fetchWithCache(stem.url);
           setCachedStems((prev) => new Set(prev).add(i));
-          return ctx.decodeAudioData(buf);
-        })
-        .then(async (decoded) => {
+          const decoded = await ctx.decodeAudioData(buf);
           buffersRef.current[i] = decoded;
-          if (i === 0) setDuration(decoded.duration);
-          const waveformData = await generateWaveform(decoded);
-          setStems((prev) => prev.map((s, idx) =>
-            idx === i ? { ...s, loading: false, ready: true, waveformData } : s
-          ));
-        })
-        .catch((err) => {
-          console.warn(`[multitracks] Stem ${i} (${stem.name}) falhou:`, err);
-          // Marca como ready=true mesmo com erro para não travar o allReady
+          // Marcar como carregado (sem waveform ainda)
           setStems((prev) => prev.map((s, idx) =>
             idx === i ? { ...s, loading: false, ready: true } : s
           ));
-        });
-    });
+          return decoded;
+        } catch (err) {
+          console.warn(`[multitracks] Stem ${i} (${stem.name}) falhou:`, err);
+          setStems((prev) => prev.map((s, idx) =>
+            idx === i ? { ...s, loading: false, ready: true } : s
+          ));
+          return null;
+        }
+      });
+
+      const decoded = await Promise.all(decodePromises);
+
+      // Duração total = stem mais longo
+      const maxDuration = Math.max(...decoded.map(d => d?.duration || 0), 0.001);
+      setDuration(maxDuration);
+
+      // Gerar waveforms com a duração total como referência
+      await Promise.all(decoded.map(async (d, i) => {
+        if (!d) return;
+        const waveformData = await generateWaveform(d, 200, maxDuration);
+        setStems((prev) => prev.map((s, idx) =>
+          idx === i ? { ...s, waveformData } : s
+        ));
+      }));
+    };
+
+    loadAll();
   }, [stems.length]);
 
   const stopAll = useCallback(() => {
