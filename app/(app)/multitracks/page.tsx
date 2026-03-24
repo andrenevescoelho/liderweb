@@ -122,14 +122,14 @@ export default function MultitracksPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Music2 className="h-7 w-7 text-primary" />
-            Multitracks
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Acervo de multitracks para seu ministério.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+            <Music2 className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Multitracks</h1>
+            <p className="text-sm text-muted-foreground">Acervo de multitracks para seu ministério</p>
+          </div>
         </div>
         {/* Cota */}
         <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5">

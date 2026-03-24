@@ -104,8 +104,13 @@ export default function ComunicadosPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Megaphone className="w-8 h-8 text-indigo-600" />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Comunicados</h1>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+          <Megaphone className="w-5 h-5 text-blue-500" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Comunicados</h1>
+          <p className="text-sm text-muted-foreground">Envie comunicados para todos os membros do grupo</p>
+        </div>
       </div>
 
       {canSend && (

@@ -17,6 +17,7 @@ import {
   X,
   Clock,
   Users,
+  CalendarDays
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -161,8 +162,13 @@ export default function SchedulesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <Calendar className="w-8 h-8 text-purple-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Escalas</h1>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10">
+            <CalendarDays className="w-5 h-5 text-indigo-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Escalas</h1>
+            <p className="text-sm text-muted-foreground">Organize e gerencie as escalas do ministério</p>
+          </div>
         </div>
         {canEdit && (
           <Button onClick={() => setModalOpen(true)}>

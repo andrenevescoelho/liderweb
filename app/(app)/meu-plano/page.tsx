@@ -180,8 +180,15 @@ export default function MeuPlanoPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Meu Plano</h1>
-          <p className="text-sm text-muted-foreground">Veja seu plano atual e faça upgrade quando precisar.</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
+              <Crown className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Meu Plano</h1>
+              <p className="text-sm text-muted-foreground">Veja seu plano atual e faça upgrade quando precisar</p>
+            </div>
+          </div>
         </div>
         <Button onClick={handleOpenPortal} disabled={portalLoading || loading || !canUseStripePortal} variant="outline">
           {portalLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}

@@ -133,9 +133,14 @@ export default function ChatGrupoPage() {
 
   return (
     <div className="h-[calc(100vh-8rem)] rounded-xl border bg-white dark:bg-slate-900 flex flex-col overflow-hidden">
-      <header className="p-4 border-b flex items-center gap-2">
-        <MessageCircle className="w-5 h-5 text-cyan-600" />
-        <h1 className="font-semibold">Chat do Grupo</h1>
+      <header className="p-4 border-b flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 flex-shrink-0">
+          <MessageCircle className="w-4 h-4 text-cyan-500" />
+        </div>
+        <div>
+          <h1 className="font-bold text-base tracking-tight">Chat do Grupo</h1>
+          <p className="text-xs text-muted-foreground">Converse com os membros do ministério</p>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -105,8 +106,15 @@ export default function AuditoriaPage() {
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Auditoria</h1>
-        <p className="text-sm text-muted-foreground">Rastreie ações administrativas e operacionais.</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
+            <ShieldCheck className="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Auditoria</h1>
+            <p className="text-sm text-muted-foreground">Rastreie ações administrativas e operacionais</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 rounded-xl border bg-card p-4 md:grid-cols-6">
