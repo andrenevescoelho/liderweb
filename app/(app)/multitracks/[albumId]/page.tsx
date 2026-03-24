@@ -253,7 +253,12 @@ export default function MultitracksPlayerPage() {
   const [showBpmGrid, setShowBpmGrid] = useState(false);
   const [addingMarker, setAddingMarker] = useState(false);
   const [bpmOffset, setBpmOffset] = useState(0);
-  const [showMixer, setShowMixer] = useState(false); // segundos de offset do 1º tempo
+  const [showMixer, setShowMixer] = useState(false);
+  const [mixerPos, setMixerPos] = useState({ x: 0, y: 0 });
+  const [mixerSize, setMixerSize] = useState({ w: 0, h: 340 });
+  const [mixerInitialized, setMixerInitialized] = useState(false);
+  const mixerDragRef = useRef<{startX:number;startY:number;origX:number;origY:number}|null>(null);
+  const mixerResizeRef = useRef<{startX:number;startY:number;origW:number;origH:number}|null>(null); // segundos de offset do 1º tempo
   const rulerRef = useRef<HTMLDivElement>(null);
   const shortcutsRef = useRef<Record<number, string>>({});
   const userIdRef = useRef<string>("");
@@ -1279,173 +1284,153 @@ export default function MultitracksPlayerPage() {
         </div>
       </div>
 
-      {/* MIXER FLUTUANTE */}
-      {showMixer && (
-        <div className="fixed bottom-[120px] left-1/2 -translate-x-1/2 z-50 flex flex-col rounded-2xl border border-white/10 bg-[#0f1117]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
-          style={{maxWidth:"calc(100vw - 32px)", width: Math.max(stems.length * 80 + 32, 400)}}>
-          {/* Header do mixer */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/8 bg-black/30">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-white/70 uppercase tracking-widest">Mixer</span>
-              <span className="text-[10px] text-white/30">{stems.length} canais</span>
+      {/* MIXER FLUTUANTE — drag + resize + neon sutil */}
+      {showMixer && (() => {
+        // Largura fixa = largura da página visível, não da tela toda
+        const pageW = typeof window !== "undefined" ? window.innerWidth - 240 : 900; // descontar sidebar
+        const defaultW = Math.min(pageW - 32, Math.max(stems.length * 80 + 80, 500));
+        const w = mixerSize.w || defaultW;
+        const h = mixerSize.h;
+        // Posição inicial: colado na parte inferior da área de conteúdo
+        const defaultX = typeof window !== "undefined" ? 240 + 16 : 256; // depois da sidebar
+        const defaultY = typeof window !== "undefined" ? window.innerHeight - h - 80 : 400; // acima do rodapé
+        const x = mixerInitialized ? mixerPos.x : defaultX;
+        const y = mixerInitialized ? mixerPos.y : defaultY;
+        const channelW = 80; // largura fixa por canal — scroll cuida do resto
+        return (
+          <div className="fixed z-50 flex flex-col overflow-hidden select-none"
+            style={{
+              left:x, top:y, width:w, height:h,
+              borderRadius:12,
+              // Mesma cor do painel principal com neon sutil
+              backgroundColor:"hsl(var(--background))",
+              border:"1px solid rgba(139,92,246,0.25)",
+              boxShadow:"0 0 0 1px rgba(139,92,246,0.1), 0 0 20px rgba(139,92,246,0.08), 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}>
+            {/* Linha neon topo — sutil */}
+            <div className="absolute top-0 left-0 right-0 h-px" style={{background:"linear-gradient(90deg, transparent 10%, rgba(139,92,246,0.5) 40%, rgba(6,182,212,0.4) 60%, transparent 90%)"}}/>
+            {/* Glow neon sutil no fundo — cantos */}
+            <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse 60% 40% at 20% 100%, rgba(139,92,246,0.04) 0%, transparent 70%)"}}/>
+            <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse 40% 30% at 80% 100%, rgba(6,182,212,0.03) 0%, transparent 70%)"}}/>
+            {/* Header drag */}
+            <div className="flex items-center justify-between px-4 py-2 flex-shrink-0 cursor-grab active:cursor-grabbing"
+              style={{borderBottom:"1px solid rgba(255,255,255,0.06)", background:"rgba(139,92,246,0.04)"}}
+              onMouseDown={e=>{
+                if((e.target as HTMLElement).closest("button")) return;
+                const startX=e.clientX,startY=e.clientY;
+                const curX=mixerInitialized?mixerPos.x:(typeof window!=="undefined"?(window.innerWidth-w)/2:200);
+                const curY=mixerInitialized?mixerPos.y:(typeof window!=="undefined"?(window.innerHeight-h)/2:200);
+                const onMove=(ev:MouseEvent)=>{setMixerPos({x:curX+(ev.clientX-startX),y:curY+(ev.clientY-startY)});setMixerInitialized(true);};
+                const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+                window.addEventListener("mousemove",onMove);window.addEventListener("mouseup",onUp);
+              }}>
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1.5">
+                  <div className="h-3 w-3 rounded-full cursor-pointer" style={{backgroundColor:"rgba(239,68,68,0.8)"}} onClick={()=>setShowMixer(false)}/>
+                  <div className="h-3 w-3 rounded-full" style={{backgroundColor:"rgba(245,158,11,0.8)"}}/>
+                  <div className="h-3 w-3 rounded-full" style={{backgroundColor:"rgba(34,197,94,0.8)"}}/>
+                </div>
+                <span className="text-xs font-black tracking-widest uppercase" style={{color:"rgba(139,92,246,0.9)"}}>Mixer</span>
+                <span className="text-[10px]" style={{color:"rgba(255,255,255,0.2)"}}>{stems.length} canais</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button onClick={()=>setMixerSize(s=>({...s,h:Math.max(260,s.h-40)}))} className="text-[9px] border rounded px-1.5 py-0.5" style={{color:"rgba(255,255,255,0.3)",borderColor:"rgba(255,255,255,0.1)"}}>−H</button>
+                <button onClick={()=>setMixerSize(s=>({...s,h:Math.min(600,s.h+40)}))} className="text-[9px] border rounded px-1.5 py-0.5" style={{color:"rgba(255,255,255,0.3)",borderColor:"rgba(255,255,255,0.1)"}}>+H</button>
+                <button onClick={()=>setShowMixer(false)} className="text-[9px] border rounded px-2 py-0.5 ml-1" style={{color:"rgba(255,255,255,0.3)",borderColor:"rgba(255,255,255,0.1)"}}>✕</button>
+              </div>
             </div>
-            <button onClick={() => setShowMixer(false)} className="text-white/30 hover:text-white/60 text-xs border border-white/10 rounded px-2 py-0.5">✕ X</button>
-          </div>
-
-          {/* Canais */}
-          <div className="flex overflow-x-auto">
-            {stems.map((stem, idx) => {
-              const isSoloing = stems.some(s => s.solo);
-              const isAudible = stem.solo || (!isSoloing && !stem.muted);
-              return (
-                <div key={idx} className="flex flex-col items-center gap-2 px-3 py-3 border-r border-white/5 flex-shrink-0"
-                  style={{width:80}}>
-
-                  {/* Nome editável */}
-                  <div className="w-full text-center">
-                    <p className="text-[9px] font-bold truncate w-full text-center"
-                      style={{color: isAudible ? stem.color : "rgba(255,255,255,0.2)"}}>
-                      {stem.name}
-                    </p>
-                  </div>
-
-                  {/* EQ simples + VU em tempo real */}
-                  <div className="flex gap-0.5 items-end h-5 w-full justify-center">
-                    {[0,1,2,3,4,5,6].map((bi)=>{
-                      const level = stemLevels[idx] || 0;
-                      const barH = isAudible ? Math.min(1, level * (0.4 + bi * 0.08) + 0.1) : 0.1;
-                      return (
-                        <div key={bi} className="flex-1 rounded-sm transition-none"
-                          style={{
-                            height:`${barH*100}%`,
-                            backgroundColor: level > 0.8 ? "#ef4444"
-                              : level > 0.5 ? "#f59e0b"
-                              : isAudible ? stem.color : "rgba(255,255,255,0.08)",
-                          }}/>
-                      );
-                    })}
-                  </div>
-
-                  {/* Pan knob */}
-                  <div className="flex flex-col items-center gap-0.5">
-                    <div className="relative w-8 h-8">
-                      <svg viewBox="0 0 32 32" className="w-8 h-8 cursor-ew-resize"
-                        onMouseDown={e=>{
-                          e.preventDefault();
-                          const startX=e.clientX, startPan=stem.pan;
-                          const onMove=(ev:MouseEvent)=>{
-                            const delta=(ev.clientX-startX)/60;
-                            updateStem(idx,{pan:Math.max(-1,Math.min(1,startPan+delta))});
-                          };
-                          const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
-                          window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
-                        }}
+            {/* Canais */}
+            <div className="flex flex-1 overflow-x-auto overflow-y-hidden" style={{scrollbarWidth:"thin",scrollbarColor:"rgba(139,92,246,0.3) transparent"}}>
+              {stems.map((stem,idx)=>{
+                const isSoloing=stems.some(s=>s.solo);
+                const isAudible=stem.solo||(!isSoloing&&!stem.muted);
+                const level=stemLevels[idx]||0;
+                return (
+                  <div key={idx} className="flex flex-col items-center gap-1.5 py-3 flex-shrink-0"
+                    style={{width:channelW,borderRight:"1px solid rgba(255,255,255,0.04)",background:isAudible&&level>0.01?`linear-gradient(180deg,${stem.color}08 0%,transparent 40%)`:"transparent"}}>
+                    <p className="text-[9px] font-bold truncate w-full text-center px-1" style={{color:isAudible?stem.color:"rgba(255,255,255,0.2)"}}>{stem.name}</p>
+                    {/* VU barras */}
+                    <div className="flex gap-px items-end w-full px-2" style={{height:24}}>
+                      {Array.from({length:8}).map((_,bi)=>{
+                        const barH=isAudible?Math.min(1,level*(0.5+bi*0.07)+0.05):0.05;
+                        return <div key={bi} className="flex-1 rounded-sm" style={{height:`${barH*100}%`,backgroundColor:level>0.85?"#ef4444":level>0.6?"#f59e0b":stem.color,opacity:isAudible?0.85:0.12,transition:"height 60ms linear"}}/>;
+                      })}
+                    </div>
+                    {/* Pan */}
+                    <div className="flex flex-col items-center gap-0.5">
+                      <svg viewBox="0 0 28 28" style={{width:28,height:28}} className="cursor-ew-resize"
+                        onMouseDown={e=>{e.preventDefault();const sx=e.clientX,sp=stem.pan;const om=(ev:MouseEvent)=>updateStem(idx,{pan:Math.max(-1,Math.min(1,sp+(ev.clientX-sx)/60))});const ou=()=>{window.removeEventListener("mousemove",om);window.removeEventListener("mouseup",ou);};window.addEventListener("mousemove",om);window.addEventListener("mouseup",ou);}}
                         onDoubleClick={()=>updateStem(idx,{pan:0})}>
-                        <circle cx="16" cy="16" r="12" fill="#1a1f2e" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-                        <circle cx="16" cy="16" r="8" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2"/>
-                        {/* Indicador pan */}
-                        <circle
-                          cx={16 + stem.pan * 7}
-                          cy="16"
-                          r="2.5"
-                          fill={isAudible?stem.color:"rgba(255,255,255,0.2)"}/>
-                        {/* Linha central */}
-                        <line x1="16" y1="8" x2="16" y2="12" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+                        <circle cx="14" cy="14" r="11" fill="rgba(0,0,0,0.5)" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
+                        <circle cx="14" cy="14" r="7" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1.5"/>
+                        <circle cx={14+stem.pan*6} cy="14" r="2.5" fill={isAudible?stem.color:"rgba(255,255,255,0.2)"} style={{filter:isAudible?`drop-shadow(0 0 3px ${stem.color})`:"none"}}/>
+                        <line x1="14" y1="7" x2="14" y2="11" stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
                       </svg>
+                      <span className="text-[7px] tabular-nums" style={{color:"rgba(255,255,255,0.2)"}}>{stem.pan===0?"C":stem.pan>0?`R${Math.round(stem.pan*100)}`:`L${Math.round(Math.abs(stem.pan)*100)}`}</span>
                     </div>
-                    <span className="text-[8px] text-white/25 tabular-nums">
-                      {stem.pan===0?"C":stem.pan>0?`R${Math.round(stem.pan*100)}`:`L${Math.round(Math.abs(stem.pan)*100)}`}
-                    </span>
-                  </div>
-
-                  {/* Fader vertical + VU lateral */}
-                  <div className="flex items-center gap-1 h-24">
-                    {/* VU bar fina */}
-                    <div className="w-1 h-full rounded-full bg-white/5 overflow-hidden flex flex-col-reverse">
-                      <div className="w-full rounded-full transition-none"
-                        style={{
-                          height:`${Math.min(100,(stemLevels[idx]||0)*100)}%`,
-                          backgroundColor:(stemLevels[idx]||0)>0.8?"#ef4444":(stemLevels[idx]||0)>0.5?"#f59e0b":stem.color,
-                          opacity: isAudible ? 0.9 : 0.1,
-                        }}/>
-                    </div>
-                    <div className="relative h-full flex flex-col items-center justify-center"
-                      style={{width:16}}>
-                      <div className="relative w-1.5 h-full rounded-full bg-white/5">
-                        <div className="absolute bottom-0 left-0 right-0 rounded-full transition-all"
-                          style={{height:`${stem.volume*100}%`, backgroundColor:isAudible?stem.color+"60":"rgba(255,255,255,0.1)"}}/>
-                        <div className="absolute left-1/2 -translate-x-1/2 w-4 h-2.5 rounded bg-white/80 shadow cursor-ns-resize border border-white/20"
-                          style={{bottom:`calc(${stem.volume*100}% - 5px)`}}
-                          onMouseDown={e=>{
-                            e.preventDefault();
-                            const el=e.currentTarget.parentElement!;
-                            const rect=el.getBoundingClientRect();
-                            const onMove=(ev:MouseEvent)=>{
-                              const v=Math.max(0,Math.min(1,1-(ev.clientY-rect.top)/rect.height));
-                              updateStem(idx,{volume:v});
-                              if(gainNodesRef.current[idx]) gainNodesRef.current[idx].gain.value = stem.muted?0:v;
-                            };
-                            const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
-                            window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
-                          }}/>
+                    {/* Fader + VU */}
+                    <div className="flex items-center gap-1 flex-1" style={{minHeight:60}}>
+                      <div className="w-1 h-full rounded-full overflow-hidden flex flex-col-reverse" style={{background:"rgba(255,255,255,0.04)"}}>
+                        <div className="w-full rounded-full" style={{height:`${Math.min(100,level*100)}%`,backgroundColor:level>0.85?"#ef4444":level>0.6?"#f59e0b":stem.color,opacity:isAudible?1:0.1,transition:"height 60ms linear",boxShadow:isAudible&&level>0.1?`0 0 4px ${stem.color}`:"none"}}/>
+                      </div>
+                      <div className="relative" style={{width:14,height:"100%"}}>
+                        <div className="relative w-1.5 h-full rounded-full mx-auto" style={{background:"rgba(255,255,255,0.06)"}}>
+                          <div className="absolute bottom-0 left-0 right-0 rounded-full" style={{height:`${stem.volume*100}%`,backgroundColor:isAudible?stem.color+"50":"rgba(255,255,255,0.08)"}}/>
+                          <div className="absolute left-1/2 -translate-x-1/2 rounded cursor-ns-resize"
+                            style={{width:16,height:10,bottom:`calc(${stem.volume*100}% - 5px)`,background:"linear-gradient(180deg,rgba(255,255,255,0.9),rgba(200,200,200,0.7))",border:"1px solid rgba(255,255,255,0.3)",boxShadow:isAudible?`0 0 6px ${stem.color}60`:"none"}}
+                            onMouseDown={e=>{e.preventDefault();const el=e.currentTarget.parentElement!;const rect=el.getBoundingClientRect();const om=(ev:MouseEvent)=>{const v=Math.max(0,Math.min(1,1-(ev.clientY-rect.top)/rect.height));updateStem(idx,{volume:v});if(gainNodesRef.current[idx])gainNodesRef.current[idx].gain.value=stem.muted?0:v;};const ou=()=>{window.removeEventListener("mousemove",om);window.removeEventListener("mouseup",ou);};window.addEventListener("mousemove",om);window.addEventListener("mouseup",ou);}}/>
+                        </div>
+                      </div>
+                      <div className="flex flex-col justify-between h-full text-[6px] leading-none" style={{color:"rgba(255,255,255,0.15)"}}>
+                        <span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-∞</span>
                       </div>
                     </div>
-                    {/* dB scale */}
-                    <div className="flex flex-col justify-between h-full text-[7px] text-white/20 leading-none">
-                      <span>0</span>
-                      <span>-6</span>
-                      <span>-12</span>
-                      <span>-24</span>
-                      <span>-∞</span>
+                    <span className="text-[8px] tabular-nums" style={{color:"rgba(255,255,255,0.3)"}}>{Math.round(stem.volume*100)}</span>
+                    <div className="flex gap-1 w-full px-2">
+                      <button onClick={()=>updateStem(idx,{muted:!stem.muted,solo:false})} className="flex-1 rounded py-1 text-[9px] font-black transition-all"
+                        style={{background:stem.muted?"rgba(239,68,68,0.25)":"rgba(255,255,255,0.05)",border:stem.muted?"1px solid rgba(239,68,68,0.5)":"1px solid rgba(255,255,255,0.08)",color:stem.muted?"#f87171":"rgba(255,255,255,0.3)",boxShadow:stem.muted?"0 0 8px rgba(239,68,68,0.3)":"none"}}>M</button>
+                      <button onClick={()=>setStems(prev=>prev.map((s,i)=>({...s,solo:i===idx?!stem.solo:false,muted:false})))} className="flex-1 rounded py-1 text-[9px] font-black transition-all"
+                        style={{background:stem.solo?"rgba(245,158,11,0.25)":"rgba(255,255,255,0.05)",border:stem.solo?"1px solid rgba(245,158,11,0.5)":"1px solid rgba(255,255,255,0.08)",color:stem.solo?"#fbbf24":"rgba(255,255,255,0.3)",boxShadow:stem.solo?"0 0 8px rgba(245,158,11,0.3)":"none"}}>S</button>
+                    </div>
+                    <div className="w-full h-1 rounded-full" style={{background:isAudible?`linear-gradient(90deg,${stem.color}40,${stem.color}80,${stem.color}40)`:"rgba(255,255,255,0.05)",boxShadow:isAudible&&level>0.05?`0 0 6px ${stem.color}60`:"none",transition:"box-shadow 100ms"}}/>
+                  </div>
+                );
+              })}
+              {/* Master */}
+              <div className="flex flex-col items-center gap-1.5 py-3 flex-shrink-0"
+                style={{width:70,borderLeft:"1px solid rgba(139,92,246,0.2)",background:"linear-gradient(180deg,rgba(139,92,246,0.06) 0%,transparent 100%)"}}>
+                <p className="text-[9px] font-black uppercase tracking-widest" style={{color:"rgba(139,92,246,0.7)"}}>Master</p>
+                <div style={{height:24}}/><div style={{height:36}}/>
+                <div className="flex items-center gap-1 flex-1" style={{minHeight:60}}>
+                  <div className="relative" style={{width:14,height:"100%"}}>
+                    <div className="relative w-1.5 h-full rounded-full mx-auto" style={{background:"rgba(255,255,255,0.06)"}}>
+                      <div className="absolute bottom-0 left-0 right-0 rounded-full" style={{height:"80%",backgroundColor:"rgba(139,92,246,0.4)"}}/>
+                      <div className="absolute left-1/2 -translate-x-1/2 rounded cursor-ns-resize" style={{width:16,height:10,bottom:"calc(80% - 5px)",background:"linear-gradient(180deg,rgba(255,255,255,0.9),rgba(200,200,200,0.7))",border:"1px solid rgba(255,255,255,0.3)",boxShadow:"0 0 8px rgba(139,92,246,0.5)"}}/>
                     </div>
                   </div>
-
-                  {/* Valor volume */}
-                  <span className="text-[8px] text-white/30 tabular-nums">{Math.round(stem.volume*100)}</span>
-
-                  {/* M / S */}
-                  <div className="flex gap-1 w-full">
-                    <button
-                      onClick={()=>updateStem(idx,{muted:!stem.muted, solo:false})}
-                      className={cn("flex-1 rounded text-[9px] font-black py-1 transition-all border",
-                        stem.muted?"bg-red-500/30 border-red-500/50 text-red-400":"border-white/10 text-white/30 hover:text-white/60")}>
-                      M
-                    </button>
-                    <button
-                      onClick={()=>setStems(prev=>prev.map((s,i)=>({...s,solo:i===idx?!stem.solo:false,muted:false})))}
-                      className={cn("flex-1 rounded text-[9px] font-black py-1 transition-all border",
-                        stem.solo?"bg-amber-500/30 border-amber-500/50 text-amber-400":"border-white/10 text-white/30 hover:text-white/60")}>
-                      S
-                    </button>
-                  </div>
-
-                  {/* Cor do canal */}
-                  <div className="h-1 w-full rounded-full opacity-60" style={{backgroundColor:stem.color}}/>
                 </div>
-              );
-            })}
-
-            {/* Master */}
-            <div className="flex flex-col items-center gap-2 px-3 py-3 flex-shrink-0 bg-white/3 border-l border-white/10" style={{width:70}}>
-              <p className="text-[9px] font-black text-white/50 uppercase tracking-widest">Master</p>
-              <div className="h-4 w-full"/>
-              <div className="h-8 w-full"/>
-              <div className="relative h-24 w-4">
-                <div className="w-1.5 h-full rounded-full bg-white/5 mx-auto relative">
-                  <div className="absolute bottom-0 left-0 right-0 rounded-full bg-primary/40" style={{height:"80%"}}/>
-                  <div className="absolute left-1/2 -translate-x-1/2 w-4 h-2.5 rounded bg-white shadow cursor-ns-resize border border-white/20" style={{bottom:"calc(80% - 5px)"}}/>
+                <span className="text-[8px]" style={{color:"rgba(255,255,255,0.3)"}}>100</span>
+                <div className="flex gap-1 w-full px-2">
+                  <div className="flex-1 rounded py-1 border" style={{borderColor:"rgba(255,255,255,0.05)"}}/>
+                  <div className="flex-1 rounded py-1 border" style={{borderColor:"rgba(255,255,255,0.05)"}}/>
                 </div>
+                <div className="w-full h-1 rounded-full" style={{background:"linear-gradient(90deg,rgba(139,92,246,0.3),rgba(139,92,246,0.7),rgba(6,182,212,0.5))",boxShadow:"0 0 6px rgba(139,92,246,0.4)"}}/>
               </div>
-              <span className="text-[8px] text-white/30">100</span>
-              <div className="flex gap-1 w-full">
-                <div className="flex-1 rounded border border-white/5 py-1"/>
-                <div className="flex-1 rounded border border-white/5 py-1"/>
-              </div>
-              <div className="h-1 w-full rounded-full bg-primary/40"/>
+            </div>
+            {/* Handle resize */}
+            <div className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize flex items-end justify-end pb-1 pr-1" style={{color:"rgba(139,92,246,0.5)"}}
+              onMouseDown={e=>{
+                e.preventDefault();
+                const sx=e.clientX,sy=e.clientY,ow=mixerSize.w||defaultW,oh=mixerSize.h;
+                const om=(ev:MouseEvent)=>setMixerSize({w:Math.max(400,ow+(ev.clientX-sx)),h:Math.max(260,Math.min(600,oh+(ev.clientY-sy)))});
+                const ou=()=>{window.removeEventListener("mousemove",om);window.removeEventListener("mouseup",ou);};
+                window.addEventListener("mousemove",om);window.addEventListener("mouseup",ou);
+              }}>
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 8 L8 2 M5 8 L8 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
