@@ -6,5 +6,6 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
   images: { unoptimized: true },
+  transpilePackages: ['@soundtouchjs/audio-worklet', '@soundtouchjs/core'],
 };
 module.exports = nextConfig;
