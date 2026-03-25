@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { hasPermission } from "@/lib/authorization";
+import { Youtube, Headphones, Radio, Layers, Music } from "lucide-react";
 
 export default function EnsaioDetalhePage() {
   const statusMeta: Record<string, { label: string; badge: string; icon: string; classes: string }> = {
@@ -240,20 +241,72 @@ export default function EnsaioDetalhePage() {
       <Card>
         <CardHeader><CardTitle>Repertório (lista vertical)</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          {(rehearsal.songs ?? []).map((song: any) => (
-            <div key={song.id} className="space-y-1 rounded-lg border border-border/70 bg-muted/20 p-3">
-              <p className="font-medium">{song.title} {song.artist ? `- ${song.artist}` : ""}</p>
-              <p className="text-xs text-muted-foreground">Tom: {song.key || "-"} | BPM: {song.bpm || "-"} | Tags: {(song.tags || []).join(", ") || "-"}</p>
+          {(rehearsal.songs ?? []).map((song: any) => {
+            const res = song.resources ?? {};
+            return (
+            <div key={song.id} className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">{song.title} {song.artist ? `- ${song.artist}` : ""}</p>
+                  <p className="text-xs text-muted-foreground">Tom: {song.key || "-"} | BPM: {song.bpm || "-"}</p>
+                </div>
+                {/* Botão de ação primária */}
+                <div className="flex-shrink-0">
+                  {res.multitrack && res.multitrackRented && res.multitrackAlbumId ? (
+                    <a href={`/multitracks/${res.multitrackAlbumId}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors">
+                      <Headphones className="h-3 w-3" /> Multitrack
+                    </a>
+                  ) : res.youtube && res.youtubeUrl ? (
+                    <a href={res.youtubeUrl} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors">
+                      <Youtube className="h-3 w-3" /> YouTube
+                    </a>
+                  ) : res.audio && res.audioUrl ? (
+                    <a href={res.audioUrl} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors">
+                      <Radio className="h-3 w-3" /> Áudio
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Indicadores de recursos */}
+              <div className="flex flex-wrap gap-1">
+                {res.cifra && (
+                  <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400">
+                    <Music className="h-2.5 w-2.5" /> Cifra
+                  </span>
+                )}
+                {res.youtube && (
+                  <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-red-500/10 text-red-700 border-red-500/30 dark:text-red-400">
+                    <Youtube className="h-2.5 w-2.5" /> YouTube
+                  </span>
+                )}
+                {res.audio && (
+                  <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400">
+                    <Radio className="h-2.5 w-2.5" /> Áudio
+                  </span>
+                )}
+                {res.multitrack && (
+                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border ${
+                    res.multitrackRented
+                      ? "bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-400"
+                      : "bg-muted/50 text-muted-foreground border-border/50"
+                  }`}>
+                    <Headphones className="h-2.5 w-2.5" />
+                    {res.multitrackRented ? "Multitrack" : "Multitrack (não alugado)"}
+                  </span>
+                )}
+                {res.pad && (
+                  <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400">
+                    <Layers className="h-2.5 w-2.5" /> Pad
+                  </span>
+                )}
+              </div>
+
               {song.notes && <p className="text-sm">{song.notes}</p>}
-              {song.youtubeUrl && (
-                <a className="text-xs text-primary underline" href={song.youtubeUrl} target="_blank" rel="noreferrer">YouTube</a>
-              )}
-              {song.audioUrl && (
-                <audio controls className="w-full h-10">
-                  <source src={song.audioUrl} />
-                </audio>
-              )}
-              <div className="text-xs text-muted-foreground">Arquivos: {(song.song?.attachments?.length ?? 0) > 0 ? `${song.song.attachments.length} anexos` : "Sem anexos"}</div>
+              <div className="text-xs text-muted-foreground">Anexos: {(song.song?.attachments?.length ?? 0) > 0 ? `${song.song.attachments.length} arquivo(s)` : "Sem anexos"}</div>
               {(song.tasks ?? []).length > 0 && (
                 <div className="text-sm">
                   <p className="font-medium">Minha tarefa</p>
@@ -266,7 +319,8 @@ export default function EnsaioDetalhePage() {
                 <Button size="sm" variant="outline" onClick={() => promoteSong(song.id)}>Promover para repertório</Button>
               )}
             </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
