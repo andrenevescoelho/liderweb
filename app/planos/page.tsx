@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Check, X, Loader2, Disc3, Brain, Users, Scissors, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -115,21 +116,43 @@ const EXTRAS = [
 
 export default function PlanosPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleSelect = async (plan: typeof PLANS[0]) => {
-    if (plan.isFree) { router.push("/register"); return; }
     setLoading(plan.id);
     try {
-      const res = await fetch("/api/checkout", {
+      // Tentar chamar a API — se não tiver sessão, a API retorna needsGroup: true
+      const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId: plan.stripePriceId }),
+        body: JSON.stringify({ planId: plan.id }),
       });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
-    } catch { /* silent */ }
-    finally { setLoading(null); }
+
+      if (data.needsGroup) {
+        // Usuário não logado — redirecionar para signup com plano selecionado
+        router.push(`/signup?plan=${plan.id}`);
+        return;
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      if (data.error) {
+        console.error("Checkout error:", data.error);
+        // Se erro de permissão, redirecionar para login
+        if (res.status === 403) {
+          router.push("/login");
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao selecionar plano:", err);
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
@@ -141,8 +164,8 @@ export default function PlanosPage() {
           <span className="font-bold text-white">Líder Web</span>
           <span className="text-xs text-slate-500">by multitrackgospel.com</span>
         </div>
-        <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
-          Entrar
+        <Button variant="outline" size="sm" onClick={() => router.push(session ? "/reativar-assinatura" : "/login")}>
+          {session ? "Minha Conta" : "Entrar"}
         </Button>
       </div>
 
