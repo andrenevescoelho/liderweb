@@ -29,6 +29,7 @@ interface Album {
   stems: Stem[];
   isActive: boolean;
   createdAt: string;
+  songId: string | null;
   _count: { rentals: number };
 }
 
@@ -41,6 +42,7 @@ const EMPTY_FORM = {
   coverUrl: "",
   description: "",
   driveZipUrl: "",
+  songId: "",
 };
 
 export default function MultitracksAdminPage() {
@@ -60,6 +62,9 @@ export default function MultitracksAdminPage() {
   const [parseMsg, setParseMsg] = useState("");
   const [coverResults, setCoverResults] = useState<{ url: string; thumb: string; source: string }[]>([]);
   const [searchingCover, setSearchingCover] = useState(false);
+  const [songSearch, setSongSearch] = useState("");
+  const [songResults, setSongResults] = useState<{ id: string; title: string; artist: string | null }[]>([]);
+  const [searchingSong, setSearchingSong] = useState(false);
 
   // Ao colar/sair do campo de URL, tenta extrair metadados automaticamente
   const handleDriveUrlBlur = async (url: string) => {
@@ -132,12 +137,27 @@ export default function MultitracksAdminPage() {
       coverUrl: album.coverUrl || "",
       description: album.description || "",
       driveZipUrl: "",
+      songId: album.songId || "",
     });
     setEditingId(album.id);
     setShowForm(true);
+    setSongSearch("");
+    setSongResults([]);
   };
 
-  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_FORM); setProcessingMsg(""); setParseMsg(""); setCoverResults([]); };
+  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_FORM); setProcessingMsg(""); setParseMsg(""); setCoverResults([]); setSongSearch(""); setSongResults([]); };
+
+  const searchSong = async (q: string) => {
+    setSongSearch(q);
+    if (q.length < 2) { setSongResults([]); return; }
+    setSearchingSong(true);
+    try {
+      const res = await fetch(`/api/songs?search=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setSongResults((data ?? []).slice(0, 8).map((s: any) => ({ id: s.id, title: s.title, artist: s.artist })));
+    } catch { setSongResults([]); }
+    finally { setSearchingSong(false); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,12 +347,21 @@ export default function MultitracksAdminPage() {
                       {album.bpm && <span className="text-[10px] text-muted-foreground">{album.bpm} BPM</span>}
                       {album.musicalKey && <span className="text-[10px] text-muted-foreground">Tom {album.musicalKey}</span>}
                       {album.genre && <span className="text-[10px] text-muted-foreground">{album.genre}</span>}
-                      <span className="text-[10px] text-muted-foreground">{album.stems.length} stems</span>
+                      <span className="text-[10px] text-muted-foreground">{(album.stems?.length ?? 0)} stems</span>
                       <span className="text-[10px] text-muted-foreground">{album._count.rentals} aluguéis</span>
+                      {album.songId ? (
+                        <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
+                          <CheckCircle2 className="h-2.5 w-2.5" /> Vinculada
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
+                          <AlertCircle className="h-2.5 w-2.5" /> Sem vínculo
+                        </span>
+                      )}
                     </div>
-                    {album.stems.length > 0 && (
+                    {(album.stems?.length ?? 0) > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {album.stems.map((s, i) => (
+                        {(album.stems ?? []).map((s: Stem, i: number) => (
                           <span key={i} className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{s.name}</span>
                         ))}
                       </div>
@@ -504,6 +533,57 @@ export default function MultitracksAdminPage() {
                   <p className="text-sm text-primary">{processingMsg}</p>
                 </div>
               )}
+
+              {/* Vínculo com música do acervo */}
+              <div className="space-y-1.5 border-t border-border pt-4">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Music2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  Vincular a uma música do acervo
+                </label>
+                {form.songId ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                    <span className="text-sm text-emerald-700 dark:text-emerald-400 flex-1 truncate">
+                      {songResults.find(s => s.id === form.songId)?.title || "Música vinculada"}
+                    </span>
+                    <button type="button" onClick={() => { setForm(f => ({ ...f, songId: "" })); setSongSearch(""); setSongResults([]); }}
+                      className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={songSearch}
+                        onChange={(e) => searchSong(e.target.value)}
+                        placeholder="Buscar música pelo título..."
+                        className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                      {searchingSong && <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />}
+                    </div>
+                    {songResults.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg overflow-hidden">
+                        {songResults.map(s => (
+                          <button key={s.id} type="button"
+                            onClick={() => { setForm(f => ({ ...f, songId: s.id })); setSongSearch(s.title); setSongResults([]); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center gap-2">
+                            <Music2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            <span className="font-medium truncate">{s.title}</span>
+                            {s.artist && <span className="text-muted-foreground truncate">— {s.artist}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {songSearch.length >= 2 && songResults.length === 0 && !searchingSong && (
+                      <p className="text-xs text-muted-foreground mt-1">Nenhuma música encontrada.</p>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Vincular permite que a música apareça como recurso no ensaio e na lista de músicas.</p>
+              </div>
 
               <div className="flex gap-3 pt-2">
                 <Button type="button" variant="outline" onClick={closeForm} className="flex-1" disabled={saving}>Cancelar</Button>

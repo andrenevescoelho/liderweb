@@ -92,11 +92,11 @@ export async function GET(req: NextRequest) {
           where: { isActive: true, status: "READY" },
           select: {
             id: true,
-            rentals: {
+            rentals: user.groupId ? {
               where: { groupId: user.groupId, status: "ACTIVE" },
               select: { id: true },
               take: 1,
-            },
+            } : false,
           },
           take: 1,
         },
@@ -108,10 +108,9 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Resolver recursos de cada música e anexar ao resultado
-    const songsWithResources = songs.map((song) => {
+    const songsWithResources = songs.map((song: any) => {
       const hasMultitrack = song.multitracks.length > 0;
-      const multitrackRented = hasMultitrack && song.multitracks[0].rentals.length > 0;
+      const multitrackRented = hasMultitrack && (song.multitracks[0].rentals?.length ?? 0) > 0;
       return {
         ...song,
         resources: {
