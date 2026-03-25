@@ -194,7 +194,22 @@ export async function GET(req: NextRequest) {
         ],
       } : {},
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { rentals: true } } },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        genre: true,
+        bpm: true,
+        musicalKey: true,
+        coverUrl: true,
+        status: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        songId: true,
+        stems: true,
+        _count: { select: { rentals: true } },
+      },
     });
 
     return NextResponse.json({ albums });

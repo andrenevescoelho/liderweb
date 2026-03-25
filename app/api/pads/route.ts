@@ -13,7 +13,22 @@ export async function GET(req: NextRequest) {
 
   const boards = await prisma.padBoard.findMany({
     where: isSuperAdmin ? {} : { isActive: true },
-    include: { pads: { orderBy: { position: "asc" } } },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      bpm: true,
+      musicalKey: true,
+      color: true,
+      isActive: true,
+      cols: true,
+      rows: true,
+      createdBy: true,
+      songId: true,
+      createdAt: true,
+      updatedAt: true,
+      pads: { orderBy: { position: "asc" } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
