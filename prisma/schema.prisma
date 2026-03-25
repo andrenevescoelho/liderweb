@@ -615,6 +615,8 @@ model Song {
   setlistItems     SetlistItem[]
   attachments      Attachment[]
   rehearsalSongs   RehearsalSong[]
+  multitracks      MultitracksAlbum[]
+  padBoards        PadBoard[]
 }
 
 model Attachment {
@@ -854,14 +856,17 @@ model MultitracksAlbum {
   description String?                @db.Text
   status      MultitracksAlbumStatus @default(PENDING)
   markers     Json                   @default("[]")
-  stems       Json                   // Array de { name: string, driveUrl: string, r2Key: string | null }
+  stems       Json
   isActive    Boolean                @default(true)
+  songId      String?
+  song        Song?                  @relation(fields: [songId], references: [id], onDelete: SetNull)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   rentals     MultitracksRental[]
 
   @@index([status, isActive])
   @@index([title, artist])
+  @@index([songId])
 }
 
 model MultitracksRental {
@@ -915,11 +920,14 @@ model PadBoard {
   cols        Int      @default(4)
   rows        Int      @default(4)
   createdBy   String
+  songId      String?
+  song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   pads        Pad[]
 
   @@index([isActive])
+  @@index([songId])
 }
 
 model Pad {
