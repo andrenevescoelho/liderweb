@@ -87,9 +87,47 @@ export async function GET(req: NextRequest) {
     const songs = await prisma.song.findMany({
       where,
       orderBy: { title: "asc" },
+      include: {
+        multitracks: {
+          where: { isActive: true, status: "READY" },
+          select: {
+            id: true,
+            rentals: {
+              where: { groupId: user.groupId, status: "ACTIVE" },
+              select: { id: true },
+              take: 1,
+            },
+          },
+          take: 1,
+        },
+        padBoards: {
+          where: { isActive: true },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
 
-    return NextResponse.json(songs ?? []);
+    // Resolver recursos de cada música e anexar ao resultado
+    const songsWithResources = songs.map((song) => {
+      const hasMultitrack = song.multitracks.length > 0;
+      const multitrackRented = hasMultitrack && song.multitracks[0].rentals.length > 0;
+      return {
+        ...song,
+        resources: {
+          cifra: Boolean(song.chordPro || song.chordUrl),
+          youtube: Boolean(song.youtubeUrl),
+          audio: Boolean(song.audioUrl),
+          multitrack: hasMultitrack,
+          multitrackAlbumId: song.multitracks[0]?.id ?? null,
+          multitrackRented,
+          pad: song.padBoards.length > 0,
+          padBoardId: song.padBoards[0]?.id ?? null,
+        },
+      };
+    });
+
+    return NextResponse.json(songsWithResources ?? []);
   } catch (error) {
     console.error("Get songs error:", error);
     return NextResponse.json({ error: "Erro ao buscar músicas" }, { status: 500 });

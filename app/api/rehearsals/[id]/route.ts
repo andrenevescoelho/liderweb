@@ -27,7 +27,31 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       include: {
         songs: {
           orderBy: { order: "asc" },
-          include: { song: { include: { attachments: true } }, tasks: { include: { member: true } } },
+          include: {
+            song: {
+              include: {
+                attachments: true,
+                multitracks: {
+                  where: { isActive: true, status: "READY" },
+                  select: {
+                    id: true,
+                    rentals: {
+                      where: { groupId: user.groupId, status: "ACTIVE" },
+                      select: { id: true },
+                      take: 1,
+                    },
+                  },
+                  take: 1,
+                },
+                padBoards: {
+                  where: { isActive: true },
+                  select: { id: true },
+                  take: 1,
+                },
+              },
+            },
+            tasks: { include: { member: true } },
+          },
         },
         attendance: { include: { member: true } },
         checklist: true,
@@ -40,7 +64,33 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: "Sem permissão para visualizar ensaio" }, { status: 403 });
     }
 
-    return NextResponse.json(rehearsal);
+    // Resolver recursos de cada música do ensaio
+    const rehearsalWithResources = {
+      ...rehearsal,
+      songs: rehearsal.songs.map((rs: any) => {
+        const song = rs.song;
+        if (!song) return rs;
+        const hasMultitrack = song.multitracks?.length > 0;
+        const multitrackRented = hasMultitrack && song.multitracks[0].rentals?.length > 0;
+        return {
+          ...rs,
+          resources: {
+            cifra: Boolean(song.chordPro || song.chordUrl),
+            youtube: Boolean(rs.youtubeUrl || song.youtubeUrl),
+            audio: Boolean(rs.audioUrl || song.audioUrl),
+            multitrack: hasMultitrack,
+            multitrackAlbumId: song.multitracks?.[0]?.id ?? null,
+            multitrackRented,
+            pad: (song.padBoards?.length ?? 0) > 0,
+            padBoardId: song.padBoards?.[0]?.id ?? null,
+            youtubeUrl: rs.youtubeUrl || song.youtubeUrl || null,
+            audioUrl: rs.audioUrl || song.audioUrl || null,
+          },
+        };
+      }),
+    };
+
+    return NextResponse.json(rehearsalWithResources);
   } catch (error) {
     console.error("Get rehearsal error:", error);
     return NextResponse.json({ error: "Erro ao buscar ensaio" }, { status: 500 });

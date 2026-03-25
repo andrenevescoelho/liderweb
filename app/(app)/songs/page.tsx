@@ -15,6 +15,8 @@ import {
   Hash,
   Youtube,
   Headphones,
+  Layers,
+  Radio,
   Link as LinkIcon,
   Play,
   Upload,
@@ -260,17 +262,37 @@ export default function SongsPage() {
                   </div>
                 )}
 
-                {/* Indicadores de mídia */}
-                <div className="flex items-center gap-2 mb-3">
-                  {song?.youtubeUrl && (
-                    <Badge variant="danger" className="flex items-center gap-1">
-                      <Youtube className="w-3 h-3" /> YouTube
-                    </Badge>
+                {/* Indicadores de recursos */}
+                <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                  {song?.resources?.cifra && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400">
+                      <Music className="h-2.5 w-2.5" /> Cifra
+                    </span>
                   )}
-                  {song?.audioUrl && (
-                    <Badge variant="success" className="flex items-center gap-1">
-                      <Headphones className="w-3 h-3" /> Áudio
-                    </Badge>
+                  {song?.resources?.youtube && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-red-500/10 text-red-700 border-red-500/30 dark:text-red-400">
+                      <Youtube className="h-2.5 w-2.5" /> YouTube
+                    </span>
+                  )}
+                  {song?.resources?.audio && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400">
+                      <Radio className="h-2.5 w-2.5" /> Áudio
+                    </span>
+                  )}
+                  {song?.resources?.multitrack && (
+                    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border ${
+                      song.resources.multitrackRented
+                        ? "bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-400"
+                        : "bg-muted/50 text-muted-foreground border-border/50"
+                    }`}>
+                      <Headphones className="h-2.5 w-2.5" />
+                      {song.resources.multitrackRented ? "Multitrack" : "Multitrack (não alugado)"}
+                    </span>
+                  )}
+                  {song?.resources?.pad && (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400">
+                      <Layers className="h-2.5 w-2.5" /> Pad
+                    </span>
                   )}
                 </div>
 
@@ -285,6 +307,35 @@ export default function SongsPage() {
                 )}
 
                   <div className="flex gap-2 pt-3 border-t dark:border-gray-700">
+                    {/* Botão de ação primária: Multitrack > YouTube > Áudio */}
+                    {song?.resources?.multitrack && song?.resources?.multitrackRented && song?.resources?.multitrackAlbumId && (
+                      <a
+                        href={`/multitracks/${song.resources.multitrackAlbumId}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors"
+                      >
+                        <Headphones className="h-3 w-3" /> Multitrack
+                      </a>
+                    )}
+                    {!song?.resources?.multitrackRented && song?.resources?.youtube && song?.youtubeUrl && (
+                      <a
+                        href={song.youtubeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                      >
+                        <Youtube className="h-3 w-3" /> YouTube
+                      </a>
+                    )}
+                    {!song?.resources?.multitrackRented && !song?.resources?.youtube && song?.resources?.audio && song?.audioUrl && (
+                      <a
+                        href={song.audioUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                      >
+                        <Radio className="h-3 w-3" /> Áudio
+                      </a>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
