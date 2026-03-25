@@ -398,9 +398,11 @@ export default function MultitracksPlayerPage() {
         if (data.markers?.length > 0) setMarkers(data.markers);
 
         const rawStems = data.stems as { name: string; url: string }[];
+        // Ignorar arquivos que começam com "." — são metadados do macOS (ex: .PIANO, .STRING)
+        const filteredStems = rawStems.filter((s) => !s.name.startsWith('.'));
         const sorted = [
-          ...rawStems.filter((s) => isPriority(s.name)),
-          ...rawStems.filter((s) => !isPriority(s.name)),
+          ...filteredStems.filter((s) => isPriority(s.name)),
+          ...filteredStems.filter((s) => !isPriority(s.name)),
         ];
 
         // Carregar configs salvas do usuário
