@@ -45,9 +45,12 @@ export function buildCouponBenefitSummary(coupon: Pick<Coupon, "type" | "discoun
   return `Plano ${coupon.freePlanTier ?? "-"} grátis por ${coupon.freePlanDurationDays ?? 0} dias`;
 }
 
-export function computeSubscriptionPriceWithCoupon(plan: Pick<SubscriptionPlan, "price">, redemption?: (Pick<CouponRedemption, "status" | "benefitStartAt" | "benefitEndAt"> & { coupon: Pick<Coupon, "type" | "discountPercent"> }) | null, now = new Date()) {
+export function computeSubscriptionPriceWithCoupon(plan: Pick<SubscriptionPlan, "price">, redemption?: (Pick<CouponRedemption, "status" | "benefitStartAt" | "benefitEndAt"> & { coupon: Pick<Coupon, "type" | "discountPercent" | "isActive"> }) | null, now = new Date()) {
   const originalPrice = plan.price;
   if (!redemption || redemption.status !== "ACTIVE") {
+    return { originalPrice, effectivePrice: originalPrice, discountPercent: 0 };
+  }
+  if (!redemption.coupon.isActive) {
     return { originalPrice, effectivePrice: originalPrice, discountPercent: 0 };
   }
 
@@ -69,8 +72,12 @@ export function computeSubscriptionPriceWithCoupon(plan: Pick<SubscriptionPlan, 
   return { originalPrice, effectivePrice, discountPercent };
 }
 
-export function redemptionIsActive(redemption: Pick<CouponRedemption, "status" | "benefitStartAt" | "benefitEndAt">, now = new Date()) {
+export function redemptionIsActive(
+  redemption: Pick<CouponRedemption, "status" | "benefitStartAt" | "benefitEndAt"> & { coupon?: Pick<Coupon, "isActive"> | null },
+  now = new Date()
+) {
   if (redemption.status !== CouponRedemptionStatus.ACTIVE) return false;
+  if (redemption.coupon && !redemption.coupon.isActive) return false;
   if (redemption.benefitStartAt > now) return false;
   if (redemption.benefitEndAt && redemption.benefitEndAt < now) return false;
   return true;
@@ -78,7 +85,7 @@ export function redemptionIsActive(redemption: Pick<CouponRedemption, "status" |
 
 type EffectivePlanSource = Pick<SubscriptionPlan, "name" | "userLimit">;
 type EffectiveRedemptionSource = Pick<CouponRedemption, "status" | "benefitStartAt" | "benefitEndAt"> & {
-  coupon: Pick<Coupon, "type" | "freePlanTier">;
+  coupon: Pick<Coupon, "type" | "freePlanTier" | "isActive">;
 };
 
 export function getEffectivePlanFromCoupon(
