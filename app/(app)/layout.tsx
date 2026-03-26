@@ -9,9 +9,18 @@ export default async function AppLayoutWrapper({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
+  const user = session?.user as { role?: string; hasActiveSubscription?: boolean } | undefined;
 
   if (!session) {
     redirect("/login");
+  }
+
+  if (user?.role !== "SUPERADMIN" && user?.hasActiveSubscription === false) {
+    if (user.role === "ADMIN") {
+      redirect("/reativar-assinatura");
+    }
+
+    redirect("/sem-assinatura");
   }
 
   return <AppLayout>{children}</AppLayout>;
