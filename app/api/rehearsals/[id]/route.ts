@@ -16,6 +16,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const session = await getServerSession(authOptions);
     const user = session?.user as any;
     if (!session || !user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const canViewMultitrack =
+      user.role === "SUPERADMIN" || hasPermission(user.role, "multitrack.view", user.permissions);
 
     if (!db?.rehearsal?.findUnique) {
       console.error("Get rehearsal error: Prisma delegate 'rehearsal' is not available");
@@ -70,7 +72,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       songs: rehearsal.songs.map((rs: any) => {
         const song = rs.song;
         if (!song) return rs;
-        const hasMultitrack = song.multitracks?.length > 0;
+        const hasMultitrack = canViewMultitrack && (song.multitracks?.length ?? 0) > 0;
         const multitrackRented = hasMultitrack && song.multitracks[0].rentals?.length > 0;
         return {
           ...rs,
@@ -79,7 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             youtube: Boolean(rs.youtubeUrl || song.youtubeUrl),
             audio: Boolean(rs.audioUrl || song.audioUrl),
             multitrack: hasMultitrack,
-            multitrackAlbumId: song.multitracks?.[0]?.id ?? null,
+            multitrackAlbumId: hasMultitrack ? (song.multitracks?.[0]?.id ?? null) : null,
             multitrackRented,
             pad: (song.padBoards?.length ?? 0) > 0,
             padBoardId: song.padBoards?.[0]?.id ?? null,

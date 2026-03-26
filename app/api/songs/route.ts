@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     }
 
     const user = session.user as any;
+    const canViewMultitrack =
+      user.role === "SUPERADMIN" || hasPermission(user.role, "multitrack.view", user.permissions);
     const searchParams = req?.nextUrl?.searchParams;
     const search = searchParams?.get?.("search");
     const tag = searchParams?.get?.("tag");
@@ -109,7 +111,7 @@ export async function GET(req: NextRequest) {
     });
 
     const songsWithResources = songs.map((song: any) => {
-      const hasMultitrack = song.multitracks.length > 0;
+      const hasMultitrack = canViewMultitrack && song.multitracks.length > 0;
       const multitrackRented = hasMultitrack && (song.multitracks[0].rentals?.length ?? 0) > 0;
       return {
         ...song,
@@ -118,7 +120,7 @@ export async function GET(req: NextRequest) {
           youtube: Boolean(song.youtubeUrl),
           audio: Boolean(song.audioUrl),
           multitrack: hasMultitrack,
-          multitrackAlbumId: song.multitracks[0]?.id ?? null,
+          multitrackAlbumId: hasMultitrack ? (song.multitracks[0]?.id ?? null) : null,
           multitrackRented,
           pad: song.padBoards.length > 0,
           padBoardId: song.padBoards[0]?.id ?? null,
