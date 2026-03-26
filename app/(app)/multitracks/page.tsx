@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
+import { ModuleAccessOverlay } from "@/components/module-access-overlay";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,7 @@ export default function MultitracksPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [renting, setRenting] = useState<string | null>(null);
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -53,10 +55,17 @@ export default function MultitracksPage() {
     try {
       setLoading(true);
       const res = await fetch(`/api/multitracks?q=${encodeURIComponent(q)}`);
+      if (res.status === 402) {
+        setBlockedByPlan(true);
+        setAlbums([]);
+        setUsage({ count: 0, limit: 0 });
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setAlbums(data.albums || []);
         setUsage(data.usage || { count: 0, limit: 0 });
+        setBlockedByPlan(false);
       }
     } catch {
       toast.error("Erro ao carregar multitracks");
@@ -119,7 +128,8 @@ export default function MultitracksPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="relative">
+      <div className={cn("space-y-6", blockedByPlan && "opacity-35 pointer-events-none select-none")}>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
@@ -244,6 +254,14 @@ export default function MultitracksPage() {
             </Card>
           ))}
         </div>
+      )}
+      </div>
+      {blockedByPlan && (
+        <ModuleAccessOverlay
+          moduleLabel="Multitracks"
+          isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
+          onUpgrade={() => router.push("/meu-plano")}
+        />
       )}
     </div>
   );

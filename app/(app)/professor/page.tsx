@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
+import { ModuleAccessOverlay } from "@/components/module-access-overlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,6 +126,7 @@ export default function ProfessorPage() {
 
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [mainSection, setMainSection] = useState<MainSection>("content");
 
   /* ─── Content state ─── */
@@ -163,6 +165,14 @@ export default function ProfessorPage() {
     if (!user) { router.replace("/login"); return; }
     const fetchDash = async () => {
       try {
+        const subscriptionRes = await fetch("/api/subscription/status");
+        if (subscriptionRes.ok) {
+          const subscriptionStatus = await subscriptionRes.json();
+          if (!subscriptionStatus?.moduleAccess?.professor) {
+            setBlockedByPlan(true);
+            return;
+          }
+        }
         const res = await fetch("/api/music-coach/dashboard");
         if (res.status === 403) { router.replace("/dashboard"); return; }
         if (!res.ok) throw new Error();
@@ -452,13 +462,40 @@ export default function ProfessorPage() {
       </div>
     );
   }
+  if (blockedByPlan) {
+    return (
+      <div className="relative">
+        <div className="space-y-6 opacity-35 pointer-events-none select-none">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <GraduationCap className="h-7 w-7 text-primary" />
+              Professor
+            </h1>
+            <p className="text-muted-foreground mt-1">Seu assistente personalizado de aprendizado musical.</p>
+          </div>
+          <Card>
+            <CardContent className="py-10 text-center text-muted-foreground">
+              Este módulo não está disponível no plano atual.
+            </CardContent>
+          </Card>
+        </div>
+        <ModuleAccessOverlay
+          moduleLabel="Professor IA"
+          isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
+          onUpgrade={() => router.push("/meu-plano")}
+        />
+      </div>
+    );
+  }
+
   if (!dashData) return null;
 
   const levelLabel = dashData.level <= 2 ? "Iniciante" : dashData.level <= 5 ? "Intermediário" : "Avançado";
   const levelColor = dashData.level <= 2 ? "text-emerald-400" : dashData.level <= 5 ? "text-blue-400" : "text-amber-400";
 
   return (
-    <div className="space-y-6">
+    <div className="relative">
+      <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -895,6 +932,7 @@ export default function ProfessorPage() {
       )}
       {/* ═══ PROGRESS SECTION ═══ */}
       {mainSection === "progress" && <ProgressSection />}
+      </div>
     </div>
   );
 }

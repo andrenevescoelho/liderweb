@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { can } from "@/lib/rbac";
+import { getModuleAccess } from "@/lib/subscription-features";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,11 +35,8 @@ export async function POST(req: NextRequest) {
       where: { groupId: user.groupId },
       include: { plan: true },
     });
-    const planFeatures = subscription?.plan?.features ?? [];
-    const multitrackLimit = planFeatures
-      .flatMap((f: string) => f.match(/multitracks:(\d+)/) ?? [])
-      .filter((_: string, i: number) => i === 1)
-      .map(Number)[0] ?? 0;
+    const moduleAccess = getModuleAccess(subscription?.plan?.features, subscription?.plan?.name);
+    const multitrackLimit = moduleAccess.multitracks;
 
     if (multitrackLimit === 0) {
       return NextResponse.json({ error: "Seu plano não inclui multitracks. Faça upgrade." }, { status: 402 });
