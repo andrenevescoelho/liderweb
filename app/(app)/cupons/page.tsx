@@ -96,6 +96,10 @@ export default function CuponsPage() {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expandedCouponId, setExpandedCouponId] = useState<string | null>(null);
+  const [couponRedemptions, setCouponRedemptions] = useState<Record<string, any[]>>({});
+  const [loadingRedemptionsId, setLoadingRedemptionsId] = useState<string | null>(null);
+  const [removingRedemptionId, setRemovingRedemptionId] = useState<string | null>(null);
 
   const isSuperadmin = userRole === "SUPERADMIN";
 
@@ -220,6 +224,50 @@ export default function CuponsPage() {
       setFeedback({ type: "error", message: error.message });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const loadCouponRedemptions = async (couponId: string) => {
+    setLoadingRedemptionsId(couponId);
+    try {
+      const res = await fetch(`/api/coupons/${couponId}/redemptions`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao buscar ministérios com cupom");
+      setCouponRedemptions((prev) => ({ ...prev, [couponId]: data.redemptions || [] }));
+    } catch (error: any) {
+      setFeedback({ type: "error", message: error.message });
+    } finally {
+      setLoadingRedemptionsId(null);
+    }
+  };
+
+  const toggleRedemptions = async (couponId: string) => {
+    if (expandedCouponId === couponId) {
+      setExpandedCouponId(null);
+      return;
+    }
+    setExpandedCouponId(couponId);
+    if (!couponRedemptions[couponId]) {
+      await loadCouponRedemptions(couponId);
+    }
+  };
+
+  const removeCouponFromMinistry = async (couponId: string, redemption: any) => {
+    if (!window.confirm(`Deseja retirar o cupom deste ministério (${redemption.ministry?.name || "sem nome"})?`)) return;
+
+    setRemovingRedemptionId(redemption.id);
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/coupons/${couponId}/redemptions/${redemption.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao remover cupom do ministério");
+      setFeedback({ type: "success", message: "✓ Cupom retirado do ministério com sucesso." });
+      await loadCouponRedemptions(couponId);
+      await loadCoupons();
+    } catch (error: any) {
+      setFeedback({ type: "error", message: error.message });
+    } finally {
+      setRemovingRedemptionId(null);
     }
   };
 
@@ -370,10 +418,15 @@ export default function CuponsPage() {
                         <p className="font-semibold">{coupon.code} • {coupon.name}</p>
                         <p className="text-sm text-muted-foreground">{coupon.benefitSummary}</p>
                         <p className="text-xs text-muted-foreground">Usos: {coupon.usedCount}{coupon.maxUses ? ` / ${coupon.maxUses}` : " (ilimitado)"}</p>
+                        <p className="text-xs text-muted-foreground">Ministérios com cupom ativo: {coupon.activeMinistryCount ?? 0}</p>
                         {coupon.validFrom && <p className="text-xs text-muted-foreground">De: {new Date(coupon.validFrom).toLocaleDateString("pt-BR")} {coupon.validUntil ? `até ${new Date(coupon.validUntil).toLocaleDateString("pt-BR")}` : ""}</p>}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant={coupon.computedStatus === "ativo" ? "success" : "outline"}>{coupon.computedStatus}</Badge>
+                        <Button size="sm" variant="outline" onClick={() => toggleRedemptions(coupon.id)}>
+                          {loadingRedemptionsId === coupon.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                          {expandedCouponId === coupon.id ? "Ocultar ministérios" : "Ver ministérios"}
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => handleEdit(coupon)}>Editar</Button>
                         <Button size="sm" variant="outline" onClick={() => toggleCoupon(coupon.id, coupon.isActive)}>
                           {coupon.isActive ? <><XCircle className="w-4 h-4 mr-1" />Desativar</> : <><CheckCircle className="w-4 h-4 mr-1" />Ativar</>}
@@ -384,6 +437,35 @@ export default function CuponsPage() {
                         </Button>
                       </div>
                     </div>
+                    {expandedCouponId === coupon.id && (
+                      <div className="mt-4 border-t border-border pt-3 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Ministérios com histórico de aplicação deste cupom</p>
+                        {!couponRedemptions[coupon.id]?.length ? (
+                          <p className="text-xs text-muted-foreground">Nenhuma aplicação encontrada.</p>
+                        ) : (
+                          couponRedemptions[coupon.id].map((redemption) => (
+                            <div key={redemption.id} className="rounded-md border border-border p-2 text-xs flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="font-medium">{redemption.ministry?.name || "Ministério sem nome"}</p>
+                                <p className="text-muted-foreground">
+                                  Status: {redemption.status} • Aplicado em {new Date(redemption.redeemedAt).toLocaleDateString("pt-BR")}
+                                  {redemption.daysRemaining !== null ? ` • Dias restantes: ${redemption.daysRemaining}` : ""}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={removingRedemptionId === redemption.id || redemption.status !== "ACTIVE"}
+                                onClick={() => removeCouponFromMinistry(coupon.id, redemption)}
+                              >
+                                {removingRedemptionId === redemption.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                                Retirar do ministério
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -395,4 +477,3 @@ export default function CuponsPage() {
     </div>
   );
 }
-

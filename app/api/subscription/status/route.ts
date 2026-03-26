@@ -41,6 +41,13 @@ export async function GET() {
 
     const activeRedemption = subscription.couponRedemptions[0];
     const hasActiveCoupon = activeRedemption ? redemptionIsActive(activeRedemption) : false;
+    const couponDaysRemaining =
+      hasActiveCoupon && activeRedemption?.benefitEndAt
+        ? Math.max(
+            0,
+            Math.ceil((new Date(activeRedemption.benefitEndAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+          )
+        : null;
     const pricing = computeSubscriptionPriceWithCoupon(
       subscription.plan,
       hasActiveCoupon && activeRedemption
@@ -51,6 +58,7 @@ export async function GET() {
             coupon: {
               type: activeRedemption.coupon.type,
               discountPercent: activeRedemption.coupon.discountPercent,
+              isActive: activeRedemption.coupon.isActive,
             },
           }
         : null
@@ -81,6 +89,7 @@ export async function GET() {
               benefitSummary: buildCouponBenefitSummary(activeRedemption.coupon),
               benefitStartAt: activeRedemption.benefitStartAt,
               benefitEndAt: activeRedemption.benefitEndAt,
+              daysRemaining: couponDaysRemaining,
             }
           : null,
       },

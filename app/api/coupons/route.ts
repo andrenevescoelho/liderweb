@@ -35,6 +35,10 @@ export async function GET(req: NextRequest) {
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       _count: { select: { redemptions: true } },
+      redemptions: {
+        where: { status: "ACTIVE" },
+        select: { id: true },
+      },
     },
   });
 
@@ -46,6 +50,7 @@ export async function GET(req: NextRequest) {
         ...coupon,
         computedStatus,
         benefitSummary: buildCouponBenefitSummary(coupon),
+        activeMinistryCount: coupon.redemptions.length,
       };
     })
     .filter((coupon) => (status && status !== "all" ? coupon.computedStatus === status : true));

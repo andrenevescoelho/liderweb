@@ -228,6 +228,11 @@ export default function MeuPlanoPage() {
               <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs space-y-0.5">
                 <p className="font-medium text-emerald-300">Cupom ativo: {status.subscription.activeCoupon.code}</p>
                 <p className="text-emerald-400">{status.subscription.activeCoupon.benefitSummary}</p>
+                {typeof status.subscription.activeCoupon.daysRemaining === "number" && (
+                  <p className="text-emerald-400">
+                    Dias restantes: {status.subscription.activeCoupon.daysRemaining}
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
