@@ -314,6 +314,15 @@ export const authOptions: NextAuthOptions = {
                 permissions: true,
               },
             },
+            group: {
+              select: {
+                subscription: {
+                  select: {
+                    status: true,
+                  },
+                },
+              },
+            },
           },
         });
 
@@ -322,6 +331,17 @@ export const authOptions: NextAuthOptions = {
           token.role = dbUser.role;
           token.groupId = dbUser.groupId;
           token.permissions = dbUser.profile?.permissions ?? [];
+
+          if (dbUser.role !== "SUPERADMIN" && dbUser.groupId) {
+            const subscriptionStatus = dbUser.group?.subscription?.status ?? "NO_SUBSCRIPTION";
+            token.subscriptionStatus = subscriptionStatus;
+            token.hasActiveSubscription =
+              subscriptionStatus === "ACTIVE" || subscriptionStatus === "TRIALING";
+          } else if (dbUser.role === "SUPERADMIN") {
+            token.subscriptionStatus = null;
+            token.hasActiveSubscription = true;
+          }
+
           if (dbUser.groupId) {
             const coachProfile = await prisma.musicCoachProfile.findUnique({
               where: { userId_groupId: { userId: dbUser.id, groupId: dbUser.groupId } },
