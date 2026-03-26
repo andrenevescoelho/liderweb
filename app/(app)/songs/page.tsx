@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Music,
   Plus,
@@ -86,10 +86,12 @@ function getYoutubeThumbnailUrl(url: string): string | null {
 }
 
 export default function SongsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const canUseMultitrack = userRole === "SUPERADMIN" || userPermissions.includes("multitrack.view");
   const canEdit =
     userRole === "ADMIN" ||
     userRole === "LEADER" ||
@@ -158,6 +160,26 @@ export default function SongsPage() {
     if (!confirm("Excluir esta música?")) return;
     await fetch(`/api/songs/${id}`, { method: "DELETE" });
     fetchSongs();
+  };
+
+  const handleOpenMultitrack = (song: any) => {
+    const albumId = song?.resources?.multitrackAlbumId;
+    if (!albumId) return;
+
+    if (!canUseMultitrack) {
+      const wantsUpgrade = confirm(
+        "Seu plano atual não inclui acesso ao Multitrack. Deseja fazer upgrade agora?"
+      );
+      if (wantsUpgrade) router.push("/planos");
+      return;
+    }
+
+    if (song?.resources?.multitrackRented) {
+      router.push(`/multitracks/${albumId}`);
+      return;
+    }
+
+    router.push(`/multitracks?highlight=${albumId}`);
   };
 
   return (
@@ -265,14 +287,32 @@ export default function SongsPage() {
                 {/* Indicadores de recursos */}
                 <div className="flex flex-wrap items-center gap-1.5 mb-3">
                   {song?.resources?.cifra && (
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (song?.chordUrl) {
+                          window.open(song.chordUrl, "_blank", "noopener,noreferrer");
+                          return;
+                        }
+                        setViewSong(song);
+                        setViewModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                    >
                       <Music className="h-2.5 w-2.5" /> Cifra
-                    </span>
+                    </button>
                   )}
                   {song?.resources?.youtube && (
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-red-500/10 text-red-700 border-red-500/30 dark:text-red-400">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewSong(song);
+                        setViewModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-red-500/10 text-red-700 border-red-500/30 dark:text-red-400 hover:bg-red-500/20 transition-colors"
+                    >
                       <Youtube className="h-2.5 w-2.5" /> YouTube
-                    </span>
+                    </button>
                   )}
                   {song?.resources?.audio && (
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400">
@@ -280,14 +320,18 @@ export default function SongsPage() {
                     </span>
                   )}
                   {song?.resources?.multitrack && (
-                    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border ${
+                    <button
+                      type="button"
+                      onClick={() => handleOpenMultitrack(song)}
+                      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors ${
                       song.resources.multitrackRented
-                        ? "bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-400"
-                        : "bg-muted/50 text-muted-foreground border-border/50"
-                    }`}>
+                        ? "bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-400 hover:bg-violet-500/20"
+                        : "bg-muted/50 text-muted-foreground border-border/50 hover:bg-muted"
+                    }`}
+                    >
                       <Headphones className="h-2.5 w-2.5" />
                       {song.resources.multitrackRented ? "Multitrack" : "Multitrack (não alugado)"}
-                    </span>
+                    </button>
                   )}
                   {song?.resources?.pad && (
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400">
