@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Gift, Loader2, ShieldCheck } from "lucide-react";
+import { Gift, GraduationCap, Loader2, ShieldCheck } from "lucide-react";
 import {
   ResponsiveContainer,
   CartesianGrid,
@@ -30,6 +30,7 @@ export default function AdminDashboardPage() {
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
   const canAccessAdminDashboard = userRole === "ADMIN" || userPermissions.includes("report.group.access");
   const canViewSongsCard = userPermissions.includes("music.view") || userPermissions.includes("music.manage") || userPermissions.includes("setlist.music.add") || userRole === "ADMIN";
+  const canManageProfessor = userRole === "ADMIN" || userRole === "SUPERADMIN";
 
   useEffect(() => {
     if (!canAccessAdminDashboard) {
@@ -138,6 +139,20 @@ export default function AdminDashboardPage() {
                 <p className="text-sm text-muted-foreground">Músicas</p>
                 <p className="mt-2 text-3xl font-semibold">{data?.stats?.totalSongs ?? 0}</p>
                 <p className="text-xs text-muted-foreground">Gerenciar repertório</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+        {canManageProfessor && (
+          <Link href="/professor-config" className="block">
+            <Card className="rounded-xl border border-border/80 h-full hover:border-violet-300 transition-colors">
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Professor IA</p>
+                <p className="mt-2 text-lg font-semibold flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-violet-500" />
+                  Config. Professor
+                </p>
+                <p className="text-xs text-muted-foreground">Ver progresso e habilitar membros</p>
               </CardContent>
             </Card>
           </Link>

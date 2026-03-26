@@ -108,6 +108,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       label: "Gestão",
       items: [
         { label: "Administração", href: "/dashboard/admin", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
+        { label: "Config. Professor", href: "/professor-config", icon: <GraduationCap className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
         { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
         { label: "Multitracks Admin", href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Pads Admin", href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
