@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { buildCouponBenefitSummary, computeSubscriptionPriceWithCoupon, getEffectivePlanFromCoupon, redemptionIsActive } from "@/lib/coupons";
+import { getModuleAccess } from "@/lib/subscription-features";
 
 export async function GET() {
   try {
@@ -65,10 +66,12 @@ export async function GET() {
     );
 
     const effectivePlan = getEffectivePlanFromCoupon(subscription.plan, activeRedemption ?? null);
+    const moduleAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
 
     return NextResponse.json({
       hasSubscription: true,
       isActive,
+      moduleAccess,
       subscription: {
         status: subscription.status,
         planName: effectivePlan.name,
