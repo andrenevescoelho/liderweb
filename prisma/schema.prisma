@@ -85,6 +85,28 @@ enum SubscriptionStatus {
   INACTIVE
 }
 
+// ─── Billing v2 enums ────────────────────────────────────────────────────────
+
+enum BillingGateway {
+  STRIPE
+  ASAAS
+  MERCADO_PAGO
+  MANUAL
+}
+
+enum BillingPeriod {
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+enum BillingPlanStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 enum CouponType {
   PERCENTAGE_DISCOUNT
   FREE_PLAN
@@ -233,6 +255,9 @@ model Subscription {
   group                Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
   planId               String
   plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+  // Novo vínculo com BillingPlan (fase 1 - opcional para migração gradual)
+  billingPlanId        String?
+  billingPlan          BillingPlan?       @relation("BillingPlanSubscriptions", fields: [billingPlanId], references: [id])
   stripeCustomerId     String?
   stripeSubscriptionId String?            @unique
   status               SubscriptionStatus @default(INACTIVE)
@@ -243,6 +268,8 @@ model Subscription {
   couponRedemptions    CouponRedemption[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+
+  @@index([billingPlanId])
 }
 
 model Coupon {
@@ -615,8 +642,6 @@ model Song {
   setlistItems     SetlistItem[]
   attachments      Attachment[]
   rehearsalSongs   RehearsalSong[]
-  multitracks      MultitracksAlbum[]
-  padBoards        PadBoard[]
 }
 
 model Attachment {
@@ -856,17 +881,14 @@ model MultitracksAlbum {
   description String?                @db.Text
   status      MultitracksAlbumStatus @default(PENDING)
   markers     Json                   @default("[]")
-  stems       Json
+  stems       Json                   // Array de { name: string, driveUrl: string, r2Key: string | null }
   isActive    Boolean                @default(true)
-  songId      String?
-  song        Song?                  @relation(fields: [songId], references: [id], onDelete: SetNull)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   rentals     MultitracksRental[]
 
   @@index([status, isActive])
   @@index([title, artist])
-  @@index([songId])
 }
 
 model MultitracksRental {
@@ -920,14 +942,11 @@ model PadBoard {
   cols        Int      @default(4)
   rows        Int      @default(4)
   createdBy   String
-  songId      String?
-  song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   pads        Pad[]
 
   @@index([isActive])
-  @@index([songId])
 }
 
 model Pad {
@@ -951,3 +970,51 @@ model Pad {
   @@unique([boardId, position])
   @@index([boardId, isActive])
 }
+
+// ─── Billing v2 ──────────────────────────────────────────────────────────────
+
+// Plano dinâmico gerenciado pelo superadmin via painel
+model BillingPlan {
+  id            String            @id @default(cuid())
+  slug          String            @unique  // ex: "basico", "pro", "enterprise"
+  name          String                     // ex: "Básico"
+  description   String?
+  tagline       String?                    // ex: "Para ministérios pequenos"
+  price         Float                      // preço base em BRL
+  period        BillingPeriod     @default(MONTHLY)
+  trialDays     Int               @default(7)
+  status        BillingPlanStatus @default(ACTIVE)
+  isPopular     Boolean           @default(false)  // destaque visual
+  badge         String?                    // ex: "Mais Popular"
+  sortOrder     Int               @default(0)
+  userLimit     Int               @default(0)       // 0 = ilimitado
+  // Feature flags como JSON — ex: {"multitracks": 3, "professor": true, "splits": 0}
+  features      Json              @default("{}")
+  // Mapeamentos para gateways externos
+  gatewayMappings BillingGatewayMapping[]
+  // Assinaturas vinculadas a este plano
+  subscriptions   Subscription[]  @relation("BillingPlanSubscriptions")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, sortOrder])
+  @@index([slug])
+}
+
+// Vínculo entre um plano e um ID externo num gateway
+// Ex: plano "basico" no Stripe tem price_id "price_1TFeL1..."
+model BillingGatewayMapping {
+  id            String         @id @default(cuid())
+  planId        String
+  plan          BillingPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  gateway       BillingGateway
+  externalId    String         // price_id no Stripe, external_id no Asaas, etc.
+  externalData  Json?          // dados extras do gateway (produto, ambiente, etc.)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([planId, gateway])
+  @@index([gateway, isActive])
+}
+
