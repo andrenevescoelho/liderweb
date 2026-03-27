@@ -13,7 +13,6 @@ const PLANS = [
     name: "Gratuito",
     tagline: "Para conhecer a plataforma",
     price: 0,
-    stripePriceId: null,
     isFree: true,
     members: 10,
     color: "#64748B",
@@ -25,11 +24,10 @@ const PLANS = [
     },
   },
   {
-    id: "starter",
-    name: "Starter",
+    id: "basico",
+    name: "Básico",
     tagline: "Para ministérios que querem crescer",
     price: 29.90,
-    stripePriceId: "price_1TDZ1bCvzhcHqHLHkRRwYD2A",
     members: 15,
     color: "#14B8A6",
     features: {
@@ -40,12 +38,11 @@ const PLANS = [
     },
   },
   {
-    id: "pro",
-    name: "Pro",
+    id: "intermediario",
+    name: "Intermediário",
     tagline: "Para ministérios em crescimento",
-    price: 69.90,
-    stripePriceId: "price_1TDZ2oCvzhcHqHLHVUoZBhtY",
-    members: 25,
+    price: 49.90,
+    members: 30,
     popular: true,
     color: "#14B8A6",
     features: {
@@ -59,9 +56,8 @@ const PLANS = [
     id: "avancado",
     name: "Avançado",
     tagline: "Para grandes ministérios",
-    price: 119.90,
-    stripePriceId: "price_1TDZ3CCvzhcHqHLHNpyidjNa",
-    members: 40,
+    price: 99.90,
+    members: 100,
     color: "#8B5CF6",
     features: {
       gestao: true,
@@ -71,12 +67,11 @@ const PLANS = [
     },
   },
   {
-    id: "igreja",
-    name: "Igreja",
+    id: "enterprise",
+    name: "Enterprise",
     tagline: "Para igrejas com múltiplos ministérios",
-    price: 199.90,
-    stripePriceId: "price_1TDZ3XCvzhcHqHLHQlysv1cC",
-    members: 80,
+    price: 149.90,
+    members: 0,
     color: "#8B5CF6",
     features: {
       gestao: true,
@@ -119,10 +114,12 @@ export default function PlanosPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState<string | null>(null);
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const handleSelect = async (plan: typeof PLANS[0]) => {
     setLoading(plan.id);
+    setErrorMsg(null);
     try {
-      // Tentar chamar a API — se não tiver sessão, a API retorna needsGroup: true
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,7 +128,7 @@ export default function PlanosPage() {
       const data = await res.json();
 
       if (data.needsGroup) {
-        // Usuário não logado — redirecionar para signup com plano selecionado
+        // Usuário não logado — redirecionar para signup
         router.push(`/signup?plan=${plan.id}`);
         return;
       }
@@ -141,15 +138,19 @@ export default function PlanosPage() {
         return;
       }
 
-      if (data.error) {
-        console.error("Checkout error:", data.error);
-        // Se erro de permissão, redirecionar para login
-        if (res.status === 403) {
-          router.push("/login");
-        }
+      if (res.status === 403) {
+        setErrorMsg("Apenas administradores do grupo podem gerenciar assinaturas.");
+        return;
       }
+
+      if (data.error) {
+        setErrorMsg(data.error);
+        return;
+      }
+
+      setErrorMsg("Não foi possível iniciar o checkout. Tente novamente.");
     } catch (err) {
-      console.error("Erro ao selecionar plano:", err);
+      setErrorMsg("Erro de conexão. Verifique sua internet e tente novamente.");
     } finally {
       setLoading(null);
     }
@@ -180,6 +181,20 @@ export default function PlanosPage() {
             ✦ 7 dias de teste grátis em todos os planos pagos
           </div>
         </div>
+
+        {/* Banner de erro */}
+        {errorMsg && (
+          <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-center text-sm text-red-400">
+            {errorMsg}
+            {errorMsg.includes("administrador") && (
+              <div className="mt-2">
+                <button onClick={() => router.push("/login")} className="underline text-red-300 hover:text-red-200">
+                  Entrar com outra conta
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Plans grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-16">
@@ -239,7 +254,7 @@ export default function PlanosPage() {
               {/* Features */}
               <div className="space-y-2.5 flex-1">
                 <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mb-2">Gestão</p>
-                <FeatureRow ok label={`Até ${plan.members} membros`} highlight />
+                <FeatureRow ok label={plan.members === 0 ? "Membros ilimitados" : `Até ${plan.members} membros`} highlight />
                 <FeatureRow ok label="Músicas e cifras" />
                 <FeatureRow ok label="Escalas ilimitadas" />
                 <FeatureRow ok label="Ensaios" />
