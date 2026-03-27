@@ -1,159 +1,93 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, X, Loader2, Disc3, Brain, Users, Scissors, Zap } from "lucide-react";
+import { Check, X, Loader2, Headphones, Brain, Scissors, Zap, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const PLANS = [
-  {
-    id: "free",
-    name: "Gratuito",
-    tagline: "Para conhecer a plataforma",
-    price: 0,
-    isFree: true,
-    members: 10,
-    color: "#64748B",
-    features: {
-      gestao: true,
-      professor: false,
-      multitracks: 0,
-      split: 0,
-    },
-  },
-  {
-    id: "basico",
-    name: "Básico",
-    tagline: "Para ministérios que querem crescer",
-    price: 29.90,
-    members: 15,
-    color: "#14B8A6",
-    features: {
-      gestao: true,
-      professor: true,
-      multitracks: 0,
-      split: 0,
-    },
-  },
-  {
-    id: "intermediario",
-    name: "Intermediário",
-    tagline: "Para ministérios em crescimento",
-    price: 49.90,
-    members: 30,
-    popular: true,
-    color: "#14B8A6",
-    features: {
-      gestao: true,
-      professor: true,
-      multitracks: 3,
-      split: 0,
-    },
-  },
-  {
-    id: "avancado",
-    name: "Avançado",
-    tagline: "Para grandes ministérios",
-    price: 99.90,
-    members: 100,
-    color: "#8B5CF6",
-    features: {
-      gestao: true,
-      professor: true,
-      multitracks: 5,
-      split: 3,
-    },
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    tagline: "Para igrejas com múltiplos ministérios",
-    price: 149.90,
-    members: 0,
-    color: "#8B5CF6",
-    features: {
-      gestao: true,
-      professor: true,
-      multitracks: 10,
-      split: 10,
-    },
-  },
-];
+interface BillingPlan {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  tagline: string | null;
+  price: number;
+  period: string;
+  trialDays: number;
+  isPopular: boolean;
+  badge: string | null;
+  sortOrder: number;
+  userLimit: number;
+  features: Record<string, any>;
+  gatewayMappings: { gateway: string; externalId: string }[];
+}
+
+const FEATURE_LABELS: Record<string, { label: string; icon: any }> = {
+  professor:   { label: "Professor IA", icon: Brain },
+  multitracks: { label: "Multitracks/mês", icon: Headphones },
+  splits:      { label: "Splits/mês", icon: Scissors },
+  audio_upload:{ label: "Upload de áudio", icon: Zap },
+};
 
 const EXTRAS = [
-  {
-    icon: <Disc3 className="h-5 w-5" />,
-    title: "Multitrack Adicional",
-    description: "Aluguel extra além da cota mensal do plano.",
-    price: "R$ 9,90",
-    unit: "por track",
-    color: "#14B8A6",
-  },
-  {
-    icon: <Scissors className="h-5 w-5" />,
-    title: "Split Adicional",
-    description: "Solicite um split extra. Fica no acervo para reutilização.",
-    price: "R$ 19,90",
-    unit: "por split",
-    color: "#8B5CF6",
-  },
-  {
-    icon: <Zap className="h-5 w-5" />,
-    title: "Split do Acervo",
-    description: "Acesse um split já processado por outro ministério.",
-    price: "R$ 4,90",
-    unit: "por acesso",
-    color: "#F59E0B",
-  },
+  { icon: Headphones, title: "Multitrack Adicional", description: "Aluguel extra além da cota mensal.", price: "R$ 9,90", unit: "por track", color: "#14B8A6" },
+  { icon: Scissors, title: "Split Adicional", description: "Solicite um split extra.", price: "R$ 19,90", unit: "por split", color: "#8B5CF6" },
+  { icon: Zap, title: "Split do Acervo", description: "Acesse um split já processado.", price: "R$ 4,90", unit: "por acesso", color: "#F59E0B" },
 ];
 
 export default function PlanosPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [loading, setLoading] = useState<string | null>(null);
-
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSelect = async (plan: typeof PLANS[0]) => {
-    setLoading(plan.id);
+  useEffect(() => {
+    fetch("/api/billing/plans")
+      .then((r) => r.json())
+      .then((data) => setPlans(data.plans ?? []))
+      .catch(() => setErrorMsg("Erro ao carregar planos"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSelect = async (plan: BillingPlan) => {
+    setSubmitting(plan.slug);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/subscription/checkout", {
+      const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: plan.id }),
+        body: JSON.stringify({ planSlug: plan.slug }),
       });
       const data = await res.json();
 
-      if (data.needsGroup) {
-        // Usuário não logado — redirecionar para signup
-        router.push(`/signup?plan=${plan.id}`);
+      if (data.needsAccount) {
+        router.push(`/signup?plan=${plan.slug}`);
         return;
       }
-
       if (data.url) {
         window.location.href = data.url;
         return;
       }
-
       if (res.status === 403) {
         setErrorMsg("Apenas administradores do grupo podem gerenciar assinaturas.");
         return;
       }
-
-      if (data.error) {
-        setErrorMsg(data.error);
-        return;
-      }
-
-      setErrorMsg("Não foi possível iniciar o checkout. Tente novamente.");
-    } catch (err) {
+      setErrorMsg(data.error || "Não foi possível iniciar o checkout. Tente novamente.");
+    } catch {
       setErrorMsg("Erro de conexão. Verifique sua internet e tente novamente.");
     } finally {
-      setLoading(null);
+      setSubmitting(null);
     }
+  };
+
+  const formatPrice = (price: number) => {
+    if (price === 0) return null;
+    const [int, dec] = price.toFixed(2).split(".");
+    return { int, dec };
   };
 
   return (
@@ -165,7 +99,11 @@ export default function PlanosPage() {
           <span className="font-bold text-white">Líder Web</span>
           <span className="text-xs text-slate-500">by multitrackgospel.com</span>
         </div>
-        <Button variant="outline" size="sm" onClick={() => router.push(session ? "/reativar-assinatura" : "/login")}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push(session ? "/reativar-assinatura" : "/login")}
+        >
           {session ? "Minha Conta" : "Entrar"}
         </Button>
       </div>
@@ -182,99 +120,114 @@ export default function PlanosPage() {
           </div>
         </div>
 
-        {/* Banner de erro */}
+        {/* Erro */}
         {errorMsg && (
           <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-center text-sm text-red-400">
             {errorMsg}
-            {errorMsg.includes("administrador") && (
-              <div className="mt-2">
-                <button onClick={() => router.push("/login")} className="underline text-red-300 hover:text-red-200">
-                  Entrar com outra conta
-                </button>
-              </div>
-            )}
           </div>
         )}
 
-        {/* Plans grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-16">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.id}
-              className={cn(
-                "relative rounded-2xl border p-5 flex flex-col",
-                plan.popular
-                  ? "border-teal-500 bg-teal-500/5"
-                  : plan.id === "avancado" || plan.id === "igreja"
-                  ? "border-violet-500/40 bg-violet-500/5"
-                  : "border-white/8 bg-white/3"
-              )}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-teal-500 px-3 py-0.5 text-[10px] font-bold text-teal-950 whitespace-nowrap">
-                  ⭐ Mais Popular
+        {/* Plans */}
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-teal-400" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-16">
+            {plans.map((plan) => {
+              const isFree = plan.price === 0;
+              const price = formatPrice(plan.price);
+              const isViolet = plan.slug === "avancado" || plan.slug === "enterprise";
+              const hasStripe = plan.gatewayMappings.some((m) => m.gateway === "STRIPE");
+
+              return (
+                <div
+                  key={plan.id}
+                  className={cn(
+                    "relative rounded-2xl border p-5 flex flex-col",
+                    plan.isPopular
+                      ? "border-teal-500 bg-teal-500/5"
+                      : isViolet
+                      ? "border-violet-500/40 bg-violet-500/5"
+                      : "border-white/8 bg-white/3"
+                  )}
+                >
+                  {plan.badge && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-teal-500 px-3 py-0.5 text-[10px] font-bold text-teal-950 whitespace-nowrap">
+                      ⭐ {plan.badge}
+                    </div>
+                  )}
+
+                  <div className="mb-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">{plan.name}</p>
+                    <p className="text-[11px] text-slate-500 min-h-[32px] leading-tight">{plan.tagline}</p>
+                  </div>
+
+                  <div className="mb-5">
+                    {isFree ? (
+                      <span className="text-3xl font-bold text-teal-400">Grátis</span>
+                    ) : price ? (
+                      <>
+                        <span className="text-3xl font-bold text-white">
+                          R$ {price.int}<span className="text-lg">,{price.dec}</span>
+                        </span>
+                        <span className="text-xs text-slate-500 block mt-0.5">/mês</span>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <Button
+                    size="sm"
+                    className={cn(
+                      "w-full mb-5 text-xs",
+                      plan.isPopular ? "bg-teal-500 hover:bg-teal-600 text-teal-950" :
+                      isViolet ? "bg-violet-600 hover:bg-violet-700 text-white" :
+                      "bg-white/10 hover:bg-white/15 text-white"
+                    )}
+                    onClick={() => handleSelect(plan)}
+                    disabled={submitting === plan.slug || (!isFree && !hasStripe)}
+                  >
+                    {submitting === plan.slug
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : isFree ? "Começar Grátis" : "Começar Teste Grátis"}
+                  </Button>
+
+                  <div className="h-px bg-white/8 mb-4" />
+
+                  {/* Features */}
+                  <div className="space-y-2.5 flex-1">
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mb-2">Gestão</p>
+                    <FeatureRow ok label={plan.userLimit === 0 ? "Membros ilimitados" : `Até ${plan.userLimit} membros`} highlight />
+                    <FeatureRow ok label="Músicas e cifras" />
+                    <FeatureRow ok label="Escalas ilimitadas" />
+                    <FeatureRow ok label="Ensaios" />
+                    <FeatureRow ok label="Chat do grupo" />
+
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mt-3 mb-2">Módulos Premium</p>
+                    <FeatureRow
+                      ok={Boolean(plan.features.professor)}
+                      label="Professor IA"
+                      tag={plan.features.professor ? "IA" : undefined}
+                    />
+                    <FeatureRow
+                      ok={Number(plan.features.multitracks) > 0}
+                      label={Number(plan.features.multitracks) > 0
+                        ? `${plan.features.multitracks} Multitracks/mês`
+                        : "Multitracks"}
+                      tag={Number(plan.features.multitracks) > 0 ? "NOVO" : undefined}
+                    />
+                    <FeatureRow
+                      ok={Number(plan.features.splits) > 0}
+                      label={Number(plan.features.splits) > 0
+                        ? `${plan.features.splits} Splits/mês`
+                        : "Split de músicas"}
+                    />
+                  </div>
                 </div>
-              )}
-
-              <div className="mb-4">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">{plan.name}</p>
-                <p className="text-[11px] text-slate-500 min-h-[32px] leading-tight">{plan.tagline}</p>
-              </div>
-
-              <div className="mb-5">
-                {plan.isFree ? (
-                  <span className="text-3xl font-bold text-teal-400">Grátis</span>
-                ) : (
-                  <>
-                    <span className="text-3xl font-bold text-white">
-                      R$ {Math.floor(plan.price)}<span className="text-lg">,{String(plan.price.toFixed(2)).split(".")[1]}</span>
-                    </span>
-                    <span className="text-xs text-slate-500 block mt-0.5">/mês</span>
-                  </>
-                )}
-              </div>
-
-              <Button
-                size="sm"
-                className={cn(
-                  "w-full mb-5 text-xs",
-                  plan.popular ? "bg-teal-500 hover:bg-teal-600 text-teal-950" :
-                  plan.id === "avancado" || plan.id === "igreja" ? "bg-violet-600 hover:bg-violet-700 text-white" :
-                  plan.isFree ? "bg-white/10 hover:bg-white/15 text-white" : "bg-white/10 hover:bg-white/15 text-white"
-                )}
-                onClick={() => handleSelect(plan)}
-                disabled={loading === plan.id}
-              >
-                {loading === plan.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
-                  plan.isFree ? "Começar Grátis" : "Começar Teste Grátis"}
-              </Button>
-
-              <div className="h-px bg-white/8 mb-4" />
-
-              {/* Features */}
-              <div className="space-y-2.5 flex-1">
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mb-2">Gestão</p>
-                <FeatureRow ok label={plan.members === 0 ? "Membros ilimitados" : `Até ${plan.members} membros`} highlight />
-                <FeatureRow ok label="Músicas e cifras" />
-                <FeatureRow ok label="Escalas ilimitadas" />
-                <FeatureRow ok label="Ensaios" />
-                <FeatureRow ok label="Chat do grupo" />
-
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mt-3 mb-2">Módulos Premium</p>
-                <FeatureRow ok={plan.features.professor} label="Professor IA" tag={plan.features.professor ? "IA" : undefined} />
-                <FeatureRow
-                  ok={plan.features.multitracks > 0}
-                  label={plan.features.multitracks > 0 ? `${plan.features.multitracks} Multitracks/mês` : "Multitracks"}
-                  tag={plan.features.multitracks > 0 ? "NOVO" : undefined}
-                />
-                <FeatureRow
-                  ok={plan.features.split > 0}
-                  label={plan.features.split > 0 ? `${plan.features.split} Splits/mês` : "Split de músicas"}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Extras */}
         <div className="rounded-2xl border border-white/8 bg-white/2 p-8 mb-12">
@@ -284,7 +237,7 @@ export default function PlanosPage() {
             {EXTRAS.map((extra, i) => (
               <div key={i} className="rounded-xl border border-white/8 bg-[#0a0f1e] p-5">
                 <div className="flex items-center gap-2 mb-3" style={{ color: extra.color }}>
-                  {extra.icon}
+                  <extra.icon className="h-5 w-5" />
                   <h3 className="text-sm font-semibold text-white">{extra.title}</h3>
                 </div>
                 <p className="text-xs text-slate-500 mb-4 leading-relaxed">{extra.description}</p>
@@ -296,32 +249,6 @@ export default function PlanosPage() {
           </div>
         </div>
 
-        {/* Split info */}
-        <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-8">
-          <div className="flex items-start gap-5">
-            <div className="text-3xl flex-shrink-0">✂️</div>
-            <div>
-              <h3 className="text-base font-bold text-white mb-2">Como funciona o Split Compartilhado?</h3>
-              <p className="text-sm text-slate-400 leading-relaxed max-w-2xl">
-                Quando um ministério solicita o split de uma música, o arquivo processado fica no acervo LiderWeb.
-                Outro ministério que quiser a mesma música paga um valor menor para acessar o split já pronto.
-              </p>
-              <div className="grid grid-cols-3 gap-3 mt-5">
-                {[
-                  { num: "①", title: "Ministério A", desc: "Solicita split da música X e paga R$ 19,90" },
-                  { num: "②", title: "Acervo LiderWeb", desc: "Split processado e armazenado com segurança" },
-                  { num: "③", title: "Ministério B", desc: "Acessa o mesmo split por R$ 4,90" },
-                ].map((step, i) => (
-                  <div key={i} className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-4">
-                    <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-1">{step.num} {step.title}</p>
-                    <p className="text-xs text-slate-400">{step.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
         <p className="text-center text-xs text-slate-600 mt-10">
           © {new Date().getFullYear()} Líder Web by Multitrack Gospel. Todos os direitos reservados.
         </p>
@@ -330,15 +257,19 @@ export default function PlanosPage() {
   );
 }
 
-function FeatureRow({ ok, label, highlight, tag }: { ok: boolean; label: string; highlight?: boolean; tag?: string }) {
+function FeatureRow({ ok, label, highlight, tag }: {
+  ok: boolean; label: string; highlight?: boolean; tag?: string
+}) {
   return (
     <div className="flex items-center gap-2">
-      {ok ? (
-        <Check className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
-      ) : (
-        <X className="h-3.5 w-3.5 text-slate-700 flex-shrink-0" />
-      )}
-      <span className={cn("text-[11px] leading-tight", ok ? highlight ? "text-white font-medium" : "text-slate-300" : "text-slate-600")}>
+      {ok
+        ? <Check className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
+        : <X className="h-3.5 w-3.5 text-slate-700 flex-shrink-0" />
+      }
+      <span className={cn(
+        "text-[11px] leading-tight",
+        ok ? highlight ? "text-white font-medium" : "text-slate-300" : "text-slate-600"
+      )}>
         {label}
       </span>
       {tag && (
