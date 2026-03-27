@@ -472,23 +472,6 @@ export default function DashboardPage() {
             <Link href="/dashboard/saude-sistema">
               <Button variant="outline">Ir para Saúde do sistema</Button>
             </Link>
-            <Link href="/billing-admin">
-              <Button variant="outline">
-                💳 Gerenciar Planos
-              </Button>
-            </Link>
-            <Link href="/multitracks-admin">
-              <Button variant="outline">🎧 Multitracks</Button>
-            </Link>
-            <Link href="/pads-admin">
-              <Button variant="outline">🎹 Pads</Button>
-            </Link>
-            <Link href="/cupons">
-              <Button variant="outline">🎟️ Cupons</Button>
-            </Link>
-            <Link href="/auditoria">
-              <Button variant="outline">🔍 Auditoria</Button>
-            </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
