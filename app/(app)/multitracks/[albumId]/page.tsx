@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import { SessionUser } from "@/lib/types";
@@ -104,33 +104,55 @@ async function generateWaveform(buffer: AudioBuffer, samples = 200, totalDuratio
   return normalized;
 }
 
-function WaveformBar({ data, progress, color }: { data: number[]; progress: number; color: string }) {
-  const width = 100;
-  const height = 48;
-  const barW = width / data.length;
+const WaveformBar = memo(function WaveformBar({ data, progress, color }: { data: number[]; progress: number; color: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastProgressRef = useRef(-1);
 
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-12">
-      {data.map((v, i) => {
-        const barH = Math.max(1, v * height * 0.9);
-        const x = i * barW;
-        const y = (height - barH) / 2;
-        const played = (i / data.length) < progress;
-        return (
-          <rect
-            key={i}
-            x={x + barW * 0.1}
-            width={barW * 0.8}
-            y={y}
-            height={barH}
-            fill={played ? color : `${color}55`}
-            rx={barW * 0.2}
-          />
-        );
-      })}
-    </svg>
-  );
-}
+  const draw = useCallback((prog: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !data.length) return;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    if (!w || !h) return;
+    ctx2d.clearRect(0, 0, w, h);
+    const barW = w / data.length;
+    for (let i = 0; i < data.length; i++) {
+      const barH = Math.max(1, data[i] * h * 0.88);
+      const x = i * barW;
+      const y = (h - barH) / 2;
+      ctx2d.fillStyle = (i / data.length) < prog ? color : color + "55";
+      ctx2d.beginPath();
+      if ((ctx2d as any).roundRect) {
+        (ctx2d as any).roundRect(x + barW * 0.1, y, barW * 0.8, barH, barW * 0.2);
+      } else {
+        ctx2d.rect(x + barW * 0.1, y, barW * 0.8, barH);
+      }
+      ctx2d.fill();
+    }
+    lastProgressRef.current = prog;
+  }, [data, color]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * dpr;
+    canvas.height = canvas.offsetHeight * dpr;
+    const ctx2d = canvas.getContext("2d");
+    if (ctx2d) ctx2d.scale(dpr, dpr);
+    draw(progress);
+  }, [data, color, draw, progress]);
+
+  useEffect(() => {
+    if (Math.abs(progress - lastProgressRef.current) < 0.002) return;
+    draw(progress);
+  }, [progress, draw]);
+
+  return <canvas ref={canvasRef} className="w-full h-12" style={{ display: "block" }} />;
+});
 
 const CACHE_NAME = "liderweb-multitracks-v1";
 const CACHE_TTL_DAYS = 7;
@@ -357,6 +379,8 @@ export default function MultitracksPlayerPage() {
   const levelAnimRef = useRef<number>(0);
   const markersRef = useRef<Marker[]>([]);
   const stemsRef = useRef<StemTrack[]>([]);
+  const vuBarRefsMain = useRef<(HTMLDivElement | null)[]>([]);
+  const stemLevelsRef = useRef<number[]>([]);
   const [stemLevels, setStemLevels] = useState<number[]>([]);
 
   useEffect(() => { markersRef.current = markers; }, [markers]);
@@ -366,6 +390,12 @@ export default function MultitracksPlayerPage() {
   const ensureWorklet = useCallback(async (ctx: AudioContext) => {
     if (workletReadyRef.current) return true;
     try {
+      // Garantir que o contexto está running antes de usar audioWorklet
+      if (ctx.state === 'suspended') await ctx.resume();
+      if (!ctx.audioWorklet) {
+        console.warn('[worklet] audioWorklet não disponível neste contexto');
+        return false;
+      }
       // Carrega o SoundTouchNode de /public — import de URL bypassa o webpack
       if (!SoundTouchNode) {
         const m = await import(/* webpackIgnore: true */ '/soundtouch-node.js');
@@ -435,11 +465,10 @@ export default function MultitracksPlayerPage() {
   // Carregar áudios e gerar waveforms (com cache local)
   useEffect(() => {
     if (stems.length === 0) return;
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-
-    // Registrar o AudioWorklet processor (necessário para o SoundTouchNode)
-    ensureWorklet(ctx);
+    // AudioContext criado apenas no primeiro play (requer interação do usuário)
+    // Aqui só decodificamos os buffers reutilizando o contexto se já existir
+    const ctx = audioCtxRef.current ?? new AudioContext();
+    if (!audioCtxRef.current) audioCtxRef.current = ctx;
 
     // Carregar todos os stems e depois gerar waveforms com a duração máxima
     const loadAll = async () => {
@@ -493,40 +522,34 @@ export default function MultitracksPlayerPage() {
     setStemLevels([]);
   }, []);
 
-  // Atualizar pitch em tempo real nos SoundTouchNodes ativos.
-  // Se transpose cruzou o zero (0→N ou N→0), reinicia para recriar os nodes.
+  // Quando transpose muda: reinicia o playback para recriar nodes com pitch correto.
+  // Mais simples e confiável do que tentar atualizar AudioParams on-the-fly.
   const prevTransposeRef = useRef(0);
   useEffect(() => {
-    const prev = prevTransposeRef.current;
     prevTransposeRef.current = transpose;
     transposeRef.current = transpose;
 
-    const wasZero = prev === 0;
-    const isZero = transpose === 0;
-    const crossedZero = wasZero !== isZero;
+    // Se há sources ativos (está tocando), reinicia no mesmo ponto
+    const isActive = sourceNodesRef.current.some(Boolean) ||
+      soundTouchNodesRef.current.some(Boolean);
 
-    if (crossedZero && sourceNodesRef.current.some(Boolean)) {
+    if (isActive) {
       const offset = audioCtxRef.current
         ? Math.max(0, audioCtxRef.current.currentTime - startTimeRef.current)
         : offsetRef.current;
       stopAll();
-      setTimeout(() => playAllRef.current(offset), 20);
-      return;
+      setTimeout(() => playAllRef.current(offset), 30);
     }
-
-    // Atualizar pitch nos SoundTouchNodes existentes (sem reiniciar)
-    soundTouchNodesRef.current.forEach((stNode, i) => {
-      if (!stNode) return;
-      const stem = stemsRef.current[i];
-      if (!stem || isRhythmicStem(stem.name)) return;
-      stNode.pitchSemitones.value = transpose;
-    });
   }, [transpose, stopAll]);
 
-  const playAll = useCallback((offset = 0) => {
+  const playAll = useCallback(async (offset = 0) => {
+    // Criar AudioContext na primeira interação do usuário
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (!ctx || buffersRef.current.length === 0) return;
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state === "suspended") await ctx.resume();
+    // Garantir worklet registrado (requer contexto running — por isso aqui)
+    if (!workletReadyRef.current) await ensureWorklet(ctx);
     stopAll();
 
     const hasTranspose = transposeRef.current !== 0;
@@ -595,11 +618,12 @@ export default function MultitracksPlayerPage() {
 
     startTimeRef.current = ctx.currentTime - offset;
 
-    // Loop de leitura de níveis
+    // VU meter via DOM direto — zero re-renders React a 60fps
     const dataArray = new Uint8Array(32);
+    let mixerCounter = 0;
     const readLevels = () => {
-      const levels = analyserNodesRef.current.map((analyser, i) => {
-        if (!analyser) return 0;
+      analyserNodesRef.current.forEach((analyser, i) => {
+        if (!analyser) return;
         analyser.getByteTimeDomainData(dataArray);
         let sum = 0;
         for (let k = 0; k < dataArray.length; k++) {
@@ -608,19 +632,31 @@ export default function MultitracksPlayerPage() {
         }
         const rms = Math.sqrt(sum / dataArray.length);
         const s = stemsRef.current[i];
-        return (s?.muted) ? 0 : rms * 4;
+        const level = (s?.muted) ? 0 : Math.min(1, rms * 4);
+        stemLevelsRef.current[i] = level;
+        // Atualizar VU bar via DOM direto — sem re-render
+        const vuEl = vuBarRefsMain.current[i];
+        if (vuEl) {
+          vuEl.style.width = `${Math.min(100, level * 100)}%`;
+          vuEl.style.backgroundColor = level > 0.8 ? "#ef4444" : level > 0.5 ? "#f59e0b" : (stemsRef.current[i]?.color ?? "#8B5CF6");
+        }
       });
-      setStemLevels(levels);
+      // Mixer: atualiza a 20fps (throttle 3 frames) só quando aberto
+      mixerCounter++;
+      if (mixerCounter % 3 === 0) setStemLevels([...stemLevelsRef.current]);
       levelAnimRef.current = requestAnimationFrame(readLevels);
     };
     levelAnimRef.current = requestAnimationFrame(readLevels);
 
     // startTimeRef já foi calculado acima considerando o startDelay
+    let lastTimeUpdate = 0;
     const tick = () => {
       if (!audioCtxRef.current) return;
       const t = audioCtxRef.current.currentTime - startTimeRef.current;
       const clipped = Math.min(t, duration);
-      setCurrentTime(clipped);
+      // Throttle: atualiza currentTime máx a cada 250ms
+      const now = performance.now();
+      if (now - lastTimeUpdate > 250) { setCurrentTime(clipped); lastTimeUpdate = now; }
 
       // Verificar scheduled jump
       if (scheduledJumpRef.current && t >= scheduledJumpRef.current.sectionEndTime) {
@@ -1313,18 +1349,15 @@ export default function MultitracksPlayerPage() {
                     onChange={(e) => updateStem(i, { volume: Number(e.target.value) })}
                     className="w-14 accent-primary h-1" disabled={stem.muted} />
                 </div>
-                {/* VU meter horizontal */}
+                {/* VU meter horizontal — atualizado via DOM ref, zero re-renders */}
                 <div className="flex items-center gap-1">
                   <span className="text-[9px] text-muted-foreground w-4">VU</span>
                   <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-75"
-                      style={{
-                        width: `${Math.min(100, (stemLevels[i] || 0) * 100)}%`,
-                        backgroundColor: (stemLevels[i] || 0) > 0.8 ? "#ef4444"
-                          : (stemLevels[i] || 0) > 0.5 ? "#f59e0b"
-                          : stem.color,
-                        opacity: stem.muted ? 0.2 : 0.9,
-                      }}/>
+                    <div
+                      ref={(el) => { vuBarRefsMain.current[i] = el; }}
+                      className="h-full rounded-full"
+                      style={{ width: "0%", backgroundColor: stem.color, opacity: stem.muted ? 0.2 : 0.9, transition: "width 60ms linear" }}
+                    />
                   </div>
                 </div>
               </div>
