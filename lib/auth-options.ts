@@ -173,11 +173,32 @@ export const authOptions: NextAuthOptions = {
         
         let musicCoachEnabled = false;
         if (user.groupId) {
-          const coachProfile = await prisma.musicCoachProfile.findUnique({
-            where: { userId_groupId: { userId: user.id, groupId: user.groupId } },
-            select: { enabled: true },
+          // Verificar se o plano tem acesso ao Professor IA
+          const subscription = await prisma.subscription.findUnique({
+            where: { groupId: user.groupId },
+            include: { billingPlan: true, plan: true },
           });
-          musicCoachEnabled = coachProfile?.enabled ?? false;
+          const isActive = ["ACTIVE", "TRIALING"].includes(subscription?.status ?? "");
+
+          let planHasProfessor = false;
+          if (isActive) {
+            if (subscription?.billingPlan) {
+              // Novo sistema de billing
+              planHasProfessor = Boolean(subscription.billingPlan.features?.professor);
+            } else if (subscription?.plan) {
+              // Sistema legado — checar pelo nome do plano
+              const planName = subscription.plan.name.toLowerCase();
+              planHasProfessor = ["intermediário", "intermediario", "avançado", "avancado", "igreja", "enterprise"].some(n => planName.includes(n));
+            }
+          }
+
+          if (planHasProfessor) {
+            const coachProfile = await prisma.musicCoachProfile.findUnique({
+              where: { userId_groupId: { userId: user.id, groupId: user.groupId } },
+              select: { enabled: true },
+            });
+            musicCoachEnabled = coachProfile?.enabled ?? false;
+          }
         }
 
         return {

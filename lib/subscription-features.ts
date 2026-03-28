@@ -22,13 +22,13 @@ function normalizePlanName(name?: string | null) {
 const PLAN_ACCESS_BY_NAME: Record<string, ModuleAccess> = {
   free: DEFAULT_ACCESS,
   gratuito: DEFAULT_ACCESS,
-  starter: { professor: true, multitracks: 0, split: 0 },
-  basico: { professor: true, multitracks: 0, split: 0 },
+  starter: DEFAULT_ACCESS,
+  basico: DEFAULT_ACCESS,
   pro: { professor: true, multitracks: 3, split: 0 },
-  intermediario: { professor: true, multitracks: 3, split: 0 },
-  avancado: { professor: true, multitracks: 5, split: 3 },
-  igreja: { professor: true, multitracks: 10, split: 10 },
-  enterprise: { professor: true, multitracks: 10, split: 10 },
+  intermediario: { professor: true, multitracks: 5, split: 5 },
+  avancado: { professor: true, multitracks: 10, split: 10 },
+  igreja: { professor: true, multitracks: 20, split: 20 },
+  enterprise: { professor: true, multitracks: 20, split: 20 },
 };
 
 export function getModuleAccess(features?: string[] | null, planName?: string | null): ModuleAccess {
