@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
+import { ModuleAccessOverlay } from "@/components/module-access-overlay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -170,6 +171,8 @@ export default function ProfessorConfigPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [progressMemberId, setProgressMemberId] = useState<string | null>(null);
 
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
+
   const fetchMembers = useCallback(async () => {
     try {
       setLoading(true);
@@ -184,7 +187,19 @@ export default function ProfessorConfigPage() {
   useEffect(() => {
     if (status === "loading") return;
     if (!user || !["ADMIN", "SUPERADMIN"].includes(user.role)) { router.replace("/dashboard"); return; }
-    fetchMembers();
+
+    // Verificar se o plano tem acesso ao Professor IA
+    fetch("/api/subscription/status")
+      .then(r => r.json())
+      .then(data => {
+        if (!data?.moduleAccess?.professor) {
+          setBlockedByPlan(true);
+          setLoading(false);
+        } else {
+          fetchMembers();
+        }
+      })
+      .catch(() => fetchMembers());
   }, [status, user, router, fetchMembers]);
 
   const toggleMember = async (memberId: string, enabled: boolean) => {
@@ -218,6 +233,18 @@ export default function ProfessorConfigPage() {
   const enabledCount = members.filter((m) => m.coachEnabled).length;
 
   if (status === "loading" || loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+
+  if (blockedByPlan) {
+    return (
+      <div className="relative h-96">
+        <ModuleAccessOverlay
+          moduleLabel="Professor IA"
+          isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
+          onUpgrade={() => router.push("/planos")}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
