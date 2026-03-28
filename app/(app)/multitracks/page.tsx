@@ -46,6 +46,7 @@ export default function MultitracksPage() {
   const [search, setSearch] = useState("");
   const [renting, setRenting] = useState<string | null>(null);
   const [blockedByPlan, setBlockedByPlan] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -67,6 +68,9 @@ export default function MultitracksPage() {
         setUsage(data.usage || { count: 0, limit: 0 });
         const rentAllowed = data.canRent ?? false;
         setBlockedByPlan(!rentAllowed);
+        // Cota esgotada: tem acesso ao plano mas usou tudo
+        const u = data.usage || { count: 0, limit: 0 };
+        setQuotaExceeded(rentAllowed && u.limit > 0 && u.count >= u.limit);
       }
     } catch {
       toast.error("Erro ao carregar multitracks");
@@ -85,6 +89,11 @@ export default function MultitracksPage() {
   };
 
   const handleRent = async (albumId: string) => {
+    // Se cota esgotada, ir para o carrinho
+    if (quotaExceeded) {
+      await addToCartAndRedirect(albumId);
+      return;
+    }
     setRenting(albumId);
     try {
       const res = await fetch("/api/multitracks/rent", {
@@ -95,7 +104,8 @@ export default function MultitracksPage() {
       const data = await res.json();
       if (!res.ok) {
         if (data.code === "QUOTA_EXCEEDED") {
-          toast.error(data.error);
+          setQuotaExceeded(true);
+          toast.error("Cota mensal esgotada. Adicione cotas extras no carrinho.");
         } else {
           toast.error(data.error || "Erro ao alugar");
         }
@@ -111,27 +121,15 @@ export default function MultitracksPage() {
     }
   };
 
-  const handlePlay = (albumId: string) => {
-    router.push(`/multitracks/${albumId}`);
-  };
-
-  const handleBuyAvulso = async (albumId?: string) => {
+  const addToCartAndRedirect = async (albumId?: string) => {
     try {
-      // Buscar produto avulso de multitrack
       const prodRes = await fetch("/api/billing/products?type=MULTITRACK_RENTAL");
-      if (!prodRes.ok) {
-        toast.error(`Erro ao buscar produto (${prodRes.status})`);
-        return;
-      }
+      if (!prodRes.ok) { toast.error("Produto não disponível"); return; }
       const prodData = await prodRes.json();
       const product = prodData.products?.[0];
-      if (!product) {
-        toast.error("Produto avulso não disponível no momento. Entre em contato com o suporte.");
-        return;
-      }
+      if (!product) { toast.error("Produto avulso não encontrado"); return; }
 
-      // Adicionar ao carrinho
-      const cartAddRes = await fetch("/api/billing/cart", {
+      const cartRes = await fetch("/api/billing/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -141,31 +139,23 @@ export default function MultitracksPage() {
           metadata: albumId ? { albumId } : {},
         }),
       });
-      const cartAddData = await cartAddRes.json();
-      if (!cartAddRes.ok) {
-        toast.error(`Erro ao adicionar ao carrinho: ${cartAddData.error || cartAddRes.status}`);
+      if (!cartRes.ok) {
+        const err = await cartRes.json();
+        toast.error(`Erro ao adicionar ao carrinho: ${err.error || cartRes.status}`);
         return;
       }
-
-      // Checkout direto
-      const checkoutRes = await fetch("/api/billing/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "checkout" }),
-      });
-      const checkoutData = await checkoutRes.json();
-      if (!checkoutRes.ok) {
-        toast.error(`Erro ao iniciar checkout: ${checkoutData.error || checkoutRes.status}`);
-        return;
-      }
-      if (checkoutData.url) {
-        window.location.href = checkoutData.url;
-      } else {
-        toast.error("Checkout não retornou URL. Tente novamente.");
-      }
+      router.push("/cart");
     } catch (err: any) {
-      toast.error(`Erro inesperado: ${err?.message || "desconhecido"}`);
+      toast.error(`Erro: ${err?.message || "desconhecido"}`);
     }
+  };
+
+  const handlePlay = (albumId: string) => {
+    router.push(`/multitracks/${albumId}`);
+  };
+
+  const handleBuyAvulso = async (albumId?: string) => {
+    await addToCartAndRedirect(albumId);
   };
 
   const daysLeft = (expiresAt: string) => {
@@ -209,6 +199,24 @@ export default function MultitracksPage() {
           </div>
         </div>
       </div>
+
+      {/* Banner cota esgotada */}
+      {quotaExceeded && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+              Cota mensal esgotada ({usage.count}/{usage.limit})
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Alugue cotas extras por R$ 9,90 cada. Clique em qualquer track para adicionar ao carrinho.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => router.push("/cart")}
+            className="flex-shrink-0 border-amber-500/40 text-amber-600 hover:bg-amber-500/10">
+            Ver carrinho
+          </Button>
+        </div>
+      )}
 
       {/* Busca */}
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -287,18 +295,25 @@ export default function MultitracksPage() {
                     <Play className="mr-2 h-3.5 w-3.5" />
                     Abrir Player
                   </Button>
+                ) : quotaExceeded ? (
+                  <Button
+                    size="sm"
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+                    onClick={() => handleRent(album.id)}
+                  >
+                    <Lock className="mr-2 h-3.5 w-3.5" />
+                    Alugar cota extra — R$ 9,90
+                  </Button>
                 ) : (
                   <Button
                     size="sm"
                     variant="outline"
                     className="w-full"
                     onClick={() => handleRent(album.id)}
-                    disabled={renting === album.id || usage.count >= usage.limit}
+                    disabled={renting === album.id}
                   >
                     {renting === album.id ? (
                       <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Alugando...</>
-                    ) : usage.count >= usage.limit ? (
-                      <><Lock className="mr-2 h-3.5 w-3.5" />Cota esgotada</>
                     ) : (
                       <><Lock className="mr-2 h-3.5 w-3.5" />Alugar (cota)</>
                     )}
@@ -315,9 +330,6 @@ export default function MultitracksPage() {
           moduleLabel="Multitracks"
           isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
           onUpgrade={() => router.push("/planos")}
-          onBuyAvulso={handleBuyAvulso}
-          avulsoLabel="Comprar avulso"
-          avulsoPrice="R$ 9,90"
         />
       )}
     </div>
