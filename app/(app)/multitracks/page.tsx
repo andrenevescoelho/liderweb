@@ -114,6 +114,47 @@ export default function MultitracksPage() {
     router.push(`/multitracks/${albumId}`);
   };
 
+  const handleBuyAvulso = async (albumId?: string) => {
+    try {
+      // Buscar produto avulso de multitrack
+      const prodRes = await fetch("/api/billing/products?type=MULTITRACK_RENTAL");
+      const prodData = await prodRes.json();
+      const product = prodData.products?.[0];
+      if (!product) {
+        toast.error("Produto avulso não disponível no momento. Entre em contato com o suporte.");
+        return;
+      }
+
+      // Adicionar ao carrinho
+      const cartRes = await fetch("/api/billing/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          productId: product.id,
+          quantity: 1,
+          metadata: albumId ? { albumId } : {},
+        }),
+      });
+      if (!cartRes.ok) { toast.error("Erro ao adicionar ao carrinho"); return; }
+
+      // Checkout direto
+      const checkoutRes = await fetch("/api/billing/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "checkout" }),
+      });
+      const checkoutData = await checkoutRes.json();
+      if (checkoutData.url) {
+        window.location.href = checkoutData.url;
+      } else {
+        toast.error("Erro ao iniciar checkout");
+      }
+    } catch {
+      toast.error("Erro ao processar compra avulsa");
+    }
+  };
+
   const daysLeft = (expiresAt: string) => {
     const diff = new Date(expiresAt).getTime() - Date.now();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
@@ -260,7 +301,10 @@ export default function MultitracksPage() {
         <ModuleAccessOverlay
           moduleLabel="Multitracks"
           isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
-          onUpgrade={() => router.push("/meu-plano")}
+          onUpgrade={() => router.push("/planos")}
+          onBuyAvulso={handleBuyAvulso}
+          avulsoLabel="Comprar avulso"
+          avulsoPrice="R$ 9,90"
         />
       )}
     </div>
