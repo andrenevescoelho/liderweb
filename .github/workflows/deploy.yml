@@ -26,6 +26,6 @@ jobs:
           docker compose -f docker-compose.prod.yml --env-file .env.prod build app
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
           docker cp /opt/liderweb/prisma liderweb_app:/app/prisma
-          docker exec liderweb_app npx prisma db push --accept-data-loss --schema=/app/prisma/schema.prisma
+          docker exec liderweb_app npx prisma@6.7.0 db push --accept-data-loss --schema=/app/prisma/schema.prisma
           docker builder prune -f --keep-storage 2gb
           echo "✅ Deploy concluído!"
