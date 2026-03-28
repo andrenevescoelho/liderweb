@@ -234,6 +234,7 @@ model Group {
   coachContentCaches  CoachContentCache[]
   multitracksRentals  MultitracksRental[]
   multitracksUsage    MultitracksUsage[]
+  paymentTransactions PaymentTransaction[]
 }
 
 model SubscriptionPlan {
@@ -994,6 +995,8 @@ model BillingPlan {
   gatewayMappings BillingGatewayMapping[]
   // Assinaturas vinculadas a este plano
   subscriptions   Subscription[]  @relation("BillingPlanSubscriptions")
+  // Transações vinculadas a este plano
+  transactions    PaymentTransaction[] @relation("PlanTransactions")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -1016,5 +1019,65 @@ model BillingGatewayMapping {
 
   @@unique([planId, gateway])
   @@index([gateway, isActive])
+}
+
+
+// ─── Billing v2 — Fase 2 ─────────────────────────────────────────────────────
+
+enum PaymentTransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+// Histórico de transações de pagamento
+model PaymentTransaction {
+  id                   String                   @id @default(cuid())
+  groupId              String
+  group                Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  billingPlanId        String?
+  billingPlan          BillingPlan?             @relation("PlanTransactions", fields: [billingPlanId], references: [id])
+  gateway              BillingGateway
+  externalId           String                   // ID da invoice/charge no gateway
+  externalSubscriptionId String?                // ID da subscription no gateway
+  status               PaymentTransactionStatus
+  amount               Float                    // valor em BRL
+  currency             String                   @default("BRL")
+  description          String?
+  paidAt               DateTime?
+  failedAt             DateTime?
+  failureReason        String?
+  gatewayData          Json?                    // dados brutos do gateway
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  @@unique([gateway, externalId])
+  @@index([groupId, status])
+  @@index([groupId, createdAt])
+}
+
+// Log de eventos de webhook recebidos — idempotência e auditoria
+model WebhookEvent {
+  id            String             @id @default(cuid())
+  gateway       BillingGateway
+  externalId    String             // event ID do gateway
+  eventType     String             // ex: "checkout.session.completed"
+  status        WebhookEventStatus @default(RECEIVED)
+  payload       Json               // payload completo do evento
+  errorMessage  String?
+  processedAt   DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@unique([gateway, externalId])   // garante idempotência
+  @@index([gateway, eventType])
+  @@index([status])
 }
 
