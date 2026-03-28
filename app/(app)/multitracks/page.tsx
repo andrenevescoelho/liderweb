@@ -119,6 +119,10 @@ export default function MultitracksPage() {
     try {
       // Buscar produto avulso de multitrack
       const prodRes = await fetch("/api/billing/products?type=MULTITRACK_RENTAL");
+      if (!prodRes.ok) {
+        toast.error(`Erro ao buscar produto (${prodRes.status})`);
+        return;
+      }
       const prodData = await prodRes.json();
       const product = prodData.products?.[0];
       if (!product) {
@@ -127,7 +131,7 @@ export default function MultitracksPage() {
       }
 
       // Adicionar ao carrinho
-      const cartRes = await fetch("/api/billing/cart", {
+      const cartAddRes = await fetch("/api/billing/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -137,7 +141,11 @@ export default function MultitracksPage() {
           metadata: albumId ? { albumId } : {},
         }),
       });
-      if (!cartRes.ok) { toast.error("Erro ao adicionar ao carrinho"); return; }
+      const cartAddData = await cartAddRes.json();
+      if (!cartAddRes.ok) {
+        toast.error(`Erro ao adicionar ao carrinho: ${cartAddData.error || cartAddRes.status}`);
+        return;
+      }
 
       // Checkout direto
       const checkoutRes = await fetch("/api/billing/cart", {
@@ -146,13 +154,17 @@ export default function MultitracksPage() {
         body: JSON.stringify({ action: "checkout" }),
       });
       const checkoutData = await checkoutRes.json();
+      if (!checkoutRes.ok) {
+        toast.error(`Erro ao iniciar checkout: ${checkoutData.error || checkoutRes.status}`);
+        return;
+      }
       if (checkoutData.url) {
         window.location.href = checkoutData.url;
       } else {
-        toast.error("Erro ao iniciar checkout");
+        toast.error("Checkout não retornou URL. Tente novamente.");
       }
-    } catch {
-      toast.error("Erro ao processar compra avulsa");
+    } catch (err: any) {
+      toast.error(`Erro inesperado: ${err?.message || "desconhecido"}`);
     }
   };
 
