@@ -65,7 +65,8 @@ export default function MultitracksPage() {
         const data = await res.json();
         setAlbums(data.albums || []);
         setUsage(data.usage || { count: 0, limit: 0 });
-        setBlockedByPlan(false);
+        const rentAllowed = data.canRent ?? false;
+        setBlockedByPlan(!rentAllowed);
       }
     } catch {
       toast.error("Erro ao carregar multitracks");
