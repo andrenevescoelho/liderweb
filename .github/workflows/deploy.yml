@@ -21,6 +21,7 @@ jobs:
           git fetch origin main
           git clean -fd
           git reset --hard origin/main
+          cp /opt/.env.prod /opt/liderweb/.env.prod
           docker compose -f docker-compose.prod.yml --env-file .env.prod build app
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
           docker cp /opt/liderweb/prisma liderweb_app:/app/prisma
