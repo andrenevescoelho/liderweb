@@ -125,7 +125,18 @@ export default function SongsPage() {
       if (filterKey) url += `key=${filterKey}&`;
       const res = await fetch(url);
       const data = await res.json();
-      setSongs(data ?? []);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Não foi possível carregar as músicas");
+      }
+
+      const normalizedSongs = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.songs)
+          ? data.songs
+          : [];
+
+      setSongs(normalizedSongs);
     } catch (e) {
       console.error(e);
     } finally {
