@@ -5,8 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
-import { can } from "@/lib/rbac";
-import { getModuleAccess } from "@/lib/subscription-features";
+import { getGroupEntitlements } from "@/lib/billing/entitlements";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,12 +15,23 @@ export async function POST(req: NextRequest) {
 
     if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
 
-    if (!can(user, "multitrack.rent")) {
-      return NextResponse.json({ error: "Sem permissão para alugar multitracks" }, { status: 403 });
-    }
-
     const { albumId } = await req.json();
     if (!albumId) return NextResponse.json({ error: "albumId obrigatório" }, { status: 400 });
+
+    // Verificar entitlements via sistema novo
+    const ent = await getGroupEntitlements(user.groupId);
+
+    if (!ent.isActive) {
+      return NextResponse.json({ error: "Assinatura inativa. Reative para alugar multitracks." }, { status: 402 });
+    }
+
+    if (!ent.canAccessMultitracks) {
+      return NextResponse.json({
+        error: "Seu plano não inclui multitracks. Faça upgrade.",
+        code: "PLAN_UPGRADE_REQUIRED",
+        requiredFeature: "multitracks",
+      }, { status: 402 });
+    }
 
     const existing = await prisma.multitracksRental.findUnique({
       where: { groupId_albumId: { groupId: user.groupId, albumId } },
@@ -30,27 +40,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Multitrack já alugada e ativa" }, { status: 409 });
     }
 
+    // Verificar cota mensal
     const now = new Date();
-    const subscription = await prisma.subscription.findUnique({
-      where: { groupId: user.groupId },
-      include: { plan: true },
-    });
-    const moduleAccess = getModuleAccess(subscription?.plan?.features, subscription?.plan?.name);
-    const multitrackLimit = moduleAccess.multitracks;
-
-    if (multitrackLimit === 0) {
-      return NextResponse.json({ error: "Seu plano não inclui multitracks. Faça upgrade." }, { status: 402 });
-    }
-
     const usageRecord = await prisma.multitracksUsage.findUnique({
       where: { groupId_month_year: { groupId: user.groupId, month: now.getMonth() + 1, year: now.getFullYear() } },
     });
     const currentCount = usageRecord?.count ?? 0;
+    const limit = ent.multitracksPerMonth;
 
-    if (currentCount >= multitrackLimit) {
+    if (currentCount >= limit) {
       return NextResponse.json({
-        error: `Cota mensal atingida (${currentCount}/${multitrackLimit}).`,
+        error: `Cota mensal atingida (${currentCount}/${limit}). Aguarde o próximo mês ou adquira um multitrack avulso.`,
         code: "QUOTA_EXCEEDED",
+        usage: { count: currentCount, limit },
       }, { status: 402 });
     }
 
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
       update: { count: { increment: 1 } },
     });
 
-    return NextResponse.json({ rental });
+    return NextResponse.json({ rental, usage: { count: currentCount + 1, limit } });
   } catch (err) {
     console.error("[multitracks/rent] error:", err);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
