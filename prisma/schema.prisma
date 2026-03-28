@@ -85,6 +85,28 @@ enum SubscriptionStatus {
   INACTIVE
 }
 
+// ─── Billing v2 enums ────────────────────────────────────────────────────────
+
+enum BillingGateway {
+  STRIPE
+  ASAAS
+  MERCADO_PAGO
+  MANUAL
+}
+
+enum BillingPeriod {
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+enum BillingPlanStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 enum CouponType {
   PERCENTAGE_DISCOUNT
   FREE_PLAN
@@ -127,7 +149,20 @@ enum AuditEntityType {
   IMPORT
   SUBSCRIPTION
   RBAC
+  MULTITRACK
   OTHER
+}
+
+enum MultitracksAlbumStatus {
+  PENDING
+  READY
+  ERROR
+}
+
+enum MultitracksRentalStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
 }
 
 enum AnnouncementType {
@@ -197,6 +232,11 @@ model Group {
   practiceSubmissions PracticeSubmission[]
   progressHistories   ProgressHistory[]
   coachContentCaches  CoachContentCache[]
+  multitracksRentals  MultitracksRental[]
+  multitracksUsage    MultitracksUsage[]
+  paymentTransactions PaymentTransaction[]
+  carts               Cart[]
+  orders              Order[]
 }
 
 model SubscriptionPlan {
@@ -218,6 +258,9 @@ model Subscription {
   group                Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
   planId               String
   plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+  // Novo vínculo com BillingPlan (fase 1 - opcional para migração gradual)
+  billingPlanId        String?
+  billingPlan          BillingPlan?       @relation("BillingPlanSubscriptions", fields: [billingPlanId], references: [id])
   stripeCustomerId     String?
   stripeSubscriptionId String?            @unique
   status               SubscriptionStatus @default(INACTIVE)
@@ -228,6 +271,8 @@ model Subscription {
   couponRedemptions    CouponRedemption[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+
+  @@index([billingPlanId])
 }
 
 model Coupon {
@@ -825,3 +870,348 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// ─── Módulo Multitracks ───────────────────────────────────────────────────────
+
+model MultitracksAlbum {
+  id          String                 @id @default(cuid())
+  title       String
+  artist      String
+  genre       String?
+  bpm         Int?
+  musicalKey  String?
+  coverUrl    String?
+  description String?                @db.Text
+  status      MultitracksAlbumStatus @default(PENDING)
+  markers     Json                   @default("[]")
+  stems       Json                   // Array de { name: string, driveUrl: string, r2Key: string | null }
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  rentals     MultitracksRental[]
+
+  @@index([status, isActive])
+  @@index([title, artist])
+}
+
+model MultitracksRental {
+  id        String                  @id @default(cuid())
+  groupId   String
+  group     Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  albumId   String
+  album     MultitracksAlbum        @relation(fields: [albumId], references: [id], onDelete: Restrict)
+  rentedBy  String                  // userId de quem alugou
+  r2Folder  String                  // pasta no R2: multitracks/{groupId}/{albumId}
+  status    MultitracksRentalStatus @default(ACTIVE)
+  rentedAt  DateTime                @default(now())
+  expiresAt DateTime
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  @@unique([groupId, albumId])
+  @@index([groupId, status])
+  @@index([albumId])
+  @@index([expiresAt])
+}
+
+model MultitracksUsage {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  month     Int      // 1-12
+  year      Int
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, month, year])
+  @@index([groupId, year, month])
+}
+
+enum PadType {
+  HOLD
+  LOOP
+  ONE_SHOT
+}
+
+model PadBoard {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  bpm         Int?
+  musicalKey  String?
+  color       String   @default("#8B5CF6")
+  isActive    Boolean  @default(true)
+  cols        Int      @default(4)
+  rows        Int      @default(4)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pads        Pad[]
+
+  @@index([isActive])
+}
+
+model Pad {
+  id          String   @id @default(cuid())
+  boardId     String
+  board       PadBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name        String
+  position    Int
+  type        PadType  @default(ONE_SHOT)
+  audioUrl    String?
+  r2Key       String?
+  color       String   @default("#6366F1")
+  volume      Float    @default(1.0)
+  midiNote    Int?
+  keyboardKey String?
+  loopSync    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([boardId, position])
+  @@index([boardId, isActive])
+}
+
+// ─── Billing v2 ──────────────────────────────────────────────────────────────
+
+// Plano dinâmico gerenciado pelo superadmin via painel
+model BillingPlan {
+  id            String            @id @default(cuid())
+  slug          String            @unique  // ex: "basico", "pro", "enterprise"
+  name          String                     // ex: "Básico"
+  description   String?
+  tagline       String?                    // ex: "Para ministérios pequenos"
+  price         Float                      // preço base em BRL
+  period        BillingPeriod     @default(MONTHLY)
+  trialDays     Int               @default(7)
+  status        BillingPlanStatus @default(ACTIVE)
+  isPopular     Boolean           @default(false)  // destaque visual
+  badge         String?                    // ex: "Mais Popular"
+  sortOrder     Int               @default(0)
+  userLimit     Int               @default(0)       // 0 = ilimitado
+  // Feature flags como JSON — ex: {"multitracks": 3, "professor": true, "splits": 0}
+  features      Json              @default("{}")
+  // Mapeamentos para gateways externos
+  gatewayMappings BillingGatewayMapping[]
+  // Assinaturas vinculadas a este plano
+  subscriptions   Subscription[]  @relation("BillingPlanSubscriptions")
+  // Transações vinculadas a este plano
+  transactions    PaymentTransaction[] @relation("PlanTransactions")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, sortOrder])
+  @@index([slug])
+}
+
+// Vínculo entre um plano e um ID externo num gateway
+// Ex: plano "basico" no Stripe tem price_id "price_1TFeL1..."
+model BillingGatewayMapping {
+  id            String         @id @default(cuid())
+  planId        String
+  plan          BillingPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  gateway       BillingGateway
+  externalId    String         // price_id no Stripe, external_id no Asaas, etc.
+  externalData  Json?          // dados extras do gateway (produto, ambiente, etc.)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([planId, gateway])
+  @@index([gateway, isActive])
+}
+
+
+// ─── Billing v2 — Fase 2 ─────────────────────────────────────────────────────
+
+enum PaymentTransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+// Histórico de transações de pagamento
+model PaymentTransaction {
+  id                   String                   @id @default(cuid())
+  groupId              String
+  group                Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  billingPlanId        String?
+  billingPlan          BillingPlan?             @relation("PlanTransactions", fields: [billingPlanId], references: [id])
+  gateway              BillingGateway
+  externalId           String                   // ID da invoice/charge no gateway
+  externalSubscriptionId String?                // ID da subscription no gateway
+  status               PaymentTransactionStatus
+  amount               Float                    // valor em BRL
+  currency             String                   @default("BRL")
+  description          String?
+  paidAt               DateTime?
+  failedAt             DateTime?
+  failureReason        String?
+  gatewayData          Json?                    // dados brutos do gateway
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  @@unique([gateway, externalId])
+  @@index([groupId, status])
+  @@index([groupId, createdAt])
+}
+
+// Log de eventos de webhook recebidos — idempotência e auditoria
+model WebhookEvent {
+  id            String             @id @default(cuid())
+  gateway       BillingGateway
+  externalId    String             // event ID do gateway
+  eventType     String             // ex: "checkout.session.completed"
+  status        WebhookEventStatus @default(RECEIVED)
+  payload       Json               // payload completo do evento
+  errorMessage  String?
+  processedAt   DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@unique([gateway, externalId])   // garante idempotência
+  @@index([gateway, eventType])
+  @@index([status])
+}
+
+
+// ─── Billing v2 — Fase 3 ─────────────────────────────────────────────────────
+
+enum ProductType {
+  MULTITRACK_RENTAL   // aluguel avulso de multitrack
+  SPLIT_REQUEST       // solicitação de split
+  SPLIT_ACCESS        // acesso a split do acervo
+  MODULE_ACCESS       // acesso a módulo premium
+  ADDON               // add-on genérico
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum CartStatus {
+  OPEN
+  CHECKOUT
+  COMPLETED
+  ABANDONED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+// Produto avulso
+model BillingProduct {
+  id           String        @id @default(cuid())
+  slug         String        @unique
+  name         String
+  description  String?
+  type         ProductType
+  status       ProductStatus @default(ACTIVE)
+  price        Float
+  currency     String        @default("BRL")
+  isRecurring  Boolean       @default(false)
+  sortOrder    Int           @default(0)
+  imageUrl     String?
+  metadata     Json          @default("{}")
+  // Mapeamentos de gateway para este produto
+  gatewayMappings BillingProductGatewayMapping[]
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status, type])
+  @@index([slug])
+}
+
+// Mapeamento de produto avulso para gateway
+model BillingProductGatewayMapping {
+  id          String         @id @default(cuid())
+  productId   String
+  product     BillingProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  gateway     BillingGateway
+  externalId  String
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+
+  @@unique([productId, gateway])
+}
+
+// Carrinho de compras
+model Cart {
+  id        String     @id @default(cuid())
+  groupId   String
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  status    CartStatus @default(OPEN)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([groupId, status])
+  @@index([userId, status])
+}
+
+// Item do carrinho
+model CartItem {
+  id        String         @id @default(cuid())
+  cartId    String
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   BillingProduct @relation(fields: [productId], references: [id])
+  quantity  Int            @default(1)
+  unitPrice Float
+  metadata  Json           @default("{}")
+  createdAt DateTime       @default(now())
+
+  @@unique([cartId, productId])
+}
+
+// Pedido
+model Order {
+  id          String      @id @default(cuid())
+  groupId     String
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId      String
+  status      OrderStatus @default(PENDING)
+  totalAmount Float
+  currency    String      @default("BRL")
+  gateway     BillingGateway?
+  externalId  String?     // session/charge ID no gateway
+  items       OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([groupId, status])
+  @@index([externalId])
+}
+
+// Item do pedido
+model OrderItem {
+  id          String         @id @default(cuid())
+  orderId     String
+  order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     BillingProduct @relation(fields: [productId], references: [id])
+  quantity    Int            @default(1)
+  unitPrice   Float
+  metadata    Json           @default("{}")
+  createdAt   DateTime       @default(now())
+}
+

@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Upload,
   Megaphone,
+  GraduationCap,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
   { href: "/dashboard/admin", label: "Administração", icon: Shield, roles: ["ADMIN"] },
+  { href: "/professor-config", label: "Config. Professor", icon: GraduationCap, roles: ["SUPERADMIN", "ADMIN"] },
   { href: "/admin", label: "Grupos", icon: Building2, roles: ["SUPERADMIN"] },
   { href: "/members", label: "Membros", icon: Users, roles: ["ADMIN", "LEADER"] },
   { href: "/meu-plano", label: "Meu Plano", icon: CreditCard, roles: ["ADMIN"] },

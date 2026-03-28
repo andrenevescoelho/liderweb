@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { canAccessFeature } from "@/lib/billing/entitlements";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,16 @@ export async function POST(req: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const user = session.user as SessionUser;
     if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
+
+    // Verificar entitlement do plano
+    const hasAccess = await canAccessFeature(user.groupId, "professor");
+    if (!hasAccess) {
+      return NextResponse.json({
+        error: "Seu plano não inclui o Professor IA. Faça upgrade para acessar.",
+        code: "PLAN_UPGRADE_REQUIRED",
+        requiredFeature: "professor",
+      }, { status: 402 });
+    }
 
     const coachProfile = await prisma.musicCoachProfile.findUnique({
       where: { userId_groupId: { userId: user.id, groupId: user.groupId } },

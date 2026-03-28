@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
+import { ModuleAccessOverlay } from "@/components/module-access-overlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +31,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Trash2,
+  Trophy,
+  Target,
+  TrendingUp,
 } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 
 /* ─── Types ─── */
@@ -45,7 +50,7 @@ interface DashboardData {
 }
 
 type ContentTab = "general" | "exercises" | "theory" | "tips";
-type MainSection = "content" | "record" | "history";
+type MainSection = "content" | "record" | "history" | "progress";
 
 interface FeedbackData {
   id: string;
@@ -85,6 +90,7 @@ const MAIN_SECTIONS: { key: MainSection; label: string; icon: React.ReactNode }[
   { key: "content", label: "Conteúdo", icon: <BookOpen className="h-4 w-4" /> },
   { key: "record", label: "Gravar Prática", icon: <Mic className="h-4 w-4" /> },
   { key: "history", label: "Histórico", icon: <Clock className="h-4 w-4" /> },
+  { key: "progress", label: "Progresso", icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 const PRACTICE_TYPES = [
@@ -120,6 +126,7 @@ export default function ProfessorPage() {
 
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [mainSection, setMainSection] = useState<MainSection>("content");
 
   /* ─── Content state ─── */
@@ -158,6 +165,14 @@ export default function ProfessorPage() {
     if (!user) { router.replace("/login"); return; }
     const fetchDash = async () => {
       try {
+        const subscriptionRes = await fetch("/api/subscription/status");
+        if (subscriptionRes.ok) {
+          const subscriptionStatus = await subscriptionRes.json();
+          if (!subscriptionStatus?.moduleAccess?.professor) {
+            setBlockedByPlan(true);
+            return;
+          }
+        }
         const res = await fetch("/api/music-coach/dashboard");
         if (res.status === 403) { router.replace("/dashboard"); return; }
         if (!res.ok) throw new Error();
@@ -232,6 +247,52 @@ export default function ProfessorPage() {
   }, [activeTab, mainSection, dashData, content, streaming, generateContent]);
 
   /* ─── Audio Recording ─── */
+
+  // Converte qualquer blob de áudio para WAV usando Web Audio API
+  const convertToWav = async (blob: Blob): Promise<Blob> => {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new AudioContext();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const numSamples = audioBuffer.length;
+    const bytesPerSample = 2; // 16-bit PCM
+    const dataLength = numSamples * numChannels * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + dataLength, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+    view.setUint16(32, numChannels * bytesPerSample, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(ch)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+
+    await audioCtx.close();
+    return new Blob([buffer], { type: "audio/wav" });
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -278,32 +339,40 @@ export default function ProfessorPage() {
     if (!audioBlob) return;
     setUploading(true);
     setUploadStatus("idle");
-    setUploadMessage("");
+    setUploadMessage("Convertendo áudio...");
 
     try {
+      // Converter para WAV (suportado pelo LLM)
+      let uploadBlob: Blob;
+      try {
+        uploadBlob = await convertToWav(audioBlob);
+      } catch (convErr) {
+        console.error("Conversão para WAV falhou, usando original:", convErr);
+        uploadBlob = audioBlob;
+      }
+
       // 1. Get presigned URL
-      const ext = audioBlob.type.includes("webm") ? "webm" : "ogg";
-      const fileName = `practice-${Date.now()}.${ext}`;
+      const fileName = `practice-${Date.now()}.wav`;
       const presignRes = await fetch("/api/music-coach/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName, contentType: audioBlob.type }),
+        body: JSON.stringify({ fileName, contentType: "audio/wav" }),
       });
       if (!presignRes.ok) throw new Error("Falha ao obter URL de upload");
       const { uploadUrl, cloud_storage_path } = await presignRes.json();
 
       // 2. Upload to S3
-      // Check signed headers to determine if Content-Disposition header is needed
+      setUploadMessage("Enviando áudio...");
       const urlObj = new URL(uploadUrl);
       const signedHeaders = urlObj.searchParams.get("X-Amz-SignedHeaders") || "";
-      const headers: Record<string, string> = { "Content-Type": audioBlob.type };
+      const headers: Record<string, string> = { "Content-Type": "audio/wav" };
       if (signedHeaders.includes("content-disposition")) {
         headers["Content-Disposition"] = "attachment";
       }
       const uploadRes = await fetch(uploadUrl, {
         method: "PUT",
         headers,
-        body: audioBlob,
+        body: uploadBlob,
       });
       if (!uploadRes.ok) throw new Error("Falha no upload do áudio");
 
@@ -393,13 +462,40 @@ export default function ProfessorPage() {
       </div>
     );
   }
+  if (blockedByPlan) {
+    return (
+      <div className="relative">
+        <div className="space-y-6 opacity-35 pointer-events-none select-none">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <GraduationCap className="h-7 w-7 text-primary" />
+              Professor
+            </h1>
+            <p className="text-muted-foreground mt-1">Seu assistente personalizado de aprendizado musical.</p>
+          </div>
+          <Card>
+            <CardContent className="py-10 text-center text-muted-foreground">
+              Este módulo não está disponível no plano atual.
+            </CardContent>
+          </Card>
+        </div>
+        <ModuleAccessOverlay
+          moduleLabel="Professor IA"
+          isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
+          onUpgrade={() => router.push("/meu-plano")}
+        />
+      </div>
+    );
+  }
+
   if (!dashData) return null;
 
   const levelLabel = dashData.level <= 2 ? "Iniciante" : dashData.level <= 5 ? "Intermediário" : "Avançado";
   const levelColor = dashData.level <= 2 ? "text-emerald-400" : dashData.level <= 5 ? "text-blue-400" : "text-amber-400";
 
   return (
-    <div className="space-y-6">
+    <div className="relative">
+      <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -834,6 +930,137 @@ export default function ProfessorPage() {
           </CardContent>
         </Card>
       )}
+      {/* ═══ PROGRESS SECTION ═══ */}
+      {mainSection === "progress" && <ProgressSection />}
+      </div>
+    </div>
+  );
+}
+
+/* ─── ProgressSection ─── */
+function ProgressSection() {
+  const [submissions, setSubmissions] = useState<SubmissionData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<7 | 30>(30);
+
+  useEffect(() => {
+    fetch("/api/music-coach/history?all=true")
+      .then((r) => r.json())
+      .then((d) => setSubmissions(d.submissions || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - period * 24 * 60 * 60 * 1000);
+  const filtered = submissions.filter((s) => new Date(s.createdAt) >= cutoff);
+
+  // Gráfico — agrupar por data
+  const chartData = filtered
+    .filter((s) => s.feedback?.score != null)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map((s) => ({
+      date: new Date(s.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+      vocal: s.type === "vocal" ? s.feedback!.score : null,
+      instrumental: s.type === "instrumental" ? s.feedback!.score : null,
+    }));
+
+  // Badges
+  const totalCount = submissions.length;
+  const scores = submissions.filter((s) => s.feedback?.score != null).map((s) => s.feedback!.score!);
+  const first3avg = scores.slice(0, 3).reduce((a, b) => a + b, 0) / Math.max(scores.slice(0, 3).length, 1);
+  const last3avg = scores.slice(-3).reduce((a, b) => a + b, 0) / Math.max(scores.slice(-3).length, 1);
+
+  const badges = [
+    { id: "first", icon: "🎵", label: "Primeira Prática", desc: "Enviou a primeira prática", earned: totalCount >= 1 },
+    { id: "five", icon: "🏅", label: "5 Práticas", desc: "Completou 5 práticas", earned: totalCount >= 5 },
+    { id: "score80", icon: "⭐", label: "Nota 80+", desc: "Atingiu nota 80 ou mais", earned: scores.some((s) => s >= 80) },
+    { id: "score90", icon: "🏆", label: "Nota 90+", desc: "Atingiu nota 90 ou mais", earned: scores.some((s) => s >= 90) },
+    { id: "improve", icon: "📈", label: "Evolução 10pts", desc: "Melhorou 10 pontos na média", earned: scores.length >= 6 && last3avg - first3avg >= 10 },
+  ];
+
+  // Meta semanal
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay());
+  weekStart.setHours(0, 0, 0, 0);
+  const thisWeek = submissions.filter((s) => new Date(s.createdAt) >= weekStart).length;
+  const weekGoal = 3;
+  const weekProgress = Math.min(thisWeek / weekGoal, 1);
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+
+  return (
+    <div className="space-y-6">
+      {/* Gráfico */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Evolução de Notas</CardTitle>
+            <div className="flex gap-1">
+              {([7, 30] as const).map((p) => (
+                <button key={p} onClick={() => setPeriod(p)} className={cn("px-3 py-1 text-xs rounded-full border transition-colors", period === p ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground")}>
+                  {p} dias
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {chartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhuma prática com nota no período selecionado.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                <Legend />
+                <Line type="monotone" dataKey="vocal" name="Vocal" stroke="#14b8a6" strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                <Line type="monotone" dataKey="instrumental" name="Instrumental" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Badges */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5 text-primary" /> Conquistas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {badges.map((b) => (
+              <div key={b.id} className={cn("flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all", b.earned ? "border-primary/30 bg-primary/5" : "border-border bg-muted/30 opacity-50")}>
+                <span className="text-2xl">{b.icon}</span>
+                <p className={cn("text-xs font-semibold", b.earned ? "text-foreground" : "text-muted-foreground")}>{b.label}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{b.desc}</p>
+                {b.earned && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Meta semanal */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> Meta Semanal</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{thisWeek} de {weekGoal} práticas esta semana</span>
+            <span className={cn("font-semibold", thisWeek >= weekGoal ? "text-emerald-400" : "text-primary")}>{Math.round(weekProgress * 100)}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div className={cn("h-full rounded-full transition-all", thisWeek >= weekGoal ? "bg-emerald-400" : "bg-primary")} style={{ width: `${weekProgress * 100}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {thisWeek === 0 ? "Comece sua primeira prática da semana! 💪" : thisWeek < weekGoal ? `Faltam ${weekGoal - thisWeek} prática${weekGoal - thisWeek > 1 ? "s" : ""} para atingir a meta! 🎯` : "Meta da semana atingida! Parabéns! 🎉"}
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

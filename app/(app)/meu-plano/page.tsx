@@ -1,464 +1,318 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Crown, CreditCard, ExternalLink, Loader2, AlertCircle, Ticket } from "lucide-react";
+import { useSession } from "next-auth/react";
+import {
+  CreditCard, Loader2, CheckCircle2, AlertTriangle, XCircle,
+  Clock, Users, ExternalLink, RefreshCw, X, ArrowUpRight,
+  Receipt, Headphones, Brain, Scissors, Zap, Calendar,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
-const PLANS = [
-  {
-    id: "free",
-    name: "Gratuito",
-    description: "Para conhecer a plataforma",
-    price: 0,
-    userLimit: 10,
-    features: [
-      "Até 10 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Suporte por email",
-    ],
-  },
-  {
-    id: "basico",
-    name: "Básico",
-    description: "Ideal para ministérios pequenos",
-    price: 29.9,
-    userLimit: 15,
-    features: [
-      "Até 15 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte por email",
-    ],
-  },
-  {
-    id: "intermediario",
-    name: "Intermediário",
-    description: "Para ministérios em crescimento",
-    price: 49.9,
-    userLimit: 30,
-    popular: true,
-    features: [
-      "Até 30 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte prioritário",
-    ],
-  },
-  {
-    id: "avancado",
-    name: "Avançado",
-    description: "Para grandes ministérios",
-    price: 99.9,
-    userLimit: 100,
-    features: [
-      "Até 100 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte VIP",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    description: "Para igrejas com múltiplos ministérios",
-    price: 149.9,
-    userLimit: 0,
-    features: [
-      "Usuários ilimitados",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte dedicado",
-      "Onboarding personalizado",
-    ],
-  },
-];
+interface Invoice {
+  id: string;
+  amount: number;
+  currency: string;
+  status: "paid" | "open" | "void" | "uncollectible";
+  description: string | null;
+  paidAt: string | null;
+  invoiceUrl: string | null;
+  invoicePdf: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+}
+
+interface SubscriptionData {
+  id: string;
+  status: string;
+  planName: string;
+  planSlug: string | null;
+  price: number;
+  period: string;
+  userLimit: number;
+  userCount: number;
+  features: Record<string, any>;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  trialEndsAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  hasStripeCustomer: boolean;
+  hasStripeSubscription: boolean;
+  gateway: string;
+}
 
 function formatBRL(value: number) {
-  try {
-    return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  } catch {
-    return `R$ ${value.toFixed(2)}`;
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatDate(date: string | null) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function StatusBadge({ status, cancelAtPeriodEnd }: { status: string; cancelAtPeriodEnd: boolean }) {
+  if (cancelAtPeriodEnd) return (
+    <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 gap-1">
+      <Clock className="h-3 w-3" /> Cancelamento agendado
+    </Badge>
+  );
+  switch (status) {
+    case "ACTIVE":    return <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 gap-1"><CheckCircle2 className="h-3 w-3" />Ativa</Badge>;
+    case "TRIALING":  return <Badge className="bg-blue-500/15 text-blue-600 border-blue-500/30 gap-1"><Clock className="h-3 w-3" />Em trial</Badge>;
+    case "PAST_DUE":  return <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 gap-1"><AlertTriangle className="h-3 w-3" />Pagamento pendente</Badge>;
+    case "CANCELED":  return <Badge className="bg-red-500/15 text-red-600 border-red-500/30 gap-1"><XCircle className="h-3 w-3" />Cancelada</Badge>;
+    case "INACTIVE":  return <Badge className="bg-slate-500/15 text-slate-500 border-slate-500/30 gap-1"><X className="h-3 w-3" />Inativa</Badge>;
+    default: return <Badge variant="outline">{status}</Badge>;
   }
 }
 
-function formatPlanPrice(value: number) {
-  if (value === 0) return "Grátis";
-  return formatBRL(value);
+function InvoiceStatusBadge({ status }: { status: string }) {
+  switch (status) {
+    case "paid":   return <span className="text-[11px] font-medium text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">Pago</span>;
+    case "open":   return <span className="text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full">Pendente</span>;
+    default:       return <span className="text-[11px] font-medium text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded-full">{status}</span>;
+  }
 }
+
+const FEATURE_ICONS: Record<string, any> = {
+  multitracks: Headphones,
+  professor:   Brain,
+  splits:      Scissors,
+  audio_upload: Zap,
+};
 
 export default function MeuPlanoPage() {
   const router = useRouter();
-  const { data: session } = useSession() || {};
-  const userRole = (session?.user as any)?.role ?? "MEMBER";
-  const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const { data: session } = useSession();
+  const user = session?.user as any;
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
 
-  const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
-  const [couponCode, setCouponCode] = useState("");
-  const [couponLoading, setCouponLoading] = useState(false);
-  const [couponFeedback, setCouponFeedback] = useState<string | null>(null);
+  const [data, setData] = useState<{ hasSubscription: boolean; isActive?: boolean; subscription?: SubscriptionData; invoices?: Invoice[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const canManage = useMemo(() => ["ADMIN", "SUPERADMIN"].includes(userRole) || userPermissions.includes("subscription.manage"), [userPermissions, userRole]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    if (!canManage) {
-      // Leva o usuário de volta para evitar confusão
-      router.replace("/dashboard");
-      return;
-    }
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/subscription/status");
-        const data = await res.json();
-        setStatus(data);
-      } catch (e) {
-        console.error(e);
-        setStatus({ error: "Erro ao carregar status da assinatura" });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-  }, [session, canManage, router]);
-
-  const currentPlanName = status?.subscription?.planName ?? null;
-  const canUseStripePortal = !!status?.subscription?.hasStripeCustomer;
-
-  const handleOpenPortal = async () => {
-    if (!canUseStripePortal) {
-      alert("Esta assinatura não está vinculada ao Stripe. Escolha um plano para migrar.");
-      return;
-    }
-
-    setPortalLoading(true);
+  const load = async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/subscription/portal", { method: "POST" });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else alert(data.error || "Não foi possível abrir o portal do Stripe.");
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao abrir o portal do Stripe.");
+      const res = await fetch("/api/billing/my-plan");
+      const json = await res.json();
+      setData(json);
+    } catch {
+      setError("Erro ao carregar dados da assinatura.");
     } finally {
-      setPortalLoading(false);
+      setLoading(false);
     }
   };
 
+  useEffect(() => { load(); }, []);
 
-  const handleApplyCoupon = async () => {
-    setCouponFeedback(null);
-    if (!couponCode.trim()) {
-      setCouponFeedback("Informe um cupom para aplicar.");
-      return;
-    }
-
-    setCouponLoading(true);
+  const doAction = async (action: string) => {
+    setActionLoading(action);
+    setError(null);
     try {
-      const res = await fetch("/api/subscription/coupon/apply", {
+      const res = await fetch("/api/billing/my-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: couponCode }),
+        body: JSON.stringify({ action }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setCouponFeedback(data.error || "Não foi possível aplicar o cupom.");
-      } else {
-        setCouponFeedback(`Cupom aplicado com sucesso: ${data.summary}`);
-        setCouponCode("");
-        const statusRes = await fetch("/api/subscription/status");
-        const statusData = await statusRes.json();
-        setStatus(statusData);
-      }
-    } catch (error) {
-      console.error(error);
-      setCouponFeedback("Erro ao aplicar cupom.");
-    } finally {
-      setCouponLoading(false);
-    }
-  };
-
-  const handleSubscribe = async (planId: string) => {
-    setActionLoading(planId);
-    try {
-      const res = await fetch("/api/subscription/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else if (data.needsGroup) router.push(`/signup?plan=${planId}`);
-      else alert(data.error || "Erro ao processar. Tente novamente.");
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao processar. Tente novamente.");
+      const json = await res.json();
+      if (json.url) { window.location.href = json.url; return; }
+      if (!res.ok) { setError(json.error || "Erro ao executar ação"); return; }
+      await load();
+    } catch {
+      setError("Erro de conexão.");
     } finally {
       setActionLoading(null);
     }
   };
 
-  if (!canManage) {
-    return (
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            Acesso restrito
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Apenas administradores do grupo podem gerenciar o plano.
-          </p>
-          <div className="mt-4">
-            <Button onClick={() => router.push("/dashboard")}>Voltar</Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (loading) return (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+
+  const sub = data?.subscription;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Meu Plano</h1>
-          <p className="text-sm text-muted-foreground">
-            Veja seu plano atual e faça upgrade ou downgrade.
-          </p>
-        </div>
-
-        <Button onClick={handleOpenPortal} disabled={portalLoading || loading || !canUseStripePortal}>
-          {portalLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
-          Gerenciar no Stripe
-          <ExternalLink className="w-4 h-4 ml-2" />
-        </Button>
+    <div className="max-w-3xl mx-auto space-y-6 pb-12">
+      <div>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <CreditCard className="h-6 w-6 text-primary" /> Meu Plano
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">Gerencie sua assinatura e histórico de pagamentos.</p>
       </div>
 
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          Carregando...
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {error}
         </div>
-      ) : status?.error ? (
-        <Card className="border-red-200">
-          <CardContent className="p-4 text-sm">
-            {status.error}
+      )}
+
+      {!data?.hasSubscription ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <CreditCard className="h-12 w-12 text-muted-foreground/20 mx-auto mb-4" />
+            <p className="text-muted-foreground mb-4">Você ainda não tem uma assinatura ativa.</p>
+            <Button onClick={() => router.push("/planos")}>Ver planos disponíveis</Button>
           </CardContent>
         </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Crown className="w-5 h-5 text-purple-600" />
-            Situação da assinatura
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm space-y-2">
-          {status?.hasSubscription ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span>
-                  Plano atual: <strong>{status?.subscription?.planName}</strong>
-                </span>
-                {status?.isActive ? (
-                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Ativa</Badge>
-                ) : (
-                  <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Inativa</Badge>
-                )}
-                {status?.subscription?.cancelAtPeriodEnd ? (
-                  <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Cancelamento agendado</Badge>
-                ) : null}
-              </div>
-
-              <div className="text-muted-foreground">
-                Usuários: {status?.subscription?.userCount} /{" "}
-                {status?.subscription?.userLimit === 0 ? "ilimitado" : status?.subscription?.userLimit}
-              </div>
-
-              {typeof status?.subscription?.originalPrice === "number" ? (
-                <div className="text-muted-foreground">
-                  Valor do plano: <strong>{formatPlanPrice(status.subscription.originalPrice)}</strong>
-                  {status.subscription.effectivePrice !== status.subscription.originalPrice ? (
-                    <>
-                      {" "}→ Valor com benefício: <strong>{formatPlanPrice(status.subscription.effectivePrice)}</strong>
-                    </>
-                  ) : null}
+      ) : sub ? (
+        <>
+          {/* Card principal — plano atual */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg">{sub.planName}</CardTitle>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <StatusBadge status={sub.status} cancelAtPeriodEnd={sub.cancelAtPeriodEnd} />
+                    {sub.status === "TRIALING" && sub.trialEndsAt && (
+                      <span className="text-xs text-muted-foreground">
+                        Trial até {formatDate(sub.trialEndsAt)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ) : null}
-
-              {status?.subscription?.activeCoupon ? (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs space-y-1">
-                  <p className="font-medium text-emerald-200">Cupom ativo: {status.subscription.activeCoupon.code}</p>
-                  <p className="text-emerald-100">{status.subscription.activeCoupon.benefitSummary}</p>
-                  <p className="text-emerald-100">
-                    Início: {new Date(status.subscription.activeCoupon.benefitStartAt).toLocaleDateString("pt-BR")}
-                    {status.subscription.activeCoupon.benefitEndAt
-                      ? ` • Fim: ${new Date(status.subscription.activeCoupon.benefitEndAt).toLocaleDateString("pt-BR")}`
-                      : ""}
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-primary">
+                    {sub.price === 0 ? "Grátis" : formatBRL(sub.price)}
                   </p>
+                  {sub.price > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {sub.period === "MONTHLY" ? "/mês" : sub.period === "ANNUAL" ? "/ano" : "/período"}
+                    </p>
+                  )}
                 </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="text-muted-foreground">
-              Seu grupo ainda não possui uma assinatura.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Métricas */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Users className="h-3 w-3" />Membros</p>
+                  <p className="font-semibold">{sub.userCount} <span className="text-muted-foreground font-normal text-xs">/ {sub.userLimit === 0 ? "∞" : sub.userLimit}</span></p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" />Próxima cobrança</p>
+                  <p className="font-semibold text-sm">{sub.cancelAtPeriodEnd ? "Não renova" : formatDate(sub.currentPeriodEnd)}</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Gateway</p>
+                  <p className="font-semibold text-sm">{sub.gateway}</p>
+                </div>
+              </div>
 
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Ticket className="w-5 h-5 text-purple-600" />
-            Cupom de desconto
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Digite o código do cupom"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-            />
-            <Button onClick={handleApplyCoupon} disabled={couponLoading || !status?.hasSubscription}>
-              {couponLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Aplicar cupom
-            </Button>
-          </div>
-          {couponFeedback ? <p className="text-xs text-muted-foreground">{couponFeedback}</p> : null}
-          {!status?.hasSubscription ? (
-            <p className="text-xs text-muted-foreground">Você precisa de uma assinatura ativa para aplicar cupons.</p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {PLANS.map((plan) => {
-          const isCurrent = !!currentPlanName && plan.name === currentPlanName;
-          const isFreePlan = plan.price === 0;
-          const shouldUsePortal = status?.hasSubscription && canUseStripePortal && !isFreePlan;
-          const isBusy = actionLoading === plan.id || (shouldUsePortal && portalLoading);
-          const buttonLabel = isCurrent
-            ? "Plano atual"
-            : shouldUsePortal
-              ? "Upgrade/Downgrade (Stripe)"
-              : "Assinar este plano";
-
-          return (
-            <Card
-              key={plan.id}
-              className={[
-                "relative transition-all",
-                isCurrent ? "border-purple-500 shadow-md" : "hover:shadow-md",
-              ].join(" ")}
-            >
-              {plan.popular && !isCurrent && (
-                <Badge className="absolute top-3 right-3 bg-purple-600 text-white hover:bg-purple-600">
-                  Popular
-                </Badge>
-              )}
-              {isCurrent && (
-                <Badge className="absolute top-3 right-3 bg-purple-100 text-purple-800 hover:bg-purple-100">
-                  Plano atual
-                </Badge>
+              {/* Features */}
+              {Object.keys(sub.features).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recursos inclusos</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(sub.features).map(([key, value]) => {
+                      const Icon = FEATURE_ICONS[key] ?? CheckCircle2;
+                      const label = key === "professor" ? "Professor IA"
+                        : key === "multitracks" ? `${value} Multitracks/mês`
+                        : key === "splits" ? `${value} Splits/mês`
+                        : key === "audio_upload" ? "Upload de áudio"
+                        : key;
+                      const hasIt = typeof value === "boolean" ? value : Number(value) > 0;
+                      return (
+                        <div key={key} className={cn("flex items-center gap-2 text-sm rounded-lg px-3 py-2",
+                          hasIt ? "bg-primary/5 text-foreground" : "text-muted-foreground/50")}>
+                          <Icon className={cn("h-3.5 w-3.5 flex-shrink-0", hasIt ? "text-primary" : "text-muted-foreground/30")} />
+                          {label}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {isCurrent ? <Crown className="w-5 h-5 text-purple-600" /> : null}
-                  {plan.name}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">{plan.description}</p>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                <div className="text-3xl font-bold">
-                  {formatPlanPrice(plan.price)}
-                  {plan.price > 0 ? (
-                    <span className="text-sm font-normal text-muted-foreground">/mês</span>
-                  ) : null}
+              {/* Cancelamento agendado */}
+              {sub.cancelAtPeriodEnd && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+                  Sua assinatura será cancelada em <strong>{formatDate(sub.currentPeriodEnd)}</strong>.
+                  Você pode reativar antes dessa data.
                 </div>
+              )}
 
-                <div className="space-y-2">
-                  {plan.features.map((f) => (
-                    <div key={f} className="flex items-start gap-2 text-sm">
-                      <Check className="w-4 h-4 mt-0.5 text-green-600" />
-                      <span>{f}</span>
+              {/* Ações */}
+              {isAdmin && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-border/60">
+                  {sub.hasStripeCustomer && (
+                    <Button variant="outline" size="sm" onClick={() => doAction("portal")}
+                      disabled={!!actionLoading}>
+                      {actionLoading === "portal" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                      Gerenciar pagamento
+                    </Button>
+                  )}
+                  {sub.cancelAtPeriodEnd && sub.hasStripeSubscription && (
+                    <Button variant="outline" size="sm" onClick={() => doAction("reactivate")}
+                      disabled={!!actionLoading} className="text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10">
+                      {actionLoading === "reactivate" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Reativar assinatura
+                    </Button>
+                  )}
+                  {!sub.cancelAtPeriodEnd && sub.hasStripeSubscription && sub.status === "ACTIVE" && (
+                    <Button variant="outline" size="sm" onClick={() => doAction("cancel")}
+                      disabled={!!actionLoading} className="text-red-500 border-red-500/40 hover:bg-red-500/10">
+                      {actionLoading === "cancel" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                      Cancelar assinatura
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => router.push("/planos")}>
+                    <ArrowUpRight className="h-3.5 w-3.5" /> Ver planos
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Histórico de pagamentos */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-muted-foreground" /> Histórico de pagamentos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!data?.invoices?.length ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Nenhum pagamento registrado.</p>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {data.invoices.map((inv) => (
+                    <div key={inv.id} className="flex items-center justify-between py-3 gap-4">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{inv.description || `Fatura ${inv.id.slice(-6)}`}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {inv.periodStart && inv.periodEnd
+                            ? `${formatDate(inv.periodStart)} – ${formatDate(inv.periodEnd)}`
+                            : formatDate(inv.paidAt)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <InvoiceStatusBadge status={inv.status} />
+                        <p className="text-sm font-semibold">{formatBRL(inv.amount)}</p>
+                        {inv.invoiceUrl && (
+                          <a href={inv.invoiceUrl} target="_blank" rel="noreferrer"
+                            className="text-muted-foreground hover:text-primary transition-colors">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
-
-                <Button
-                  className="w-full"
-                  variant={status?.hasSubscription && isCurrent ? "secondary" : "default"}
-                  disabled={isCurrent || !!actionLoading || (shouldUsePortal && portalLoading)}
-                  onClick={() => {
-                    if (shouldUsePortal) {
-                      handleOpenPortal();
-                      return;
-                    }
-
-                    handleSubscribe(plan.id);
-                  }}
-                >
-                  {isBusy ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Crown className="w-4 h-4 mr-2" />
-                  )}
-                  {buttonLabel}
-                </Button>
-
-                {isCurrent ? (
-                  <p className="text-xs text-muted-foreground">
-                    Você já possui este plano ativo.
-                  </p>
-                ) : null}
-
-                {status?.hasSubscription && !isCurrent && shouldUsePortal ? (
-                  <p className="text-xs text-muted-foreground">
-                    Você será redirecionado ao portal do Stripe para alterar o plano.
-                  </p>
-                ) : null}
-
-                {status?.hasSubscription && !isCurrent && isFreePlan ? (
-                  <p className="text-xs text-muted-foreground">
-                    Migração para o plano gratuito é feita diretamente, sem pagamento.
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
     </div>
   );
 }

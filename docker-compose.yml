@@ -22,6 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile.app
     container_name: liderweb_app
+    user: root
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -39,6 +40,7 @@ services:
       AUDIO_ANALYSIS_SERVICE_TOKEN: "dev-audio-service-token"
       # Token compartilhado para callback do worker -> app (/api/songs/:id/analysis-result)
       AUDIO_ANALYSIS_CALLBACK_TOKEN: "dev-audio-callback-token"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
     volumes:
       - ./:/app
       - liderweb_node_modules:/app/node_modules

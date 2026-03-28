@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { buildCouponBenefitSummary, computeSubscriptionPriceWithCoupon, getEffectivePlanFromCoupon, redemptionIsActive } from "@/lib/coupons";
+import { getModuleAccess } from "@/lib/subscription-features";
 
 export async function GET() {
   try {
@@ -41,6 +42,13 @@ export async function GET() {
 
     const activeRedemption = subscription.couponRedemptions[0];
     const hasActiveCoupon = activeRedemption ? redemptionIsActive(activeRedemption) : false;
+    const couponDaysRemaining =
+      hasActiveCoupon && activeRedemption?.benefitEndAt
+        ? Math.max(
+            0,
+            Math.ceil((new Date(activeRedemption.benefitEndAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+          )
+        : null;
     const pricing = computeSubscriptionPriceWithCoupon(
       subscription.plan,
       hasActiveCoupon && activeRedemption
@@ -51,16 +59,19 @@ export async function GET() {
             coupon: {
               type: activeRedemption.coupon.type,
               discountPercent: activeRedemption.coupon.discountPercent,
+              isActive: activeRedemption.coupon.isActive,
             },
           }
         : null
     );
 
     const effectivePlan = getEffectivePlanFromCoupon(subscription.plan, activeRedemption ?? null);
+    const moduleAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
 
     return NextResponse.json({
       hasSubscription: true,
       isActive,
+      moduleAccess,
       subscription: {
         status: subscription.status,
         planName: effectivePlan.name,
@@ -81,6 +92,7 @@ export async function GET() {
               benefitSummary: buildCouponBenefitSummary(activeRedemption.coupon),
               benefitStartAt: activeRedemption.benefitStartAt,
               benefitEndAt: activeRedemption.benefitEndAt,
+              daysRemaining: couponDaysRemaining,
             }
           : null,
       },

@@ -137,19 +137,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ url: `${origin}/dashboard?subscription=success` });
     }
 
-    // Para planos pagos, continuar com fluxo Stripe
-    let stripeCustomerId = group.subscription?.stripeCustomerId;
-
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        name: group.name,
-        email: user.email,
-        metadata: {
-          groupId: group.id,
-        },
-      });
-      stripeCustomerId = customer.id;
-    }
+    // Para planos pagos, sempre criar um novo customer para garantir
+    // que vai para o checkout e não para o portal de gerenciamento
+    const customer = await stripe.customers.create({
+      name: group.name,
+      email: user.email,
+      metadata: { groupId: group.id },
+    });
+    const stripeCustomerId = customer.id;
 
     // Criar sessão de checkout
     const origin = req.headers.get("origin") || "http://localhost:3000";

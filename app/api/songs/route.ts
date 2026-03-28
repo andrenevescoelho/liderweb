@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     }
 
     const user = session.user as any;
+    const canViewMultitrack =
+      user.role === "SUPERADMIN" || hasPermission(user.role, "multitrack.view", user.permissions);
     const searchParams = req?.nextUrl?.searchParams;
     const search = searchParams?.get?.("search");
     const tag = searchParams?.get?.("tag");
@@ -87,9 +89,46 @@ export async function GET(req: NextRequest) {
     const songs = await prisma.song.findMany({
       where,
       orderBy: { title: "asc" },
+      include: {
+        multitracks: {
+          where: { isActive: true, status: "READY" },
+          select: {
+            id: true,
+            rentals: user.groupId ? {
+              where: { groupId: user.groupId, status: "ACTIVE" },
+              select: { id: true },
+              take: 1,
+            } : false,
+          },
+          take: 1,
+        },
+        padBoards: {
+          where: { isActive: true },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
 
-    return NextResponse.json(songs ?? []);
+    const songsWithResources = songs.map((song: any) => {
+      const hasMultitrack = canViewMultitrack && song.multitracks.length > 0;
+      const multitrackRented = hasMultitrack && (song.multitracks[0].rentals?.length ?? 0) > 0;
+      return {
+        ...song,
+        resources: {
+          cifra: Boolean(song.chordPro || song.chordUrl),
+          youtube: Boolean(song.youtubeUrl),
+          audio: Boolean(song.audioUrl),
+          multitrack: hasMultitrack,
+          multitrackAlbumId: hasMultitrack ? (song.multitracks[0]?.id ?? null) : null,
+          multitrackRented,
+          pad: song.padBoards.length > 0,
+          padBoardId: song.padBoards[0]?.id ?? null,
+        },
+      };
+    });
+
+    return NextResponse.json(songsWithResources ?? []);
   } catch (error) {
     console.error("Get songs error:", error);
     return NextResponse.json({ error: "Erro ao buscar músicas" }, { status: 500 });

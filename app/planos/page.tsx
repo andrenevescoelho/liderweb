@@ -1,268 +1,302 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Music, Users, Calendar, Headphones, Star } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Check, X, Loader2, Headphones, Brain, Scissors, Zap, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
-const PLANS = [
-  {
-    id: "free",
-    name: "Gratuito",
-    description: "Para conhecer a plataforma",
-    price: 0,
-    userLimit: 10,
-    isFree: true,
-    features: [
-      "Até 10 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Suporte por email",
-    ],
-  },
-  {
-    id: "basico",
-    name: "Básico",
-    description: "Ideal para ministérios pequenos",
-    price: 29.90,
-    userLimit: 15,
-    features: [
-      "Até 15 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte por email",
-    ],
-  },
-  {
-    id: "intermediario",
-    name: "Intermediário",
-    description: "Para ministérios em crescimento",
-    price: 49.90,
-    userLimit: 30,
-    popular: true,
-    features: [
-      "Até 30 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte prioritário",
-    ],
-  },
-  {
-    id: "avancado",
-    name: "Avançado",
-    description: "Para grandes ministérios",
-    price: 99.90,
-    userLimit: 100,
-    features: [
-      "Até 100 usuários",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte VIP",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    description: "Para igrejas com múltiplos ministérios",
-    price: 149.90,
-    userLimit: 0,
-    features: [
-      "Usuários ilimitados",
-      "Músicas ilimitadas",
-      "Repertórios ilimitados",
-      "Escalas ilimitadas",
-      "Upload de áudio",
-      "Suporte dedicado",
-      "Onboarding personalizado",
-    ],
-  },
+interface BillingPlan {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  tagline: string | null;
+  price: number;
+  period: string;
+  trialDays: number;
+  isPopular: boolean;
+  badge: string | null;
+  sortOrder: number;
+  userLimit: number;
+  features: Record<string, any>;
+  gatewayMappings: { gateway: string; externalId: string }[];
+}
+
+const FEATURE_LABELS: Record<string, { label: string; icon: any }> = {
+  professor:   { label: "Professor IA", icon: Brain },
+  multitracks: { label: "Multitracks/mês", icon: Headphones },
+  splits:      { label: "Splits/mês", icon: Scissors },
+  audio_upload:{ label: "Upload de áudio", icon: Zap },
+};
+
+const EXTRAS = [
+  { icon: Headphones, title: "Multitrack Adicional", description: "Aluguel extra além da cota mensal.", price: "R$ 9,90", unit: "por track", color: "#14B8A6" },
+  { icon: Scissors, title: "Split Adicional", description: "Solicite um split extra.", price: "R$ 19,90", unit: "por split", color: "#8B5CF6" },
+  { icon: Zap, title: "Split do Acervo", description: "Acesse um split já processado.", price: "R$ 4,90", unit: "por acesso", color: "#F59E0B" },
 ];
 
 export default function PlanosPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState<string | null>(null);
+  const { data: session } = useSession();
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [checkingAccount, setCheckingAccount] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSelectPlan = async (planId: string) => {
-    setLoading(planId);
+  const handleAccountClick = async () => {
+    if (!session) { router.push("/login"); return; }
+    setCheckingAccount(true);
     try {
-      const res = await fetch("/api/subscription/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
-      });
-
+      const res = await fetch("/api/subscription/status");
       const data = await res.json();
-
-      if (data.url) {
-        window.location.href = data.url;
-      } else if (data.needsGroup) {
-        // Redirecionar para criar grupo primeiro
-        router.push(`/signup?plan=${planId}`);
-      } else {
-        alert(data.error || "Erro ao processar. Tente novamente.");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao processar. Tente novamente.");
+      const isActive = data.hasSubscription && data.isActive;
+      router.push(isActive ? "/dashboard" : "/reativar-assinatura");
+    } catch {
+      router.push("/dashboard");
     } finally {
-      setLoading(null);
+      setCheckingAccount(false);
     }
   };
 
+  useEffect(() => {
+    fetch("/api/billing/plans")
+      .then((r) => r.json())
+      .then((data) => setPlans(data.plans ?? []))
+      .catch(() => setErrorMsg("Erro ao carregar planos"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSelect = async (plan: BillingPlan) => {
+    setSubmitting(plan.slug);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planSlug: plan.slug }),
+      });
+      const data = await res.json();
+
+      if (data.needsAccount) {
+        router.push(`/signup?plan=${plan.slug}`);
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      if (res.status === 403) {
+        setErrorMsg("Apenas administradores do grupo podem gerenciar assinaturas.");
+        return;
+      }
+      setErrorMsg(data.error || "Não foi possível iniciar o checkout. Tente novamente.");
+    } catch {
+      setErrorMsg("Erro de conexão. Verifique sua internet e tente novamente.");
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    if (price === 0) return null;
+    const [int, dec] = price.toFixed(2).split(".");
+    return { int, dec };
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900">
+    <div className="min-h-screen bg-[#0a0f1e] text-slate-200">
       {/* Header */}
-      <header className="container mx-auto px-4 py-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Music className="w-8 h-8 text-white" />
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-white">Líder Web</span>
-              <span className="text-xs text-purple-300">By Multitrack Gospel</span>
-            </div>
-          </div>
-          <Button
-            variant="secondary"
-            onClick={() => router.push("/login")}
-          >
-            Entrar
-          </Button>
+      <div className="border-b border-white/5 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <img src="/favicon.svg" alt="Líder Web" className="h-8 w-8" />
+          <span className="font-bold text-white">Líder Web</span>
+          <span className="text-xs text-slate-500">by multitrackgospel.com</span>
         </div>
-      </header>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAccountClick}
+          disabled={checkingAccount}
+        >
+          {checkingAccount
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : session ? "Minha Conta" : "Entrar"}
+        </Button>
+      </div>
 
-      {/* Hero */}
-      <section className="container mx-auto px-4 py-12 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-          Gerencie seu Ministério de Louvor
-        </h1>
-        <p className="text-xl text-purple-200 mb-8 max-w-2xl mx-auto">
-          Escalas, repertórios, cifras e muito mais. Tudo em um só lugar para sua equipe de louvor.
-        </p>
-
-        {/* Features */}
-        <div className="flex flex-wrap justify-center gap-6 mb-12">
-          <div className="flex items-center gap-2 text-white">
-            <Users className="w-5 h-5 text-purple-300" />
-            <span>Gestão de Equipe</span>
-          </div>
-          <div className="flex items-center gap-2 text-white">
-            <Music className="w-5 h-5 text-purple-300" />
-            <span>Cifras com Transposição</span>
-          </div>
-          <div className="flex items-center gap-2 text-white">
-            <Calendar className="w-5 h-5 text-purple-300" />
-            <span>Escalas Automatizadas</span>
-          </div>
-          <div className="flex items-center gap-2 text-white">
-            <Headphones className="w-5 h-5 text-purple-300" />
-            <span>Upload de Áudio</span>
+      <div className="max-w-6xl mx-auto px-4 py-16">
+        {/* Hero */}
+        <div className="text-center mb-14">
+          <h1 className="text-4xl font-bold text-white mb-4">Escolha seu Plano</h1>
+          <p className="text-slate-400 text-lg max-w-xl mx-auto">
+            Ferramentas completas para gestão e desenvolvimento musical do seu ministério de louvor.
+          </p>
+          <div className="inline-flex items-center gap-2 mt-5 rounded-full border border-teal-500/30 bg-teal-500/10 px-4 py-1.5 text-sm text-teal-400">
+            ✦ 7 dias de teste grátis em todos os planos pagos
           </div>
         </div>
-      </section>
 
-      {/* Pricing */}
-      <section className="container mx-auto px-4 pb-20">
-        <h2 className="text-3xl font-bold text-white text-center mb-4">
-          Escolha seu Plano
-        </h2>
-        <p className="text-purple-200 text-center mb-10">
-          7 dias de teste grátis em todos os planos. Cancele quando quiser.
-        </p>
+        {/* Erro */}
+        {errorMsg && (
+          <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-center text-sm text-red-400">
+            {errorMsg}
+          </div>
+        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-          {PLANS.map((plan) => (
-            <Card
-              key={plan.id}
-              className={`relative overflow-hidden transition-transform hover:scale-105 ${
-                plan.popular
-                  ? "border-2 border-yellow-400 shadow-xl shadow-yellow-400/20"
-                  : "border-purple-700"
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute top-0 right-0">
-                  <Badge className="rounded-none rounded-bl-lg bg-yellow-400 text-yellow-900 font-semibold">
-                    <Star className="w-3 h-3 mr-1" /> Mais Popular
-                  </Badge>
-                </div>
-              )}
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
-                  {plan.name}
-                </CardTitle>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {plan.description}
-                </p>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="mb-6">
-                  {(plan as any).isFree ? (
-                    <span className="text-4xl font-bold text-green-600">
-                      Grátis
-                    </span>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-bold text-purple-600">
-                        R${plan.price.toFixed(2).replace(".", ",")}
-                      </span>
-                      <span className="text-gray-500">/mês</span>
-                    </>
+        {/* Plans */}
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-teal-400" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-16">
+            {plans.map((plan) => {
+              const isFree = plan.price === 0;
+              const price = formatPrice(plan.price);
+              const isViolet = plan.slug === "avancado" || plan.slug === "enterprise";
+              const hasStripe = plan.gatewayMappings.some((m) => m.gateway === "STRIPE");
+
+              return (
+                <div
+                  key={plan.id}
+                  className={cn(
+                    "relative rounded-2xl border p-5 flex flex-col",
+                    plan.isPopular
+                      ? "border-teal-500 bg-teal-500/5"
+                      : isViolet
+                      ? "border-violet-500/40 bg-violet-500/5"
+                      : "border-white/8 bg-white/3"
                   )}
-                </div>
-
-                <ul className="space-y-3 mb-6 text-left">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm">
-                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      <span className="text-gray-700 dark:text-gray-300">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  className={`w-full ${
-                    plan.popular
-                      ? "bg-yellow-400 hover:bg-yellow-500 text-yellow-900"
-                      : (plan as any).isFree
-                      ? "bg-green-600 hover:bg-green-700 text-white"
-                      : ""
-                  }`}
-                  onClick={() => handleSelectPlan(plan.id)}
-                  disabled={loading !== null}
                 >
-                  {loading === plan.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (plan as any).isFree ? (
-                    "Começar Grátis"
-                  ) : (
-                    "Começar Teste Grátis"
+                  {plan.badge && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-teal-500 px-3 py-0.5 text-[10px] font-bold text-teal-950 whitespace-nowrap">
+                      ⭐ {plan.badge}
+                    </div>
                   )}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+
+                  <div className="mb-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">{plan.name}</p>
+                    <p className="text-[11px] text-slate-500 min-h-[32px] leading-tight">{plan.tagline}</p>
+                  </div>
+
+                  <div className="mb-5">
+                    {isFree ? (
+                      <span className="text-3xl font-bold text-teal-400">Grátis</span>
+                    ) : price ? (
+                      <>
+                        <span className="text-3xl font-bold text-white">
+                          R$ {price.int}<span className="text-lg">,{price.dec}</span>
+                        </span>
+                        <span className="text-xs text-slate-500 block mt-0.5">/mês</span>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <Button
+                    size="sm"
+                    className={cn(
+                      "w-full mb-5 text-xs",
+                      plan.isPopular ? "bg-teal-500 hover:bg-teal-600 text-teal-950" :
+                      isViolet ? "bg-violet-600 hover:bg-violet-700 text-white" :
+                      "bg-white/10 hover:bg-white/15 text-white"
+                    )}
+                    onClick={() => handleSelect(plan)}
+                    disabled={submitting === plan.slug || (!isFree && !hasStripe)}
+                  >
+                    {submitting === plan.slug
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : isFree ? "Começar Grátis" : "Começar Teste Grátis"}
+                  </Button>
+
+                  <div className="h-px bg-white/8 mb-4" />
+
+                  {/* Features */}
+                  <div className="space-y-2.5 flex-1">
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mb-2">Gestão</p>
+                    <FeatureRow ok label={plan.userLimit === 0 ? "Membros ilimitados" : `Até ${plan.userLimit} membros`} highlight />
+                    <FeatureRow ok label="Músicas e cifras" />
+                    <FeatureRow ok label="Escalas ilimitadas" />
+                    <FeatureRow ok label="Ensaios" />
+                    <FeatureRow ok label="Chat do grupo" />
+
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 mt-3 mb-2">Módulos Premium</p>
+                    <FeatureRow
+                      ok={Boolean(plan.features.professor)}
+                      label="Professor IA"
+                      tag={plan.features.professor ? "IA" : undefined}
+                    />
+                    <FeatureRow
+                      ok={Number(plan.features.multitracks) > 0}
+                      label={Number(plan.features.multitracks) > 0
+                        ? `${plan.features.multitracks} Multitracks/mês`
+                        : "Multitracks"}
+                      tag={Number(plan.features.multitracks) > 0 ? "NOVO" : undefined}
+                    />
+                    <FeatureRow
+                      ok={Number(plan.features.splits) > 0}
+                      label={Number(plan.features.splits) > 0
+                        ? `${plan.features.splits} Splits/mês`
+                        : "Split de músicas"}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Extras */}
+        <div className="rounded-2xl border border-white/8 bg-white/2 p-8 mb-12">
+          <h2 className="text-lg font-bold text-white mb-2">Recursos Adicionais</h2>
+          <p className="text-sm text-slate-500 mb-6">Precisou de mais? Contrate avulso sem precisar mudar de plano.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {EXTRAS.map((extra, i) => (
+              <div key={i} className="rounded-xl border border-white/8 bg-[#0a0f1e] p-5">
+                <div className="flex items-center gap-2 mb-3" style={{ color: extra.color }}>
+                  <extra.icon className="h-5 w-5" />
+                  <h3 className="text-sm font-semibold text-white">{extra.title}</h3>
+                </div>
+                <p className="text-xs text-slate-500 mb-4 leading-relaxed">{extra.description}</p>
+                <div className="text-xl font-bold" style={{ color: extra.color }}>
+                  {extra.price} <span className="text-xs text-slate-500 font-normal">{extra.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <p className="text-center text-purple-300 mt-8 text-sm">
-          Todos os planos incluem 7 dias de teste grátis. Você só será cobrado após o período de teste.
+        <p className="text-center text-xs text-slate-600 mt-10">
+          © {new Date().getFullYear()} Líder Web by Multitrack Gospel. Todos os direitos reservados.
         </p>
-      </section>
+      </div>
+    </div>
+  );
+}
 
-      {/* Footer */}
-      <footer className="border-t border-purple-700 py-8">
-        <div className="container mx-auto px-4 text-center text-purple-300">
-          <p>© 2025 Líder Web by Multitrack Gospel. Todos os direitos reservados.</p>
-        </div>
-      </footer>
+function FeatureRow({ ok, label, highlight, tag }: {
+  ok: boolean; label: string; highlight?: boolean; tag?: string
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {ok
+        ? <Check className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
+        : <X className="h-3.5 w-3.5 text-slate-700 flex-shrink-0" />
+      }
+      <span className={cn(
+        "text-[11px] leading-tight",
+        ok ? highlight ? "text-white font-medium" : "text-slate-300" : "text-slate-600"
+      )}>
+        {label}
+      </span>
+      {tag && (
+        <span className={cn(
+          "text-[9px] font-bold px-1 py-0.5 rounded",
+          tag === "IA" ? "bg-violet-500/20 text-violet-400" : "bg-teal-500/20 text-teal-400"
+        )}>{tag}</span>
+      )}
     </div>
   );
 }

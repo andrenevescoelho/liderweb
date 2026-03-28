@@ -18,7 +18,10 @@ export async function GET() {
       select: { enabled: true, level: true },
     });
 
-    return NextResponse.json({ enabled: profile?.enabled ?? false, level: profile?.level ?? 1 });
+    return NextResponse.json({
+      enabled: profile?.enabled ?? false,
+      level: profile?.level ?? 1,
+    });
   } catch (err) {
     console.error("[music-coach/status] error:", err);
     return NextResponse.json({ enabled: false });

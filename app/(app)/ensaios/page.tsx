@@ -137,8 +137,15 @@ export default function EnsaiosPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Ensaios</h1>
-          <p className="text-muted-foreground">Planejamento, repertório e confirmações em um só lugar.</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
+              <Music2 className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Ensaios</h1>
+              <p className="text-sm text-muted-foreground">Planejamento, repertório e confirmações em um só lugar</p>
+            </div>
+          </div>
         </div>
         <div className="flex gap-2">
           <Link href="/ensaios/calendario">

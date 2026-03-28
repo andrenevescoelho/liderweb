@@ -3,24 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
-import { getFileUrl } from "@/lib/s3";
 import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { getFileUrl } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
-
-// Helper to detect audio format from content type or extension
-function getAudioFormat(contentType: string, path: string): string {
-  if (contentType.includes("mp3") || contentType.includes("mpeg")) return "mp3";
-  if (contentType.includes("wav")) return "wav";
-  if (contentType.includes("ogg")) return "ogg";
-  if (contentType.includes("webm")) return "webm";
-  if (contentType.includes("m4a") || contentType.includes("mp4")) return "m4a";
-  if (contentType.includes("flac")) return "flac";
-  // Fallback to extension
-  const ext = path.split(".").pop()?.toLowerCase();
-  if (ext && ["mp3", "wav", "ogg", "webm", "m4a", "flac"].includes(ext)) return ext;
-  return "wav"; // default to wav which is widely supported
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { cloud_storage_path, type, instrument, notes } = body;
+    const { cloud_storage_path, type, instrument, notes, audioBase64 } = body;
 
     if (!cloud_storage_path || !type) {
       return NextResponse.json({ error: "cloud_storage_path e type são obrigatórios" }, { status: 400 });
@@ -67,7 +53,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Now analyze with AI
-    const apiKey = process.env.ABACUSAI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ submission, feedback: null, error: "API key não configurada" });
     }
@@ -83,24 +69,6 @@ export async function POST(req: NextRequest) {
     });
     const roles = memberFunctions.map((mf) => mf.roleFunction.name);
 
-    // Get signed URL for audio and download it
-    const audioUrl = await getFileUrl(cloud_storage_path, false);
-    let audioBase64: string | null = null;
-    let audioFormat = "wav";
-    
-    try {
-      const audioResponse = await fetch(audioUrl);
-      if (audioResponse.ok) {
-        const contentType = audioResponse.headers.get("content-type") || "";
-        audioFormat = getAudioFormat(contentType, cloud_storage_path);
-        const audioBuffer = await audioResponse.arrayBuffer();
-        audioBase64 = Buffer.from(audioBuffer).toString("base64");
-        console.log(`[music-coach/submit] Audio downloaded: ${audioBuffer.byteLength} bytes, format: ${audioFormat}`);
-      }
-    } catch (downloadErr) {
-      console.error("[music-coach/submit] Audio download error:", downloadErr);
-    }
-
     const profileCtx = [
       `Nível: ${coachProfile.level}`,
       roles.length > 0 ? `Funções: ${roles.join(", ")}` : null,
@@ -110,7 +78,7 @@ export async function POST(req: NextRequest) {
       notes ? `Observações do aluno: ${notes}` : null,
     ].filter(Boolean).join(". ");
 
-    const systemPrompt = `Você é um professor de música cristã especializado em ministério de louvor. ${audioBase64 ? "Analise o áudio de prática enviado pelo aluno e forneça feedback detalhado baseado no que você ouviu." : "Forneça feedback pedagógico baseado no contexto do aluno."}
+    const systemPrompt = `Você é um professor de música cristã especializado em ministério de louvor. Forneça feedback pedagógico detalhado baseado no contexto e perfil do aluno.
 
 Perfil do aluno: ${profileCtx}
 
@@ -127,47 +95,47 @@ Responda em português brasileiro no seguinte formato JSON (sem markdown, apenas
 Seja específico, prático e encorajador nas suas observações.`;
 
     try {
-      // Build message content
-      type MessageContent = { type: string; text?: string; input_audio?: { data: string; format: string } };
-      const userContent: MessageContent[] = [
-        { 
-          type: "text", 
-          text: `Analise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}` 
-        },
-      ];
-      
-      // Add audio if available
-      if (audioBase64) {
-        userContent.push({
-          type: "input_audio",
-          input_audio: {
-            data: audioBase64,
-            format: audioFormat,
-          },
-        });
+      // Download audio from S3
+      const audioUrl = await getFileUrl(cloud_storage_path, false);
+      const audioResponse = await fetch(audioUrl);
+      const contentType = audioResponse.headers.get("content-type") || "";
+      const audioFormat = contentType.split("/")[1]?.split(";")[0] || "unknown";
+      const SUPPORTED_FORMATS = ["mp3", "mp4", "wav", "flac", "ogg", "webm", "mpeg"];
+      const isAudioFormatSupported = SUPPORTED_FORMATS.includes(audioFormat);
+
+      let s3AudioBase64: string | null = null;
+      if (isAudioFormatSupported) {
+        const audioBuffer = await audioResponse.arrayBuffer();
+        s3AudioBase64 = Buffer.from(audioBuffer).toString("base64");
       }
 
-      const llmResponse = await fetch("https://apps.abacus.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-2024-11-20",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userContent },
-          ],
-          max_tokens: 1000,
-        }),
-      });
+      const resolvedAudioBase64 = s3AudioBase64 || audioBase64 || null;
+
+      const promptText = `${systemPrompt}\n\nAnalise minha prática de ${type}${instrument ? ` (${instrument})` : ""} e me dê feedback detalhado.${notes ? ` Minhas observações: ${notes}` : ""}`;
+
+      const parts: object[] = [];
+
+      if (resolvedAudioBase64 && isAudioFormatSupported) {
+        const mediaType = contentType.split(";")[0].trim() || `audio/${audioFormat}`;
+        parts.push({ inline_data: { mime_type: mediaType, data: resolvedAudioBase64 } });
+      }
+
+      parts.push({ text: promptText });
+
+      const llmResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts }] }),
+        }
+      );
 
       let feedbackData: { score?: number; feedback?: string; suggestions?: string; metricsJson?: Record<string, unknown> } = {};
 
       if (llmResponse.ok) {
         const llmData = await llmResponse.json();
-        const rawContent = llmData.choices?.[0]?.message?.content || "";
+        const rawContent = llmData.candidates?.[0]?.content?.parts?.[0]?.text || "";
         
         // Try to parse JSON from response
         try {

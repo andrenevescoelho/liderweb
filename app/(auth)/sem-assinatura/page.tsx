@@ -1,37 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { signOut } from "next-auth/react";
-import { AlertTriangle, CreditCard, Loader2, LogOut, Mail } from "lucide-react";
+import { AlertTriangle, LogOut, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export default function SemAssinaturaPage() {
-  const [portalLoading, setPortalLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleManageSubscription = async () => {
-    setPortalLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch("/api/subscription/portal", {
-        method: "POST",
-      });
-      const data = await res.json();
-
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setError(data.error || "Não foi possível acessar o portal de pagamento");
-      }
-    } catch (_err) {
-      setError("Não foi possível acessar o portal de pagamento");
-    } finally {
-      setPortalLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' });
   };
@@ -49,9 +23,9 @@ export default function SemAssinaturaPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Assinatura do Grupo Inativa</h1>
           
           <p className="text-gray-600 dark:text-gray-400 mt-4">
-            O seu grupo não possui uma assinatura ativa no momento. 
-            Por favor, entre em contato com o líder ou administrador do seu grupo 
-            para resolver esta situação.
+            A assinatura do seu grupo está inativa no momento e, por isso, o acesso à área logada foi pausado.
+            <br />
+            Fale com o administrador do grupo para reativar o plano.
           </p>
           
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
@@ -60,30 +34,13 @@ export default function SemAssinaturaPage() {
               <span className="font-semibold">O que fazer?</span>
             </div>
             <ul className="text-left text-sm text-blue-600 dark:text-blue-300 space-y-2">
-              <li>• Entre em contato com o líder do seu ministério</li>
-              <li>• Informe que a assinatura do grupo está inativa</li>
-              <li>• Aguarde o líder reativar a assinatura</li>
+              <li>• Avise o administrador/líder do grupo sobre a assinatura inativa</li>
+              <li>• Peça a reativação ou contratação de um novo plano</li>
+              <li>• Assim que o plano for ativado, seu acesso será liberado automaticamente</li>
             </ul>
           </div>
           
-          {error && (
-            <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg">
-              {error}
-            </div>
-          )}
-
           <div className="mt-6 space-y-3">
-            <Button onClick={handleManageSubscription} className="w-full" disabled={portalLoading}>
-              {portalLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <CreditCard className="w-5 h-5 mr-2" />
-                  Tentar Reativar Assinatura
-                </>
-              )}
-            </Button>
-
             <Button variant="outline" onClick={handleLogout} className="w-full">
               <LogOut className="w-5 h-5 mr-2" />
               Sair da Conta

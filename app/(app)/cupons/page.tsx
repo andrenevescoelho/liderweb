@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { CheckCircle, Loader2, PlusCircle, Search, Ticket, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, PlusCircle, Search, Ticket, Trash2, XCircle, AlertCircle } from "lucide-react";
 
 const PLAN_OPTIONS = [
   { value: "BASIC", label: "Básico" },
@@ -45,6 +45,42 @@ const EMPTY_FORM = {
   allowedPlanTiers: [] as string[],
 };
 
+function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-muted-foreground">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+      {error && <p className="text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{error}</p>}
+    </div>
+  );
+}
+
+function validateForm(form: typeof EMPTY_FORM): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.code.trim()) errors.code = "Código é obrigatório";
+  else if (!/^[A-Z0-9_-]+$/i.test(form.code.trim())) errors.code = "Use apenas letras, números, _ e -";
+  if (!form.name.trim()) errors.name = "Nome é obrigatório";
+  if (form.type === "PERCENTAGE_DISCOUNT") {
+    const pct = Number(form.discountPercent);
+    if (!form.discountPercent) errors.discountPercent = "Percentual é obrigatório";
+    else if (isNaN(pct) || pct < 1 || pct > 100) errors.discountPercent = "Percentual deve ser entre 1 e 100";
+  }
+  if (form.type === "FREE_PLAN") {
+    const days = Number(form.freePlanDurationDays);
+    if (!form.freePlanDurationDays) errors.freePlanDurationDays = "Duração é obrigatória";
+    else if (isNaN(days) || days < 1) errors.freePlanDurationDays = "Duração deve ser pelo menos 1 dia";
+  }
+  if (form.validFrom && form.validUntil && form.validFrom > form.validUntil) {
+    errors.validUntil = "Data final deve ser após a data inicial";
+  }
+  if (form.maxUses && (isNaN(Number(form.maxUses)) || Number(form.maxUses) < 1)) {
+    errors.maxUses = "Limite de usos deve ser um número positivo";
+  }
+  return errors;
+}
+
 export default function CuponsPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
@@ -57,8 +93,13 @@ export default function CuponsPage() {
   const [coupons, setCoupons] = useState<any[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expandedCouponId, setExpandedCouponId] = useState<string | null>(null);
+  const [couponRedemptions, setCouponRedemptions] = useState<Record<string, any[]>>({});
+  const [loadingRedemptionsId, setLoadingRedemptionsId] = useState<string | null>(null);
+  const [removingRedemptionId, setRemovingRedemptionId] = useState<string | null>(null);
 
   const isSuperadmin = userRole === "SUPERADMIN";
 
@@ -77,7 +118,7 @@ export default function CuponsPage() {
       if (!res.ok) throw new Error(data.error || "Erro ao buscar cupons");
       setCoupons(data.coupons || []);
     } catch (error: any) {
-      setFeedback(error.message);
+      setFeedback({ type: "error", message: error.message });
     } finally {
       setLoading(false);
     }
@@ -85,21 +126,22 @@ export default function CuponsPage() {
 
   useEffect(() => {
     if (status === "loading") return;
-    if (!session || !isSuperadmin) {
-      router.replace("/dashboard");
-      return;
-    }
+    if (!session || !isSuperadmin) { router.replace("/dashboard"); return; }
     loadCoupons();
   }, [session, status, isSuperadmin, query]);
 
-  const resetForm = () => {
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-  };
+  const resetForm = () => { setForm(EMPTY_FORM); setEditingId(null); setFieldErrors({}); setFeedback(null); };
 
   const submitForm = async () => {
-    setSaving(true);
     setFeedback(null);
+    const errors = validateForm(form);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFeedback({ type: "error", message: "Corrija os campos destacados antes de salvar." });
+      return;
+    }
+    setFieldErrors({});
+    setSaving(true);
 
     const payload = {
       ...form,
@@ -118,18 +160,28 @@ export default function CuponsPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao salvar cupom");
-      setFeedback(editingId ? "Cupom atualizado com sucesso" : "Cupom criado com sucesso");
+      if (!res.ok) {
+        // Mapear erros da API para campos específicos
+        const msg: string = data.error || "Erro ao salvar cupom";
+        if (msg.includes("código") || msg.includes("código")) setFieldErrors({ code: msg });
+        else if (msg.includes("Percentual")) setFieldErrors({ discountPercent: msg });
+        else if (msg.includes("Plano gratuito")) setFieldErrors({ freePlanDurationDays: msg });
+        else if (msg.includes("Data")) setFieldErrors({ validUntil: msg });
+        throw new Error(msg);
+      }
+      setFeedback({ type: "success", message: editingId ? "✓ Cupom atualizado com sucesso!" : "✓ Cupom criado com sucesso!" });
       resetForm();
       await loadCoupons();
     } catch (error: any) {
-      setFeedback(error.message);
+      setFeedback((prev) => prev?.type === "success" ? prev : { type: "error", message: error.message });
     } finally {
       setSaving(false);
     }
   };
 
   const handleEdit = (coupon: any) => {
+    setFeedback(null);
+    setFieldErrors({});
     setEditingId(coupon.id);
     setForm({
       code: coupon.code,
@@ -149,41 +201,73 @@ export default function CuponsPage() {
 
   const toggleCoupon = async (id: string, isActive: boolean) => {
     const res = await fetch(`/api/coupons/${id}/toggle`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !isActive }),
     });
     const data = await res.json();
-    if (!res.ok) {
-      setFeedback(data.error || "Erro ao atualizar status");
-      return;
-    }
+    if (!res.ok) { setFeedback({ type: "error", message: data.error || "Erro ao atualizar status" }); return; }
     await loadCoupons();
   };
 
   const deleteCoupon = async (coupon: any) => {
-    const confirmed = window.confirm(`Tem certeza que deseja excluir o cupom ${coupon.code}?`);
-    if (!confirmed) return;
-
+    if (!window.confirm(`Tem certeza que deseja excluir o cupom ${coupon.code}?`)) return;
     setDeletingId(coupon.id);
     setFeedback(null);
-
     try {
       const res = await fetch(`/api/coupons/${coupon.id}`, { method: "DELETE" });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Erro ao excluir cupom");
-
-      if (editingId === coupon.id) {
-        resetForm();
-      }
-
-      setFeedback("Cupom excluído com sucesso");
+      if (editingId === coupon.id) resetForm();
+      setFeedback({ type: "success", message: `✓ Cupom ${coupon.code} excluído com sucesso.` });
       await loadCoupons();
     } catch (error: any) {
-      setFeedback(error.message);
+      setFeedback({ type: "error", message: error.message });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const loadCouponRedemptions = async (couponId: string) => {
+    setLoadingRedemptionsId(couponId);
+    try {
+      const res = await fetch(`/api/coupons/${couponId}/redemptions`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao buscar ministérios com cupom");
+      setCouponRedemptions((prev) => ({ ...prev, [couponId]: data.redemptions || [] }));
+    } catch (error: any) {
+      setFeedback({ type: "error", message: error.message });
+    } finally {
+      setLoadingRedemptionsId(null);
+    }
+  };
+
+  const toggleRedemptions = async (couponId: string) => {
+    if (expandedCouponId === couponId) {
+      setExpandedCouponId(null);
+      return;
+    }
+    setExpandedCouponId(couponId);
+    if (!couponRedemptions[couponId]) {
+      await loadCouponRedemptions(couponId);
+    }
+  };
+
+  const removeCouponFromMinistry = async (couponId: string, redemption: any) => {
+    if (!window.confirm(`Deseja retirar o cupom deste ministério (${redemption.ministry?.name || "sem nome"})?`)) return;
+
+    setRemovingRedemptionId(redemption.id);
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/coupons/${couponId}/redemptions/${redemption.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao remover cupom do ministério");
+      setFeedback({ type: "success", message: "✓ Cupom retirado do ministério com sucesso." });
+      await loadCouponRedemptions(couponId);
+      await loadCoupons();
+    } catch (error: any) {
+      setFeedback({ type: "error", message: error.message });
+    } finally {
+      setRemovingRedemptionId(null);
     }
   };
 
@@ -196,54 +280,102 @@ export default function CuponsPage() {
         <p className="text-sm text-muted-foreground">Criação e gestão de cupons (somente SUPERADMIN).</p>
       </div>
 
-      {feedback ? <Card><CardContent className="p-4 text-sm">{feedback}</CardContent></Card> : null}
+      {feedback && (
+        <Card className={feedback.type === "error" ? "border-red-500/40 bg-red-500/5" : "border-emerald-500/40 bg-emerald-500/5"}>
+          <CardContent className={`p-4 text-sm flex items-center gap-2 ${feedback.type === "error" ? "text-red-400" : "text-emerald-400"}`}>
+            {feedback.type === "error" ? <AlertCircle className="w-4 h-4 flex-shrink-0" /> : <CheckCircle className="w-4 h-4 flex-shrink-0" />}
+            {feedback.message}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><PlusCircle className="w-5 h-5" />{editingId ? "Editar cupom" : "Novo cupom"}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <PlusCircle className="w-5 h-5" />
+            {editingId ? "Editar cupom" : "Novo cupom"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <Input placeholder="Código (ex: PROMO20)" value={form.code} disabled={!!editingId} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-          <Input placeholder="Nome" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-          <Input placeholder="Descrição" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="md:col-span-2" />
+          <Field label="Código do cupom" required error={fieldErrors.code}>
+            <Input placeholder="Ex: PROMO20, NATAL25" value={form.code} disabled={!!editingId}
+              onChange={(e) => { setForm((p) => ({ ...p, code: e.target.value.toUpperCase() })); setFieldErrors((p) => ({ ...p, code: "" })); }}
+              className={fieldErrors.code ? "border-red-500/50" : ""} />
+          </Field>
 
-          <Select options={TYPE_OPTIONS} value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))} />
-          <Select
-            options={[{ value: "true", label: "Ativo" }, { value: "false", label: "Inativo" }]}
-            value={String(form.isActive)}
-            onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.value === "true" }))}
-          />
+          <Field label="Nome do cupom" required error={fieldErrors.name}>
+            <Input placeholder="Ex: Promoção de Natal" value={form.name}
+              onChange={(e) => { setForm((p) => ({ ...p, name: e.target.value })); setFieldErrors((p) => ({ ...p, name: "" })); }}
+              className={fieldErrors.name ? "border-red-500/50" : ""} />
+          </Field>
+
+          <Field label="Descrição (opcional)" error={fieldErrors.description}>
+            <Input placeholder="Descrição interna do cupom" value={form.description}
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              className="md:col-span-2" />
+          </Field>
+
+          <Field label="Tipo de benefício" required>
+            <Select options={TYPE_OPTIONS} value={form.type}
+              onChange={(e) => { setForm((p) => ({ ...p, type: e.target.value })); setFieldErrors({}); }} />
+          </Field>
+
+          <Field label="Status">
+            <Select options={[{ value: "true", label: "Ativo" }, { value: "false", label: "Inativo" }]}
+              value={String(form.isActive)}
+              onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.value === "true" }))} />
+          </Field>
 
           {form.type === "PERCENTAGE_DISCOUNT" ? (
-            <Input type="number" placeholder="Percentual de desconto" value={form.discountPercent} onChange={(e) => setForm((p) => ({ ...p, discountPercent: e.target.value }))} />
+            <Field label="Percentual de desconto (%)" required error={fieldErrors.discountPercent}>
+              <Input type="number" min={1} max={100} placeholder="Ex: 20 (para 20%)" value={form.discountPercent}
+                onChange={(e) => { setForm((p) => ({ ...p, discountPercent: e.target.value })); setFieldErrors((p) => ({ ...p, discountPercent: "" })); }}
+                className={fieldErrors.discountPercent ? "border-red-500/50" : ""} />
+            </Field>
           ) : (
             <>
-              <Select options={PLAN_OPTIONS} value={form.freePlanTier} onChange={(e) => setForm((p) => ({ ...p, freePlanTier: e.target.value }))} />
-              <Input type="number" placeholder="Duração (dias)" value={form.freePlanDurationDays} onChange={(e) => setForm((p) => ({ ...p, freePlanDurationDays: e.target.value }))} />
+              <Field label="Plano gratuito concedido" required>
+                <Select options={PLAN_OPTIONS} value={form.freePlanTier}
+                  onChange={(e) => setForm((p) => ({ ...p, freePlanTier: e.target.value }))} />
+              </Field>
+              <Field label="Duração do benefício (dias)" required error={fieldErrors.freePlanDurationDays}>
+                <Input type="number" min={1} placeholder="Ex: 30" value={form.freePlanDurationDays}
+                  onChange={(e) => { setForm((p) => ({ ...p, freePlanDurationDays: e.target.value })); setFieldErrors((p) => ({ ...p, freePlanDurationDays: "" })); }}
+                  className={fieldErrors.freePlanDurationDays ? "border-red-500/50" : ""} />
+              </Field>
             </>
           )}
 
-          <Input type="date" value={form.validFrom} onChange={(e) => setForm((p) => ({ ...p, validFrom: e.target.value }))} />
-          <Input type="date" value={form.validUntil} onChange={(e) => setForm((p) => ({ ...p, validUntil: e.target.value }))} />
-          <Input type="number" placeholder="Limite de usos (opcional)" value={form.maxUses} onChange={(e) => setForm((p) => ({ ...p, maxUses: e.target.value }))} />
+          <Field label="Válido a partir de (Data inicial)" error={fieldErrors.validFrom}>
+            <Input type="date" value={form.validFrom}
+              onChange={(e) => { setForm((p) => ({ ...p, validFrom: e.target.value })); setFieldErrors((p) => ({ ...p, validFrom: "", validUntil: "" })); }} />
+          </Field>
+
+          <Field label="Válido até (Data final)" error={fieldErrors.validUntil}>
+            <Input type="date" value={form.validUntil}
+              onChange={(e) => { setForm((p) => ({ ...p, validUntil: e.target.value })); setFieldErrors((p) => ({ ...p, validUntil: "" })); }}
+              className={fieldErrors.validUntil ? "border-red-500/50" : ""} />
+          </Field>
+
+          <Field label="Limite de usos (deixe vazio para ilimitado)" error={fieldErrors.maxUses}>
+            <Input type="number" min={1} placeholder="Ex: 100" value={form.maxUses}
+              onChange={(e) => { setForm((p) => ({ ...p, maxUses: e.target.value })); setFieldErrors((p) => ({ ...p, maxUses: "" })); }}
+              className={fieldErrors.maxUses ? "border-red-500/50" : ""} />
+          </Field>
 
           <div className="md:col-span-2 space-y-2">
-            <p className="text-sm font-medium">Restringir a planos (opcional)</p>
+            <p className="text-xs font-medium text-muted-foreground">Restringir a planos específicos <span className="text-muted-foreground/50">(opcional — deixe vazio para todos os planos)</span></p>
             <div className="flex flex-wrap gap-2">
               {PLAN_OPTIONS.map((plan) => {
                 const selected = form.allowedPlanTiers.includes(plan.value);
                 return (
-                  <Button
-                    key={plan.value}
-                    type="button"
-                    variant={selected ? "default" : "outline"}
+                  <Button key={plan.value} type="button" size="sm" variant={selected ? "default" : "outline"}
                     onClick={() => setForm((prev) => ({
                       ...prev,
                       allowedPlanTiers: selected
-                        ? prev.allowedPlanTiers.filter((value) => value !== plan.value)
+                        ? prev.allowedPlanTiers.filter((v) => v !== plan.value)
                         : [...prev.allowedPlanTiers, plan.value],
-                    }))}
-                  >
+                    }))}>
                     {plan.label}
                   </Button>
                 );
@@ -252,8 +384,11 @@ export default function CuponsPage() {
           </div>
 
           <div className="md:col-span-2 flex gap-2">
-            <Button onClick={submitForm} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}Salvar</Button>
-            {editingId ? <Button variant="outline" onClick={resetForm}>Cancelar edição</Button> : null}
+            <Button onClick={submitForm} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {editingId ? "Salvar alterações" : "Criar cupom"}
+            </Button>
+            {editingId && <Button variant="outline" onClick={resetForm}>Cancelar edição</Button>}
           </div>
         </CardContent>
       </Card>
@@ -282,30 +417,59 @@ export default function CuponsPage() {
                       <div className="space-y-1">
                         <p className="font-semibold">{coupon.code} • {coupon.name}</p>
                         <p className="text-sm text-muted-foreground">{coupon.benefitSummary}</p>
-                        <p className="text-xs text-muted-foreground">Usos: {coupon.usedCount}{coupon.maxUses ? ` / ${coupon.maxUses}` : ""}</p>
+                        <p className="text-xs text-muted-foreground">Usos: {coupon.usedCount}{coupon.maxUses ? ` / ${coupon.maxUses}` : " (ilimitado)"}</p>
+                        <p className="text-xs text-muted-foreground">Ministérios com cupom ativo: {coupon.activeMinistryCount ?? 0}</p>
+                        {coupon.validFrom && <p className="text-xs text-muted-foreground">De: {new Date(coupon.validFrom).toLocaleDateString("pt-BR")} {coupon.validUntil ? `até ${new Date(coupon.validUntil).toLocaleDateString("pt-BR")}` : ""}</p>}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant={coupon.computedStatus === "ativo" ? "success" : "outline"}>{coupon.computedStatus}</Badge>
+                        <Button size="sm" variant="outline" onClick={() => toggleRedemptions(coupon.id)}>
+                          {loadingRedemptionsId === coupon.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                          {expandedCouponId === coupon.id ? "Ocultar ministérios" : "Ver ministérios"}
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => handleEdit(coupon)}>Editar</Button>
                         <Button size="sm" variant="outline" onClick={() => toggleCoupon(coupon.id, coupon.isActive)}>
                           {coupon.isActive ? <><XCircle className="w-4 h-4 mr-1" />Desativar</> : <><CheckCircle className="w-4 h-4 mr-1" />Ativar</>}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={deletingId === coupon.id}
-                          onClick={() => deleteCoupon(coupon)}
-                        >
+                        <Button size="sm" variant="destructive" disabled={deletingId === coupon.id} onClick={() => deleteCoupon(coupon)}>
                           {deletingId === coupon.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
                           Excluir
                         </Button>
                       </div>
                     </div>
+                    {expandedCouponId === coupon.id && (
+                      <div className="mt-4 border-t border-border pt-3 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Ministérios com histórico de aplicação deste cupom</p>
+                        {!couponRedemptions[coupon.id]?.length ? (
+                          <p className="text-xs text-muted-foreground">Nenhuma aplicação encontrada.</p>
+                        ) : (
+                          couponRedemptions[coupon.id].map((redemption) => (
+                            <div key={redemption.id} className="rounded-md border border-border p-2 text-xs flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="font-medium">{redemption.ministry?.name || "Ministério sem nome"}</p>
+                                <p className="text-muted-foreground">
+                                  Status: {redemption.status} • Aplicado em {new Date(redemption.redeemedAt).toLocaleDateString("pt-BR")}
+                                  {redemption.daysRemaining !== null ? ` • Dias restantes: ${redemption.daysRemaining}` : ""}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={removingRedemptionId === redemption.id || redemption.status !== "ACTIVE"}
+                                onClick={() => removeCouponFromMinistry(coupon.id, redemption)}
+                              >
+                                {removingRedemptionId === redemption.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                                Retirar do ministério
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
-
-              {!coupons.length ? <p className="text-sm text-muted-foreground">Nenhum cupom encontrado.</p> : null}
+              {!coupons.length && <p className="text-sm text-muted-foreground">Nenhum cupom encontrado.</p>}
             </div>
           )}
         </CardContent>
