@@ -43,7 +43,23 @@ export default function PlanosPage() {
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [checkingAccount, setCheckingAccount] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleAccountClick = async () => {
+    if (!session) { router.push("/login"); return; }
+    setCheckingAccount(true);
+    try {
+      const res = await fetch("/api/subscription/status");
+      const data = await res.json();
+      const isActive = data.hasSubscription && data.isActive;
+      router.push(isActive ? "/dashboard" : "/reativar-assinatura");
+    } catch {
+      router.push("/dashboard");
+    } finally {
+      setCheckingAccount(false);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/billing/plans")
@@ -102,9 +118,12 @@ export default function PlanosPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => router.push(session ? "/reativar-assinatura" : "/login")}
+          onClick={handleAccountClick}
+          disabled={checkingAccount}
         >
-          {session ? "Minha Conta" : "Entrar"}
+          {checkingAccount
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : session ? "Minha Conta" : "Entrar"}
         </Button>
       </div>
 
