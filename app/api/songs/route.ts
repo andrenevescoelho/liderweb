@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { title: "asc" },
       include: {
-        multitracks: {
+        multitracksAlbums: {
           where: { isActive: true, status: "READY" },
           select: {
             id: true,
@@ -111,8 +111,8 @@ export async function GET(req: NextRequest) {
     });
 
     const songsWithResources = songs.map((song: any) => {
-      const hasMultitrack = canViewMultitrack && song.multitracks.length > 0;
-      const multitrackRented = hasMultitrack && (song.multitracks[0].rentals?.length ?? 0) > 0;
+      const hasMultitrack = canViewMultitrack && song.multitracksAlbums.length > 0;
+      const multitrackRented = hasMultitrack && (song.multitracksAlbums[0].rentals?.length ?? 0) > 0;
       return {
         ...song,
         resources: {
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
           youtube: Boolean(song.youtubeUrl),
           audio: Boolean(song.audioUrl),
           multitrack: hasMultitrack,
-          multitrackAlbumId: hasMultitrack ? (song.multitracks[0]?.id ?? null) : null,
+          multitrackAlbumId: hasMultitrack ? (song.multitracksAlbums[0]?.id ?? null) : null,
           multitrackRented,
           pad: song.padBoards.length > 0,
           padBoardId: song.padBoards[0]?.id ?? null,
