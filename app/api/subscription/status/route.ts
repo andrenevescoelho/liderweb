@@ -20,6 +20,7 @@ export async function GET() {
       where: { groupId: user.groupId },
       include: {
         plan: true,
+        billingPlan: true,
         couponRedemptions: {
           where: { status: "ACTIVE" },
           orderBy: { redeemedAt: "desc" },
@@ -66,7 +67,20 @@ export async function GET() {
     );
 
     const effectivePlan = getEffectivePlanFromCoupon(subscription.plan, activeRedemption ?? null);
-    const moduleAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
+
+    // Priorizar BillingPlan (novo sistema) sobre SubscriptionPlan (legado)
+    let moduleAccess;
+    if ((subscription as any).billingPlan) {
+      const bp = (subscription as any).billingPlan;
+      const f = bp.features ?? {};
+      moduleAccess = {
+        professor: Boolean(f.professor),
+        multitracks: Number(f.multitracks ?? 0),
+        split: Number(f.splits ?? 0),
+      };
+    } else {
+      moduleAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
+    }
 
     return NextResponse.json({
       hasSubscription: true,

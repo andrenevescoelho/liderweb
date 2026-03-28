@@ -95,6 +95,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Metrônomo", href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
         { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
+        { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN"], tag: "IA" },
         { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
       ],
     },
