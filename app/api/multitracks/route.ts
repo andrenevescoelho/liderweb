@@ -5,8 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
-import { can } from "@/lib/rbac";
-import { getModuleAccess } from "@/lib/subscription-features";
+import { getGroupEntitlements } from "@/lib/billing/entitlements";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,21 +13,8 @@ export async function GET(req: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const user = session.user as SessionUser;
 
-    if (!can(user, "multitrack.view")) {
+    if (!user.groupId && user.role !== "SUPERADMIN" && user.role !== "ADMIN") {
       return NextResponse.json({ error: "Sem permissão para acessar multitracks" }, { status: 403 });
-    }
-    if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
-
-    const subscription = await prisma.subscription.findUnique({
-      where: { groupId: user.groupId },
-      include: { plan: true },
-    });
-    const moduleAccess = getModuleAccess(subscription?.plan?.features, subscription?.plan?.name);
-    if (moduleAccess.multitracks <= 0) {
-      return NextResponse.json(
-        { error: "Seu plano atual não inclui acesso ao módulo Multitracks.", code: "PLAN_UPGRADE_REQUIRED" },
-        { status: 402 }
-      );
     }
 
     const { searchParams } = new URL(req.url);
@@ -62,10 +48,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const rentals = await prisma.multitracksRental.findMany({
-      where: { groupId: user.groupId, status: "ACTIVE" },
-      select: { albumId: true, expiresAt: true, status: true },
-    });
+    let rentals: { albumId: string; expiresAt: Date; status: string }[] = [];
+    if (user.groupId) {
+      rentals = await prisma.multitracksRental.findMany({
+        where: { groupId: user.groupId, status: "ACTIVE" },
+        select: { albumId: true, expiresAt: true, status: true },
+      });
+    }
 
     const rentalMap = new Map(rentals.map((r) => [r.albumId, r]));
     const result = albums.map((album) => {
@@ -81,15 +70,20 @@ export async function GET(req: NextRequest) {
     });
 
     let usage = { count: 0, limit: 0 };
-    if (can(user, "multitrack.rent")) {
-      const now = new Date();
-      const usageRecord = await prisma.multitracksUsage.findUnique({
-        where: { groupId_month_year: { groupId: user.groupId, month: now.getMonth() + 1, year: now.getFullYear() } },
-      });
-      usage = { count: usageRecord?.count ?? 0, limit: moduleAccess.multitracks };
+    let canRent = false;
+    if (user.groupId) {
+      const ent = await getGroupEntitlements(user.groupId);
+      canRent = ent.canAccessMultitracks && ent.isActive;
+      if (canRent) {
+        const now = new Date();
+        const usageRecord = await prisma.multitracksUsage.findUnique({
+          where: { groupId_month_year: { groupId: user.groupId, month: now.getMonth() + 1, year: now.getFullYear() } },
+        });
+        usage = { count: usageRecord?.count ?? 0, limit: ent.multitracksPerMonth };
+      }
     }
 
-    return NextResponse.json({ albums: result, usage, canRent: can(user, "multitrack.rent") });
+    return NextResponse.json({ albums: result, usage, canRent });
   } catch (err) {
     console.error("[multitracks] GET error:", err);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
