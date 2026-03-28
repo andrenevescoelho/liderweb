@@ -174,6 +174,15 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 });
       }
       updateData.planId = planId;
+
+      // Tentar vincular ao BillingPlan correspondente pelo nome
+      const allBillingPlans = await (prisma as any).billingPlan.findMany({
+        where: { status: "ACTIVE" },
+      });
+      const billingPlan = allBillingPlans.find((bp: any) =>
+        bp.name.toLowerCase() === plan.name.toLowerCase()
+      ) || null;
+      updateData.billingPlanId = billingPlan ? billingPlan.id : null;
     }
 
     // Atualizar status se fornecido
