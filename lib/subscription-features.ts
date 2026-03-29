@@ -2,12 +2,16 @@ type ModuleAccess = {
   professor: boolean;
   multitracks: number;
   split: number;
+  pads: boolean;
+  admin: boolean;
 };
 
 const DEFAULT_ACCESS: ModuleAccess = {
   professor: false,
   multitracks: 0,
   split: 0,
+  pads: false,
+  admin: false,
 };
 
 function normalizePlanName(name?: string | null) {
@@ -20,15 +24,15 @@ function normalizePlanName(name?: string | null) {
 }
 
 const PLAN_ACCESS_BY_NAME: Record<string, ModuleAccess> = {
-  free: DEFAULT_ACCESS,
-  gratuito: DEFAULT_ACCESS,
-  starter: DEFAULT_ACCESS,
-  basico: DEFAULT_ACCESS,
-  pro: { professor: true, multitracks: 3, split: 0 },
-  intermediario: { professor: true, multitracks: 5, split: 5 },
-  avancado: { professor: true, multitracks: 10, split: 10 },
-  igreja: { professor: true, multitracks: 20, split: 20 },
-  enterprise: { professor: true, multitracks: 20, split: 20 },
+  free:          { professor: false, multitracks: 0,  split: 0,  pads: false, admin: false },
+  gratuito:      { professor: false, multitracks: 0,  split: 0,  pads: false, admin: false },
+  starter:       { professor: false, multitracks: 0,  split: 0,  pads: false, admin: false },
+  basico:        { professor: false, multitracks: 0,  split: 0,  pads: false, admin: false },
+  pro:           { professor: true,  multitracks: 3,  split: 0,  pads: true,  admin: true  },
+  intermediario: { professor: true,  multitracks: 5,  split: 5,  pads: true,  admin: true  },
+  avancado:      { professor: true,  multitracks: 10, split: 10, pads: true,  admin: true  },
+  igreja:        { professor: true,  multitracks: 20, split: 20, pads: true,  admin: true  },
+  enterprise:    { professor: true,  multitracks: 20, split: 20, pads: true,  admin: true  },
 };
 
 export function getModuleAccess(features?: string[] | null, planName?: string | null): ModuleAccess {
@@ -50,9 +54,11 @@ export function getModuleAccess(features?: string[] | null, planName?: string | 
     if (value.includes("professor") || value.includes("coach") || value.includes("ia.module.access")) {
       parsed.professor = true;
     }
+    if (value.includes("pads")) parsed.pads = true;
+    if (value.includes("admin")) parsed.admin = true;
   }
 
-  const hasParsedData = parsed.professor || parsed.multitracks > 0 || parsed.split > 0;
+  const hasParsedData = parsed.professor || parsed.multitracks > 0 || parsed.split > 0 || parsed.pads || parsed.admin;
   if (hasParsedData) return parsed;
 
   return PLAN_ACCESS_BY_NAME[normalizePlanName(planName)] ?? { ...DEFAULT_ACCESS };

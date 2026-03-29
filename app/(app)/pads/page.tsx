@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Loader2, Usb, Volume2, Volume1, Zap, Grid3x3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ModuleAccessOverlay } from "@/components/module-access-overlay";
 import toast from "react-hot-toast";
 
 interface Pad {
@@ -128,6 +130,8 @@ function PadIcon({ name, color, size=40 }: { name:string; color:string; size?:nu
 
 export default function PadsPage() {
   const { data: session, status } = useSession() || {};
+  const router = useRouter();
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [boards, setBoards] = useState<PadBoard[]>([]);
   const [activeBoard, setActiveBoard] = useState<PadBoard|null>(null);
   const [loading, setLoading] = useState(true);
@@ -198,11 +202,27 @@ export default function PadsPage() {
 
   useEffect(()=>{
     if(status!=="authenticated") return;
-    fetch("/api/pads").then(r=>r.json()).then(d=>{
-      const bs=d.boards||[];
-      setBoards(bs);
-      if(bs.length>0){setActiveBoard(bs[0]); if(bs[0].bpm) setBpm(bs[0].bpm);}
-    }).finally(()=>setLoading(false));
+    fetch("/api/subscription/status")
+      .then(r=>r.json())
+      .then(data=>{
+        if(data?.moduleAccess?.pads === false) {
+          setBlockedByPlan(true);
+          setLoading(false);
+          return;
+        }
+        fetch("/api/pads").then(r=>r.json()).then(d=>{
+          const bs=d.boards||[];
+          setBoards(bs);
+          if(bs.length>0){setActiveBoard(bs[0]); if(bs[0].bpm) setBpm(bs[0].bpm);}
+        }).finally(()=>setLoading(false));
+      })
+      .catch(()=>{
+        fetch("/api/pads").then(r=>r.json()).then(d=>{
+          const bs=d.boards||[];
+          setBoards(bs);
+          if(bs.length>0){setActiveBoard(bs[0]); if(bs[0].bpm) setBpm(bs[0].bpm);}
+        }).finally(()=>setLoading(false));
+      });
   },[status]);
 
   useEffect(()=>{
@@ -275,6 +295,28 @@ export default function PadsPage() {
     const idx=((Math.round(p))%12+12)%12;
     return NOTE_NAMES[idx];
   };
+
+  if(blockedByPlan) return (
+    <div className="relative h-[calc(100vh-120px)] overflow-hidden">
+      {/* Conteúdo fantasma por trás para dar efeito de blur */}
+      <div className="opacity-60 pointer-events-none select-none space-y-6 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10"><Grid3x3 className="w-4 h-4 text-primary" /></div>
+          <div><h1 className="text-lg font-bold">Worship Pads</h1><p className="text-xs text-muted-foreground">Pads e atmosferas ao vivo</p></div>
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          {Array.from({length: 16}).map((_,i) => (
+            <div key={i} className="aspect-square rounded-xl bg-muted/50 border border-border/50" />
+          ))}
+        </div>
+      </div>
+      <ModuleAccessOverlay
+        moduleLabel="Pads & Loops"
+        isAdmin={(session?.user as any)?.role === "ADMIN" || (session?.user as any)?.role === "SUPERADMIN"}
+        onUpgrade={() => router.push("/planos")}
+      />
+    </div>
+  );
 
   if(loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
 
