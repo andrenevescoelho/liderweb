@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Music2, Search, Play, Lock, Loader2, CheckCircle2, Clock, Layers,
+  LayoutGrid, Grid2x2, List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -47,6 +48,8 @@ export default function MultitracksPage() {
   const [renting, setRenting] = useState<string | null>(null);
   const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
+  const [canRent, setCanRent] = useState(false);
+  const [viewMode, setViewMode] = useState<"large" | "small" | "list">("large");
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -67,6 +70,7 @@ export default function MultitracksPage() {
         setAlbums(data.albums || []);
         setUsage(data.usage || { count: 0, limit: 0 });
         const rentAllowed = data.canRent ?? false;
+        setCanRent(rentAllowed);
         setBlockedByPlan(!rentAllowed);
         // Cota esgotada: tem acesso ao plano mas usou tudo
         const u = data.usage || { count: 0, limit: 0 };
@@ -186,16 +190,39 @@ export default function MultitracksPage() {
           </div>
         </div>
         {/* Cota */}
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5">
-          <Layers className="h-4 w-4 text-primary" />
-          <div>
-            <p className="text-xs text-muted-foreground">Cotas do mês</p>
-            <p className="text-sm font-semibold">
-              <span className={cn(usage.count >= usage.limit ? "text-red-400" : "text-primary")}>
-                {usage.count}
-              </span>
-              <span className="text-muted-foreground">/{usage.limit}</span>
-            </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5">
+            <Layers className="h-4 w-4 text-primary" />
+            <div>
+              <p className="text-xs text-muted-foreground">Cotas do mês</p>
+              <p className="text-sm font-semibold">
+                <span className={cn(usage.count >= usage.limit ? "text-red-400" : "text-primary")}>
+                  {usage.count}
+                </span>
+                <span className="text-muted-foreground">/{usage.limit}</span>
+              </p>
+            </div>
+          </div>
+          {/* Modos de visualização */}
+          <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
+            <button
+              onClick={() => setViewMode("large")}
+              className={cn("p-1.5 rounded-lg transition-colors", viewMode === "large" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+              title="Ícones grandes">
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("small")}
+              className={cn("p-1.5 rounded-lg transition-colors", viewMode === "small" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+              title="Ícones pequenos">
+              <Grid2x2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn("p-1.5 rounded-lg transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+              title="Lista">
+              <List className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -238,8 +265,55 @@ export default function MultitracksPage() {
           <Music2 className="h-12 w-12 text-muted-foreground/30 mb-4" />
           <p className="text-muted-foreground">Nenhuma multitrack encontrada.</p>
         </div>
+      ) : viewMode === "list" ? (
+        /* ── MODO LISTA ── */
+        <div className="divide-y divide-border/60 rounded-xl border border-border overflow-hidden">
+          {albums.map((album) => (
+            <div key={album.id} className={cn("flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors", album.rented && "bg-primary/5")}>
+              {/* Capa pequena */}
+              <div className="relative h-12 w-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
+                {album.coverUrl
+                  ? <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center"><Music2 className="h-5 w-5 text-muted-foreground/20" /></div>}
+                {album.rented && <div className="absolute inset-0 bg-primary/20 flex items-center justify-center"><CheckCircle2 className="h-4 w-4 text-primary" /></div>}
+              </div>
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">{album.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{album.artist}</p>
+              </div>
+              {/* Tags */}
+              <div className="hidden sm:flex items-center gap-1.5 flex-shrink-0">
+                {album.bpm && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{album.bpm} BPM</span>}
+                {album.musicalKey && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Tom {album.musicalKey}</span>}
+                {album.genre && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{album.genre}</span>}
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{album.stemCount} stems</span>
+                {album.rented && album.expiresAt && <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="h-3 w-3" />{daysLeft(album.expiresAt)}d</span>}
+              </div>
+              {/* Botão */}
+              <div className="flex-shrink-0">
+                {album.rented ? (
+                  <Button size="sm" onClick={() => handlePlay(album.id)}>
+                    <Play className="mr-1.5 h-3.5 w-3.5" />Abrir
+                  </Button>
+                ) : quotaExceeded ? (
+                  <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleRent(album.id)}>
+                    <Lock className="mr-1.5 h-3.5 w-3.5" />R$ 9,90
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
+                    {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        /* ── MODO GRID (LARGE / SMALL) ── */
+        <div className={cn("grid gap-4", viewMode === "large"
+          ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+          : "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8")}>
           {albums.map((album) => (
             <Card key={album.id} className={cn("overflow-hidden transition-all hover:border-primary/30", album.rented && "border-primary/20")}>
               {/* Capa */}
@@ -248,75 +322,48 @@ export default function MultitracksPage() {
                   <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <Music2 className="h-16 w-16 text-muted-foreground/20" />
+                    <Music2 className={cn("text-muted-foreground/20", viewMode === "large" ? "h-16 w-16" : "h-8 w-8")} />
                   </div>
                 )}
                 {album.rented && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-primary/90 px-2 py-1 text-[10px] font-semibold text-primary-foreground">
+                  <div className="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-full bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                     <CheckCircle2 className="h-3 w-3" />
-                    Alugada
+                    {viewMode === "large" && "Alugada"}
                   </div>
                 )}
-                {album.rented && album.expiresAt && (
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] text-white">
-                    <Clock className="h-3 w-3" />
-                    {daysLeft(album.expiresAt)}d restantes
+                {album.rented && album.expiresAt && viewMode === "large" && (
+                  <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+                    <Clock className="h-3 w-3" />{daysLeft(album.expiresAt)}d
                   </div>
                 )}
               </div>
 
-              <CardContent className="p-4">
-                <h3 className="font-semibold truncate">{album.title}</h3>
-                <p className="text-sm text-muted-foreground truncate mb-2">{album.artist}</p>
+              <CardContent className={cn(viewMode === "large" ? "p-4" : "p-2")}>
+                <h3 className={cn("font-semibold truncate", viewMode === "small" && "text-xs")}>{album.title}</h3>
+                <p className={cn("text-muted-foreground truncate", viewMode === "large" ? "text-sm mb-2" : "text-[10px] mb-1.5")}>{album.artist}</p>
 
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {album.bpm && (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      {album.bpm} BPM
-                    </span>
-                  )}
-                  {album.musicalKey && (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      Tom {album.musicalKey}
-                    </span>
-                  )}
-                  {album.genre && (
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                      {album.genre}
-                    </span>
-                  )}
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {album.stemCount} stems
-                  </span>
-                </div>
+                {viewMode === "large" && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {album.bpm && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{album.bpm} BPM</span>}
+                    {album.musicalKey && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Tom {album.musicalKey}</span>}
+                    {album.genre && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{album.genre}</span>}
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{album.stemCount} stems</span>
+                  </div>
+                )}
 
                 {album.rented ? (
                   <Button size="sm" className="w-full" onClick={() => handlePlay(album.id)}>
-                    <Play className="mr-2 h-3.5 w-3.5" />
-                    Abrir Player
+                    <Play className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Abrir Player" : "Abrir"}
                   </Button>
                 ) : quotaExceeded ? (
-                  <Button
-                    size="sm"
-                    className="w-full bg-amber-500 hover:bg-amber-600 text-white"
-                    onClick={() => handleRent(album.id)}
-                  >
-                    <Lock className="mr-2 h-3.5 w-3.5" />
-                    Alugar cota extra — R$ 9,90
+                  <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleRent(album.id)}>
+                    <Lock className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Alugar — R$ 9,90" : "R$ 9,90"}
                   </Button>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleRent(album.id)}
-                    disabled={renting === album.id}
-                  >
-                    {renting === album.id ? (
-                      <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Alugando...</>
-                    ) : (
-                      <><Lock className="mr-2 h-3.5 w-3.5" />Alugar (cota)</>
-                    )}
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
+                    {renting === album.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <><Lock className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Alugar (cota)" : "Alugar"}</>}
                   </Button>
                 )}
               </CardContent>
