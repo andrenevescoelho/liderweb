@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { KeyRound } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { MEMBER_FUNCTION_OPTIONS, PROFILE_VOICE_TYPE_OPTIONS, SKILL_LEVEL_OPTIONS } from "@/lib/member-profile";
 
@@ -66,6 +67,43 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const isSuperAdmin = (session?.user as any)?.role === "SUPERADMIN";
 
+  // Troca de senha
+  const [isGoogleUser, setIsGoogleUser] = useState<boolean | null>(null);
+  const [passwordForm, setPasswordForm] = useState({ current: "", newPass: "", confirm: "" });
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess(false);
+    if (passwordForm.newPass !== passwordForm.confirm) {
+      setPasswordError("As senhas não coincidem.");
+      return;
+    }
+    if (passwordForm.newPass.length < 8) {
+      setPasswordError("A nova senha deve ter pelo menos 8 caracteres.");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const res = await fetch("/api/user/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: passwordForm.current, newPassword: passwordForm.newPass }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPasswordError(data.error || "Erro ao alterar senha"); return; }
+      setPasswordSuccess(true);
+      setPasswordForm({ current: "", newPass: "", confirm: "" });
+    } catch {
+      setPasswordError("Erro inesperado. Tente novamente.");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -77,6 +115,8 @@ export default function ProfilePage() {
           ...data,
           availability: Array.isArray(data?.availability) ? data.availability : [],
         });
+        // Verificar se é usuário Google
+        setIsGoogleUser(Boolean(data.isGoogleUser));
       } catch (error: any) {
         toast({ title: "Erro ao carregar perfil", description: error?.message ?? "Tente novamente." });
       } finally {
@@ -292,6 +332,73 @@ export default function ProfilePage() {
           <Button disabled={saving} type="submit">{saving ? "Salvando..." : "Salvar"}</Button>
         </div>
       </form>
+
+      {/* Seção de troca de senha — só para usuários locais (não Google) */}
+      {isGoogleUser === false && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Alterar Senha
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+              <div className="space-y-2">
+                <Label htmlFor="current-password">Senha atual</Label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  value={passwordForm.current}
+                  onChange={(e) => setPasswordForm(p => ({ ...p, current: e.target.value }))}
+                  placeholder="Digite sua senha atual"
+                  autoComplete="current-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">Nova senha</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={passwordForm.newPass}
+                  onChange={(e) => setPasswordForm(p => ({ ...p, newPass: e.target.value }))}
+                  placeholder="Mínimo 8 caracteres"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirmar nova senha</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={passwordForm.confirm}
+                  onChange={(e) => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
+                  placeholder="Repita a nova senha"
+                  autoComplete="new-password"
+                />
+              </div>
+              {passwordError && (
+                <p className="text-sm text-red-500">{passwordError}</p>
+              )}
+              {passwordSuccess && (
+                <p className="text-sm text-green-500">Senha alterada com sucesso!</p>
+              )}
+              <Button type="submit" disabled={savingPassword || !passwordForm.current || !passwordForm.newPass || !passwordForm.confirm}>
+                {savingPassword ? "Alterando..." : "Alterar senha"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {isGoogleUser === true && (
+        <Card className="mt-6 border-muted">
+          <CardContent className="py-4 flex items-center gap-3 text-sm text-muted-foreground">
+            <KeyRound className="h-4 w-4 flex-shrink-0" />
+            Sua senha é gerenciada pelo Google. Para alterá-la, acesse as configurações da sua conta Google.
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -119,6 +119,12 @@ export default function LoginPage() {
             <Input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e?.target?.value ?? "")} className="pl-10" required />
           </div>
 
+          <div className="flex justify-end">
+            <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-primary transition-colors">
+              Esqueci minha senha
+            </Link>
+          </div>
+
           <Button type="submit" className="w-full" disabled={credentialsLoading || googleLoading}>
             {credentialsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
           </Button>
