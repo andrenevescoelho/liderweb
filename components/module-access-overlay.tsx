@@ -15,7 +15,7 @@ type Props = {
 
 export function ModuleAccessOverlay({ moduleLabel, isAdmin, onUpgrade, onBuyAvulso, avulsoLabel, avulsoPrice }: Props) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-[2px] p-4">
+    <div className="absolute inset-0 z-20 flex items-center justify-center backdrop-blur-md bg-background/40 p-4">
       <Card className="max-w-lg w-full border-primary/25 shadow-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">

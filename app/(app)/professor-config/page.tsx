@@ -236,7 +236,22 @@ export default function ProfessorConfigPage() {
 
   if (blockedByPlan) {
     return (
-      <div className="relative h-96">
+      <div className="relative overflow-hidden">
+        <div className="opacity-60 pointer-events-none select-none space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10" />
+            <div><div className="h-6 w-48 rounded bg-muted" /><div className="h-4 w-64 rounded bg-muted/60 mt-1" /></div>
+          </div>
+          <div className="rounded-xl border border-border/50 overflow-hidden">
+            {Array.from({length: 4}).map((_,i) => (
+              <div key={i} className="flex items-center gap-4 px-6 py-4 border-b border-border/30">
+                <div className="h-9 w-9 rounded-full bg-muted/60" />
+                <div className="flex-1"><div className="h-4 w-32 rounded bg-muted" /><div className="h-3 w-48 rounded bg-muted/60 mt-1" /></div>
+                <div className="h-6 w-10 rounded-full bg-muted/60" />
+              </div>
+            ))}
+          </div>
+        </div>
         <ModuleAccessOverlay
           moduleLabel="Professor IA"
           isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}

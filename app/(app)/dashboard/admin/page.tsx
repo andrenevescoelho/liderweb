@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Gift, GraduationCap, Loader2, ShieldCheck } from "lucide-react";
+import { ModuleAccessOverlay } from "@/components/module-access-overlay";
 import {
   ResponsiveContainer,
   CartesianGrid,
@@ -25,6 +26,7 @@ export default function AdminDashboardPage() {
   const { data: session } = useSession() || {};
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -38,14 +40,36 @@ export default function AdminDashboardPage() {
       return;
     }
 
-    fetch("/api/dashboard")
-      .then((res) => res.json())
-      .then((payload) => {
-        setData(payload);
-        setLoading(false);
+    // SUPERADMIN sempre tem acesso
+    if (userRole === "SUPERADMIN") {
+      fetch("/api/dashboard")
+        .then((res) => res.json())
+        .then((payload) => { setData(payload); setLoading(false); })
+        .catch(() => setLoading(false));
+      return;
+    }
+
+    // Verificar entitlement de admin para planos normais
+    fetch("/api/subscription/status")
+      .then(r => r.json())
+      .then(status => {
+        if (status?.moduleAccess?.admin === false) {
+          setBlockedByPlan(true);
+          setLoading(false);
+          return;
+        }
+        fetch("/api/dashboard")
+          .then((res) => res.json())
+          .then((payload) => { setData(payload); setLoading(false); })
+          .catch(() => setLoading(false));
       })
-      .catch(() => setLoading(false));
-  }, [canAccessAdminDashboard, router]);
+      .catch(() => {
+        fetch("/api/dashboard")
+          .then((res) => res.json())
+          .then((payload) => { setData(payload); setLoading(false); })
+          .catch(() => setLoading(false));
+      });
+  }, [canAccessAdminDashboard, userRole, router]);
 
   const adminInsights = data?.adminInsights;
   const monthlySchedules = adminInsights?.reports?.schedulesByMonth ?? [];
@@ -76,6 +100,28 @@ export default function AdminDashboardPage() {
       },
     ],
     [adminInsights]
+  );
+
+  if (blockedByPlan) return (
+    <div className="relative overflow-hidden">
+      {/* Conteúdo fantasma por trás para dar efeito de blur */}
+      <div className="opacity-60 pointer-events-none select-none space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/10" />
+          <div><div className="h-6 w-40 rounded bg-muted" /><div className="h-4 w-56 rounded bg-muted/60 mt-1" /></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({length: 6}).map((_,i) => (
+            <div key={i} className="h-36 rounded-xl bg-muted/50 border border-border/50" />
+          ))}
+        </div>
+      </div>
+      <ModuleAccessOverlay
+        moduleLabel="Administração"
+        isAdmin={true}
+        onUpgrade={() => router.push("/planos")}
+      />
+    </div>
   );
 
   if (loading) {

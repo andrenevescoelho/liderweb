@@ -73,10 +73,14 @@ export async function GET() {
     if ((subscription as any).billingPlan) {
       const bp = (subscription as any).billingPlan;
       const f = bp.features ?? {};
+      // Se o campo não existe nas features do billing plan, usar o PLAN_ACCESS_BY_NAME como fallback
+      const legacyAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
       moduleAccess = {
         professor: Boolean(f.professor),
         multitracks: Number(f.multitracks ?? 0),
         split: Number(f.splits ?? 0),
+        pads: f.pads !== undefined ? Boolean(f.pads) : legacyAccess.pads,
+        admin: f.admin !== undefined ? Boolean(f.admin) : legacyAccess.admin,
       };
     } else {
       moduleAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
