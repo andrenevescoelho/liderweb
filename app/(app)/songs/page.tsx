@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 import {
   Music,
   Plus,
@@ -24,6 +25,9 @@ import {
   FileAudio,
   Sparkles,
   CheckCircle2,
+  LayoutGrid,
+  Grid2x2,
+  List,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -105,6 +109,7 @@ export default function SongsPage() {
   const [search, setSearch] = useState("");
   const [filterTag, setFilterTag] = useState("");
   const [filterKey, setFilterKey] = useState("");
+  const [viewMode, setViewMode] = useState<"large" | "small" | "list">("large");
   const [modalOpen, setModalOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editSong, setEditSong] = useState<any>(null);
@@ -240,6 +245,24 @@ export default function SongsPage() {
           ]}
           className="w-32"
         />
+        {/* Modos de visualização */}
+        <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
+          <button onClick={() => setViewMode("large")}
+            className={cn("p-1.5 rounded-lg transition-colors", viewMode === "large" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Ícones grandes">
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+          <button onClick={() => setViewMode("small")}
+            className={cn("p-1.5 rounded-lg transition-colors", viewMode === "small" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Ícones pequenos">
+            <Grid2x2 className="h-4 w-4" />
+          </button>
+          <button onClick={() => setViewMode("list")}
+            className={cn("p-1.5 rounded-lg transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Lista">
+            <List className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -254,7 +277,50 @@ export default function SongsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <>
+        {viewMode === "list" ? (
+          /* ── MODO LISTA ── */
+          <div className="divide-y divide-border/60 rounded-xl border border-border overflow-hidden">
+            {songs?.map?.((song) => (
+              <div key={song?.id ?? ''} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm truncate">{song?.title ?? ''}</p>
+                    <Badge variant="info">{song?.originalKey ?? 'C'}</Badge>
+                    {song?.bpm && <span className="text-[11px] text-muted-foreground">{song.bpm} BPM</span>}
+                  </div>
+                  {song?.artist && <p className="text-xs text-muted-foreground truncate">{song.artist}</p>}
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    {song?.resources?.cifra && <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400"><Music className="h-2.5 w-2.5" />Cifra</span>}
+                    {song?.resources?.youtube && <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border bg-red-500/10 text-red-700 border-red-500/30 dark:text-red-400"><Youtube className="h-2.5 w-2.5" />YouTube</span>}
+                    {song?.resources?.multitrack && <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border ${song.resources.multitrackRented ? "bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-400" : "bg-muted/50 text-muted-foreground border-border/50"}`}><Headphones className="h-2.5 w-2.5" />Multitrack</span>}
+                    {song?.resources?.pad && <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400"><Layers className="h-2.5 w-2.5" />Pad</span>}
+                    {song?.tags?.map?.((tag: string) => <Badge key={tag} variant="default"><Tag className="w-2.5 h-2.5 mr-1" />{tag}</Badge>)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {song?.resources?.multitrack && song?.resources?.multitrackRented && song?.resources?.multitrackAlbumId && (
+                    <a href={`/multitracks/${song.resources.multitrackAlbumId}`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors"><Headphones className="h-3 w-3" /></a>
+                  )}
+                  {!song?.resources?.multitrackRented && song?.resources?.youtube && song?.youtubeUrl && (
+                    <a href={song.youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"><Youtube className="h-3 w-3" /></a>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => { setViewSong(song); setViewModalOpen(true); }}><Eye className="w-4 h-4" /></Button>
+                  {canEdit && (
+                    <>
+                      <Button size="sm" variant="ghost" onClick={() => { setEditSong(song); setModalOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(song?.id ?? '')}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* ── MODO GRID (LARGE / SMALL) ── */
+          <div className={cn("grid gap-4", viewMode === "large"
+            ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+            : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5")}>
           {songs?.map?.((song) => {
             const youtubeThumbnailUrl = song?.youtubeUrl
               ? getYoutubeThumbnailUrl(song.youtubeUrl)
@@ -284,7 +350,7 @@ export default function SongsPage() {
                   <span>{song?.timeSignature ?? '4/4'}</span>
                 </div>
 
-                {youtubeThumbnailUrl && (
+                {youtubeThumbnailUrl && viewMode === "large" && (
                   <div className="mb-3">
                     <img
                       src={youtubeThumbnailUrl}
@@ -428,6 +494,8 @@ export default function SongsPage() {
             );
           })}
         </div>
+        )}
+        </>
       )}
 
       <SongModal
