@@ -59,7 +59,7 @@ export async function GET() {
     const user = session.user as SessionUser;
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
-      include: { profile: true },
+      include: { profile: true, accounts: { select: { provider: true } } },
     });
 
     if (!dbUser) {
@@ -67,6 +67,7 @@ export async function GET() {
     }
 
     const profile = dbUser.profile;
+    const isGoogleUser = dbUser.accounts.some(a => a.provider === "google");
 
     return NextResponse.json({
       displayName: dbUser.name,
@@ -85,6 +86,7 @@ export async function GET() {
       avatarUrl: profile?.avatarUrl ?? "",
       instagram: profile?.instagram ?? "",
       youtube: profile?.youtube ?? "",
+      isGoogleUser,
     });
   } catch (error) {
     console.error("Get me profile error:", error);

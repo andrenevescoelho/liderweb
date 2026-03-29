@@ -350,6 +350,7 @@ model User {
   practiceSubmissions PracticeSubmission[]
   progressHistories   ProgressHistory[]
   coachContentCaches  CoachContentCache[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model CoachContentCache {
@@ -871,6 +872,19 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique @default(cuid())
+  expires   DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
 }
 
 // ─── Módulo Multitracks ───────────────────────────────────────────────────────
