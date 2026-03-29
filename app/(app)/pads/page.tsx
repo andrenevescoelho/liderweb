@@ -367,6 +367,29 @@ export default function PadsPage() {
           </div>
         </div>
 
+        {/* Seletor de boards — só aparece quando há mais de um */}
+        {boards.length > 1 && (
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+            {boards.map(board => (
+              <button
+                key={board.id}
+                onClick={() => { setActiveBoard(board); if(board.bpm) setBpm(board.bpm); }}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all",
+                  activeBoard?.id === board.id
+                    ? "border-primary bg-primary/20 text-primary"
+                    : "border-white/10 bg-white/5 text-white/50 hover:border-white/20 hover:text-white/80"
+                )}
+                style={activeBoard?.id === board.id ? { borderColor: board.color + "60", backgroundColor: board.color + "20", color: board.color } : {}}
+              >
+                <Grid3x3 className="h-3 w-3" />
+                {board.name}
+                {board.musicalKey && <span className="opacity-60 text-[10px]">{board.musicalKey}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* BPM + Volume master */}
         <div className="flex items-center gap-3 flex-shrink-0 bg-white/3 rounded-xl px-3 py-2 border border-white/5">
           <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">BPM</span>
