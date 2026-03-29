@@ -11,7 +11,7 @@ import { PendingAnnouncementModal } from "@/components/pending-announcement-moda
 const APP_VERSION = `Versão ${pkg.version}`;
 
 // Rotas que precisam de fullscreen sem padding nem scroll
-const FULLSCREEN_ROUTES = ["/pads", "/multitracks"];
+const FULLSCREEN_ROUTES = ["/pads"];
 
 interface AppLayoutProps {
   children: React.ReactNode;

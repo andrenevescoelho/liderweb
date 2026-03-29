@@ -177,7 +177,7 @@ export default function MultitracksPage() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0 overflow-x-hidden">
       <div className={cn("space-y-6", blockedByPlan && "opacity-35 pointer-events-none select-none")}>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
