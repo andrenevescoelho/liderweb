@@ -217,8 +217,9 @@ export default function SongsPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      {/* Busca */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <Input
             placeholder="Buscar por título ou artista..."
@@ -227,41 +228,43 @@ export default function SongsPage() {
             className="pl-10"
           />
         </div>
-        <Select
-          value={filterTag}
-          onChange={(e) => setFilterTag(e?.target?.value ?? '')}
-          options={[
-            { value: "", label: "Todas tags" },
-            ...SONG_TAGS?.map?.((t) => ({ value: t, label: t })) ?? [],
-          ]}
-          className="w-40"
-        />
-        <Select
-          value={filterKey}
-          onChange={(e) => setFilterKey(e?.target?.value ?? '')}
-          options={[
-            { value: "", label: "Todos tons" },
-            ...MUSICAL_KEYS?.slice?.(0, 12)?.map?.((k) => ({ value: k, label: k })) ?? [],
-          ]}
-          className="w-32"
-        />
-        {/* Modos de visualização */}
+      </div>
+
+      {/* Filtros + view mode */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Filtro Tom */}
+          <select
+            value={filterKey}
+            onChange={(e) => setFilterKey(e.target.value)}
+            className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+            <option value="">Todos os tons</option>
+            {MUSICAL_KEYS?.slice?.(0, 12)?.map?.((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          {/* Filtro Tag */}
+          <select
+            value={filterTag}
+            onChange={(e) => setFilterTag(e.target.value)}
+            className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+            <option value="">Todas as tags</option>
+            {SONG_TAGS?.map?.((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+        {/* View mode */}
         <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
           <button onClick={() => setViewMode("large")}
             className={cn("p-1.5 rounded-lg transition-colors", viewMode === "large" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-            title="Ícones grandes">
-            <LayoutGrid className="h-4 w-4" />
-          </button>
+            title="Ícones grandes"><LayoutGrid className="h-4 w-4" /></button>
           <button onClick={() => setViewMode("small")}
             className={cn("p-1.5 rounded-lg transition-colors", viewMode === "small" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-            title="Ícones pequenos">
-            <Grid2x2 className="h-4 w-4" />
-          </button>
+            title="Ícones pequenos"><Grid2x2 className="h-4 w-4" /></button>
           <button onClick={() => setViewMode("list")}
             className={cn("p-1.5 rounded-lg transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-            title="Lista">
-            <List className="h-4 w-4" />
-          </button>
+            title="Lista"><List className="h-4 w-4" /></button>
         </div>
       </div>
 

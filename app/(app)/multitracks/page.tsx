@@ -45,6 +45,7 @@ export default function MultitracksPage() {
   const [usage, setUsage] = useState<Usage>({ count: 0, limit: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterArtist, setFilterArtist] = useState("");
   const [renting, setRenting] = useState<string | null>(null);
   const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
@@ -190,39 +191,16 @@ export default function MultitracksPage() {
           </div>
         </div>
         {/* Cota */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5">
-            <Layers className="h-4 w-4 text-primary" />
-            <div>
-              <p className="text-xs text-muted-foreground">Cotas do mês</p>
-              <p className="text-sm font-semibold">
-                <span className={cn(usage.count >= usage.limit ? "text-red-400" : "text-primary")}>
-                  {usage.count}
-                </span>
-                <span className="text-muted-foreground">/{usage.limit}</span>
-              </p>
-            </div>
-          </div>
-          {/* Modos de visualização */}
-          <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
-            <button
-              onClick={() => setViewMode("large")}
-              className={cn("p-1.5 rounded-lg transition-colors", viewMode === "large" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-              title="Ícones grandes">
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("small")}
-              className={cn("p-1.5 rounded-lg transition-colors", viewMode === "small" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-              title="Ícones pequenos">
-              <Grid2x2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn("p-1.5 rounded-lg transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-              title="Lista">
-              <List className="h-4 w-4" />
-            </button>
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5">
+          <Layers className="h-4 w-4 text-primary" />
+          <div>
+            <p className="text-xs text-muted-foreground">Cotas do mês</p>
+            <p className="text-sm font-semibold">
+              <span className={cn(usage.count >= usage.limit ? "text-red-400" : "text-primary")}>
+                {usage.count}
+              </span>
+              <span className="text-muted-foreground">/{usage.limit}</span>
+            </p>
           </div>
         </div>
       </div>
@@ -259,8 +237,38 @@ export default function MultitracksPage() {
         <Button type="submit" variant="outline">Buscar</Button>
       </form>
 
+      {/* Filtros + view mode */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Filtro Artista */}
+          <select
+            value={filterArtist}
+            onChange={(e) => setFilterArtist(e.target.value)}
+            className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+            <option value="">Todos os artistas</option>
+            {Array.from(new Set(albums.map(a => a.artist).filter(Boolean))).sort().map(artist => (
+              <option key={artist} value={artist!}>{artist}</option>
+            ))}
+          </select>
+        </div>
+        {/* View mode */}
+        <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
+          <button onClick={() => setViewMode("large")}
+            className={cn("p-1.5 rounded-lg transition-colors", viewMode === "large" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Ícones grandes"><LayoutGrid className="h-4 w-4" /></button>
+          <button onClick={() => setViewMode("small")}
+            className={cn("p-1.5 rounded-lg transition-colors", viewMode === "small" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Ícones pequenos"><Grid2x2 className="h-4 w-4" /></button>
+          <button onClick={() => setViewMode("list")}
+            className={cn("p-1.5 rounded-lg transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Lista"><List className="h-4 w-4" /></button>
+        </div>
+      </div>
+
       {/* Grid de álbuns */}
-      {albums.length === 0 ? (
+      {(() => {
+        const filtered = filterArtist ? albums.filter(a => a.artist === filterArtist) : albums;
+        return filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Music2 className="h-12 w-12 text-muted-foreground/30 mb-4" />
           <p className="text-muted-foreground">Nenhuma multitrack encontrada.</p>
@@ -268,7 +276,7 @@ export default function MultitracksPage() {
       ) : viewMode === "list" ? (
         /* ── MODO LISTA ── */
         <div className="divide-y divide-border/60 rounded-xl border border-border overflow-hidden">
-          {albums.map((album) => (
+          {filtered.map((album) => (
             <div key={album.id} className={cn("flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors", album.rented && "bg-primary/5")}>
               {/* Capa pequena */}
               <div className="relative h-12 w-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
@@ -314,7 +322,7 @@ export default function MultitracksPage() {
         <div className={cn("grid gap-4", viewMode === "large"
           ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
           : "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8")}>
-          {albums.map((album) => (
+          {filtered.map((album) => (
             <Card key={album.id} className={cn("overflow-hidden transition-all hover:border-primary/30", album.rented && "border-primary/20")}>
               {/* Capa */}
               <div className="relative aspect-square bg-muted overflow-hidden">
@@ -370,7 +378,8 @@ export default function MultitracksPage() {
             </Card>
           ))}
         </div>
-      )}
+      );
+      })()}
       </div>
       {blockedByPlan && (
         <ModuleAccessOverlay
