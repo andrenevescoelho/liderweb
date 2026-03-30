@@ -311,9 +311,8 @@ export default function MultitracksPlayerPage() {
   const [transpose, setTranspose] = useState(0);
   const transposeRef = useRef(0);
   const [isMobile, setIsMobile] = useState(false);
-
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
+    const check = () => setIsMobile(window.innerWidth < 640);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -938,17 +937,17 @@ export default function MultitracksPlayerPage() {
   return (
     <div className="fixed inset-0 top-[64px] flex flex-col bg-background z-10">
       {/* Header */}
-      <div className="flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2 md:py-3 border-b border-border flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-2 sm:py-3 border-b border-border flex-shrink-0">
         <button onClick={() => router.push("/multitracks")} className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </button>
         {album.coverUrl ? (
-          <img src={album.coverUrl} alt={album.title} className="h-8 w-8 md:h-10 md:w-10 rounded-lg object-cover flex-shrink-0" />
+          <img src={album.coverUrl} alt={album.title} className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg object-cover flex-shrink-0" />
         ) : (
-          <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-muted flex-shrink-0" />
+          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-muted flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="font-bold truncate text-sm md:text-base">{album.title}</h1>
+          <h1 className="font-bold truncate text-sm sm:text-base">{album.title}</h1>
           <p className="text-sm text-muted-foreground truncate">{album.artist}</p>
         </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0">
@@ -1016,7 +1015,7 @@ export default function MultitracksPlayerPage() {
       {/* Régua de tempo + grade BPM */}
       {duration > 0 && (
         <div className="flex flex-shrink-0 border-b border-border/40 bg-black/30 h-6">
-          <div className="flex-shrink-0 w-44 flex items-center px-2 gap-1">
+          <div className={isMobile ? "flex-shrink-0 w-28 flex items-center px-1 gap-0.5" : "flex-shrink-0 w-44 flex items-center px-2 gap-1"}>
             {album.bpm && (
               <button
                 onClick={() => { setShowBpmGrid((v) => !v); setBpmOffset(0); }}
@@ -1029,7 +1028,7 @@ export default function MultitracksPlayerPage() {
             )}
           </div>
           {/* Controles de offset */}
-          <div className="flex-shrink-0 w-36 flex items-center px-1 gap-0.5">
+          <div className={isMobile ? "flex-shrink-0 w-24 flex items-center px-0.5 gap-0.5" : "flex-shrink-0 w-36 flex items-center px-1 gap-0.5"}>
             {showBpmGrid && (
               <>
                 <span className="text-[8px] text-muted-foreground/40 mr-0.5">offset</span>
@@ -1117,8 +1116,8 @@ export default function MultitracksPlayerPage() {
       <div className="flex-shrink-0 border-b border-border/50 bg-black/20">
         {/* Barra de controles: zoom + shortcuts */}
         <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30">
-          <div className="flex-shrink-0 w-44" />
-          <div className="flex-shrink-0 w-36" />
+          <div className={isMobile ? "flex-shrink-0 w-28" : "flex-shrink-0 w-44"} />
+          <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-36"} />
           <div className="flex-1 flex items-center gap-2">
             <span className="text-[9px] text-muted-foreground">Zoom:</span>
             <button onClick={() => setZoom((z) => Math.max(1, z / 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">−</button>
@@ -1157,8 +1156,8 @@ export default function MultitracksPlayerPage() {
           {/* Painel de atalhos */}
           {showShortcutsPanel && (
             <div className="flex border-b border-border/30 bg-black/30 overflow-x-auto">
-              <div className="flex-shrink-0 w-44" />
-              <div className="flex-shrink-0 w-36" />
+              <div className={isMobile ? "flex-shrink-0 w-28" : "flex-shrink-0 w-44"} />
+              <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-36"} />
               <div className="flex-1 flex gap-2 px-2 py-1.5 flex-wrap">
                 {markers.map((marker, i) => (
                   <div key={i} className="flex items-center gap-1 rounded border border-border/50 px-2 py-0.5 bg-card/50">
@@ -1190,8 +1189,8 @@ export default function MultitracksPlayerPage() {
 
           {/* Faixa dos markers com zoom */}
           <div className="flex h-8">
-            <div className="flex-shrink-0 w-44" />
-            <div className="flex-shrink-0 w-36" />
+            <div className={isMobile ? "flex-shrink-0 w-28" : "flex-shrink-0 w-44"} />
+            <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-36"} />
             <div
               className={cn("flex-1 relative overflow-hidden pr-3", addingMarker && "cursor-crosshair")}
               ref={waveformAreaRef}
@@ -1332,7 +1331,7 @@ export default function MultitracksPlayerPage() {
             style={{ borderLeft: `4px solid ${stem.color}` }}
           >
             {/* Controls */}
-            <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 w-44">
+            <div className={isMobile ? "flex items-center gap-1 px-2 py-2 flex-shrink-0 w-28" : "flex items-center gap-2 px-3 py-2 flex-shrink-0 w-44"}>
               <div className="flex gap-1">
                 <button onClick={(e) => { e.stopPropagation(); toggleMute(i); }}
                   className={cn("rounded px-2 py-0.5 text-[10px] font-bold transition-colors",
@@ -1349,7 +1348,7 @@ export default function MultitracksPlayerPage() {
             </div>
 
             {/* Volume + Pan + VU */}
-            <div className="flex items-center gap-2 px-2 flex-shrink-0 w-44" onClick={(e) => e.stopPropagation()}>
+            <div className={isMobile ? "flex items-center gap-1 px-1 flex-shrink-0 w-24" : "flex items-center gap-2 px-2 flex-shrink-0 w-44"} onClick={(e) => e.stopPropagation()}>
               <div className="flex flex-col gap-0.5 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="text-[9px] text-muted-foreground w-4">VOL</span>
@@ -1426,7 +1425,7 @@ export default function MultitracksPlayerPage() {
       </div>
 
       {/* Transport bar — fixo no rodapé */}
-      <div className="border-t border-border bg-card px-3 md:px-5 py-2 md:py-3 flex-shrink-0">
+      <div className="border-t border-border bg-card px-3 sm:px-5 py-2 sm:py-3 flex-shrink-0">
 
         {/* Scheduled jump indicator */}
         {scheduledJump && (
@@ -1457,7 +1456,7 @@ export default function MultitracksPlayerPage() {
               onClick={togglePlay}
               disabled={!allReady}
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-full transition-all",
+                isMobile ? "flex h-12 w-12 items-center justify-center rounded-full transition-all" : "flex h-10 w-10 items-center justify-center rounded-full transition-all",
                 isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary/90",
                 !allReady && "opacity-50 cursor-not-allowed"
               )}
