@@ -108,6 +108,7 @@ export const PERMISSIONS: PermissionDefinition[] = [
   { key: "multitrack.rent", label: "Alugar multitracks", category: "technical", premium: true },
   { key: "technical.multitrack.link", label: "Vincular música ao Multitrack Gospel", category: "technical", premium: true },
   { key: "pad.view", label: "Visualizar Pads & Loops", category: "technical", premium: true },
+  { key: "split.view", label: "Acessar Split de músicas", category: "technical", premium: true },
   { key: "technical.bpm.change", label: "Alterar BPM", category: "technical", premium: true },
   { key: "technical.guide.download", label: "Baixar guia individual", category: "technical", premium: true },
 
@@ -147,8 +148,8 @@ export const PERMISSION_PRESETS: PermissionPreset[] = [
   { key: "SUPER_ADMIN_IGREJA", label: "👑 Super Admin Igreja", description: "Acesso total de governança da igreja e ministérios.", permissions: allKeys },
   { key: "LIDER_MINISTERIO", label: "🎯 Líder de Ministério", description: "Gestão completa do ministério e time local.", permissions: managerKeys },
   { key: "COORDENADOR_MUSICAL", label: "🎼 Coordenador Musical", description: "Foco em repertório, arranjos, escalas e ensaios.", permissions: PERMISSIONS.filter((p) => ["musical", "schedule", "communication", "reports"].includes(p.category)).map((p) => p.key) },
-  { key: "MINISTRO", label: "🎙 Ministro", description: "Atuação vocal e apoio de ensaio, sem gestão administrativa.", permissions: [...PERMISSIONS.filter((p) => ["musical", "schedule", "profile", "communication"].includes(p.category) && !p.key.includes("manage") && !p.key.includes("delete") && !p.key.includes("remove")).map((p) => p.key), "multitrack.view", "multitrack.rent", "pad.view"] },
-  { key: "MUSICO", label: "🎹 Músico", description: "Participação em escalas e colaboração em ensaios.", permissions: ["music.rehearsal.send", "setlist.music.add", "music.key.change.request", "schedule.presence.confirm.self", "schedule.future.view", "schedule.history.view", "profile.self.edit", "profile.skills.edit", "profile.availability.update", "profile.days.define", "profile.instrument.primary.define", "communication.direct.send", "multitrack.view", "multitrack.rent", "pad.view"] },
+  { key: "MINISTRO", label: "🎙 Ministro", description: "Atuação vocal e apoio de ensaio, sem gestão administrativa.", permissions: [...PERMISSIONS.filter((p) => ["musical", "schedule", "profile", "communication"].includes(p.category) && !p.key.includes("manage") && !p.key.includes("delete") && !p.key.includes("remove")).map((p) => p.key), "multitrack.view", "multitrack.rent", "pad.view", "split.view"] },
+  { key: "MUSICO", label: "🎹 Músico", description: "Participação em escalas e colaboração em ensaios.", permissions: ["music.rehearsal.send", "setlist.music.add", "music.key.change.request", "schedule.presence.confirm.self", "schedule.future.view", "schedule.history.view", "profile.self.edit", "profile.skills.edit", "profile.availability.update", "profile.days.define", "profile.instrument.primary.define", "communication.direct.send", "multitrack.view", "multitrack.rent", "pad.view", "split.view"] },
   { key: "MEMBRO", label: "🙋 Membro", description: "Permissões básicas de participação.", permissions: ["schedule.presence.confirm.self", "schedule.future.view", "profile.self.edit", "profile.availability.update", "communication.direct.send"] },
   { key: "VISUALIZADOR", label: "👀 Visualizador", description: "Somente visualização de agenda e histórico.", permissions: ["schedule.future.view", "schedule.history.view"] },
 ];

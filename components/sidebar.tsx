@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Music, Calendar, NotebookPen, CreditCard,
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
-  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3,
+  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -99,7 +99,8 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
         { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN"], tag: "IA" },
-        { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"], permissions: ["pad.view"] },
+        { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["pad.view"] },
+        { label: "Split de músicas", href: "/splits", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["split.view"], tag: "NOVO" },
       ],
     },
     {
@@ -131,19 +132,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     if (item.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
     if (item.href === "/aniversariantes" && userRole === "SUPERADMIN") return false;
     if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) return false;
-
-    const roleOk = item.roles.includes(userRole);
-
-    // Se tem permissões definidas, o role sozinho não basta para MEMBER —
-    // precisa também ter a permissão. ADMIN e LEADER sempre passam.
-    if (item.permissions?.length) {
-      const hasPermission = item.permissions.some((p) => userPermissions.includes(p));
-      if (userRole === "ADMIN" || userRole === "SUPERADMIN") return roleOk;
-      if (userRole === "LEADER") return roleOk;
-      return roleOk && hasPermission;
-    }
-
-    return roleOk;
+    if (item.roles.includes(userRole)) return true;
+    if (!item.permissions?.length) return false;
+    return item.permissions.some((p) => userPermissions.includes(p));
   };
 
   const visibleSections = sections
