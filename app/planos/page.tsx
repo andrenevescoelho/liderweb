@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, X, Loader2, Headphones, Brain, Scissors, Zap, Users } from "lucide-react";
+import { Check, X, Loader2, Headphones, Brain, Scissors, Zap, Users, Grid3x3, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -240,6 +240,14 @@ export default function PlanosPage() {
                       label={Number(plan.features.splits) > 0
                         ? `${plan.features.splits} Splits/mês`
                         : "Split de músicas"}
+                    />
+                    <FeatureRow
+                      ok={plan.slug !== "free" && plan.slug !== "gratuito"}
+                      label="Pads & Loops"
+                    />
+                    <FeatureRow
+                      ok={plan.slug !== "free" && plan.slug !== "gratuito"}
+                      label="Métricas do ministério"
                     />
                   </div>
                 </div>
