@@ -310,6 +310,14 @@ export default function MultitracksPlayerPage() {
   const [showMixer, setShowMixer] = useState(false);
   const [transpose, setTranspose] = useState(0);
   const transposeRef = useRef(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   const [mixerPos, setMixerPos] = useState({ x: 0, y: 0 });
   const [mixerSize, setMixerSize] = useState({ w: 0, h: 340 });
   const [mixerInitialized, setMixerInitialized] = useState(false);
@@ -930,17 +938,17 @@ export default function MultitracksPlayerPage() {
   return (
     <div className="fixed inset-0 top-[64px] flex flex-col bg-background z-10">
       {/* Header */}
-      <div className="flex items-center gap-4 px-5 py-3 border-b border-border flex-shrink-0">
+      <div className="flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2 md:py-3 border-b border-border flex-shrink-0">
         <button onClick={() => router.push("/multitracks")} className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </button>
         {album.coverUrl ? (
-          <img src={album.coverUrl} alt={album.title} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+          <img src={album.coverUrl} alt={album.title} className="h-8 w-8 md:h-10 md:w-10 rounded-lg object-cover flex-shrink-0" />
         ) : (
-          <div className="h-10 w-10 rounded-lg bg-muted flex-shrink-0" />
+          <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-muted flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="font-bold truncate">{album.title}</h1>
+          <h1 className="font-bold truncate text-sm md:text-base">{album.title}</h1>
           <p className="text-sm text-muted-foreground truncate">{album.artist}</p>
         </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0">
@@ -1418,7 +1426,7 @@ export default function MultitracksPlayerPage() {
       </div>
 
       {/* Transport bar — fixo no rodapé */}
-      <div className="border-t border-border bg-card px-5 py-3 flex-shrink-0">
+      <div className="border-t border-border bg-card px-3 md:px-5 py-2 md:py-3 flex-shrink-0">
 
         {/* Scheduled jump indicator */}
         {scheduledJump && (
