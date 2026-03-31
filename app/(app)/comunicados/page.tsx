@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Megaphone, Send } from "lucide-react";
+import { Megaphone, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SessionUser } from "@/lib/types";
@@ -31,6 +31,7 @@ export default function ComunicadosPage() {
   const [error, setError] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [items, setItems] = useState<BroadcastItem[]>([]);
+  const [deletingBroadcastId, setDeletingBroadcastId] = useState<string | null>(null);
 
   const loadBroadcasts = async (cursor?: string | null) => {
     if (!groupId) return;
@@ -101,6 +102,30 @@ export default function ComunicadosPage() {
     }
   };
 
+  const handleDeleteBroadcast = async (broadcastId: string) => {
+    if (!groupId || deletingBroadcastId) return;
+
+    setDeletingBroadcastId(broadcastId);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/groups/${groupId}/broadcasts/${broadcastId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao apagar comunicado");
+      }
+
+      setItems((prev) => prev.filter((item) => item.id !== broadcastId));
+    } catch (err: any) {
+      setError(err.message || "Erro ao apagar comunicado");
+    } finally {
+      setDeletingBroadcastId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -141,19 +166,37 @@ export default function ComunicadosPage() {
           <div className="rounded-xl border p-6 text-center text-slate-500">Nenhum comunicado publicado.</div>
         )}
 
-        {items.map((broadcast) => (
-          <article key={broadcast.id} className="rounded-xl border bg-white dark:bg-slate-900 p-4">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p className="font-semibold text-slate-900 dark:text-slate-100">
-                {broadcast.sender.name} <span className="text-xs text-slate-500">({broadcast.senderRole})</span>
-              </p>
-              <time className="text-xs text-slate-500">
-                {new Date(broadcast.createdAt).toLocaleString("pt-BR")}
-              </time>
-            </div>
-            <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{broadcast.content}</p>
-          </article>
-        ))}
+        {items.map((broadcast) => {
+          const canDeleteBroadcast = user?.role === "SUPERADMIN" || (user?.role === "ADMIN" && broadcast.sender.id === user.id);
+
+          return (
+            <article key={broadcast.id} className="rounded-xl border bg-white dark:bg-slate-900 p-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                  {broadcast.sender.name} <span className="text-xs text-slate-500">({broadcast.senderRole})</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <time className="text-xs text-slate-500">
+                    {new Date(broadcast.createdAt).toLocaleString("pt-BR")}
+                  </time>
+                  {canDeleteBroadcast && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBroadcast(broadcast.id)}
+                      disabled={deletingBroadcastId === broadcast.id}
+                      className="text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                      aria-label="Apagar comunicado"
+                      title="Apagar comunicado"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{broadcast.content}</p>
+            </article>
+          );
+        })}
 
         {nextCursor && (
           <div className="pt-2">
