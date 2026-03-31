@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { MessageCircle, SendHorizontal } from "lucide-react";
+import { MessageCircle, SendHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SessionUser } from "@/lib/types";
@@ -29,6 +29,7 @@ export default function ChatGrupoPage() {
   const [error, setError] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [items, setItems] = useState<ChatItem[]>([]);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
 
   const canAccess = useMemo(() => Boolean(groupId), [groupId]);
 
@@ -127,6 +128,30 @@ export default function ChatGrupoPage() {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!groupId || deletingMessageId) return;
+
+    setDeletingMessageId(messageId);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/groups/${groupId}/messages/${messageId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Erro ao apagar mensagem");
+      }
+
+      setItems((prev) => prev.filter((item) => item.id !== messageId));
+    } catch (err: any) {
+      setError(err.message || "Erro ao apagar mensagem");
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   if (!canAccess) {
     return <p className="text-sm text-slate-500">Você precisa estar associado a um grupo para acessar o chat.</p>;
   }
@@ -172,7 +197,21 @@ export default function ChatGrupoPage() {
             >
               <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{message.sender.name}</span>
-                <time className="text-[10px] text-slate-500">{new Date(message.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time>
+                <div className="flex items-center gap-2">
+                  <time className="text-[10px] text-slate-500">{new Date(message.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time>
+                  {ownMessage && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMessage(message.id)}
+                      disabled={deletingMessageId === message.id}
+                      className="text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                      aria-label="Apagar mensagem"
+                      title="Apagar mensagem"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-sm text-slate-800 dark:text-slate-100 break-words">{message.content}</p>
             </article>
