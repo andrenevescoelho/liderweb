@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { signIn, getSession, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Music, Mail, Lock, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -99,10 +100,11 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <div className="mb-4 flex justify-center">
             <div className="rounded-xl border border-primary/25 bg-primary/15 p-3">
-              <Music className="h-8 w-8 text-primary" />
+              <Image src="/favicon.svg" alt="LiderWeb" width={32} height={32} className="h-8 w-8" />
             </div>
           </div>
           <h1 className="text-2xl font-semibold">LiderWeb</h1>
+          <p className="mt-1 text-xs text-muted-foreground">by multitrackgospel.com</p>
           <p className="mt-2 text-sm text-muted-foreground">Entre na sua conta</p>
         </div>
 
