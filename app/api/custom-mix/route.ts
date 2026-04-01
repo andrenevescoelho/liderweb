@@ -47,7 +47,13 @@ async function getQuota(groupId: string): Promise<{ limit: number; used: number 
     where: { groupId, createdAt: { gte: startOfMonth } },
   });
 
-  return { limit, used };
+  // Somar cotas extras compradas no mês
+  const extras = await (prisma as any).customMixExtra.findMany({
+    where: { groupId, month: startOfMonth.getMonth() + 1, year: startOfMonth.getFullYear() },
+  });
+  const extraLimit = extras.reduce((sum: number, e: any) => sum + (e.quantity ?? 1), 0);
+
+  return { limit: limit + extraLimit, used };
 }
 
 // GET — listar mixes do grupo

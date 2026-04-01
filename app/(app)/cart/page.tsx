@@ -37,6 +37,7 @@ function formatBRL(value: number) {
 
 const PRODUCT_TYPE_LABELS: Record<string, string> = {
   MULTITRACK_RENTAL: "Aluguel de Multitrack",
+  CUSTOM_MIX_EXTRA: "Custom Mix Avulso",
   SPLIT_REQUEST: "Solicitação de Split",
   SPLIT_ACCESS: "Acesso a Split",
   MODULE_ACCESS: "Acesso a Módulo",
