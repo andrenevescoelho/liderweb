@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, X, Loader2, Headphones, Brain, Scissors, Zap, Users, Grid3x3, BarChart2 } from "lucide-react";
+import { Check, X, Loader2, Headphones, Brain, Scissors, Zap, Users, Grid3x3, BarChart2, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +33,9 @@ const FEATURE_LABELS: Record<string, { label: string; icon: any }> = {
 
 const EXTRAS = [
   { icon: Headphones, title: "Multitrack Adicional", description: "Aluguel extra além da cota mensal.", price: "R$ 9,90", unit: "por track", color: "#14B8A6" },
-  { icon: Scissors, title: "Split Adicional", description: "Solicite um split extra.", price: "R$ 19,90", unit: "por split", color: "#8B5CF6" },
+  { icon: Scissors, title: "Split Adicional", description: "Solicite um split extra.", price: "R$ 9,90", unit: "por split", color: "#8B5CF6" },
   { icon: Zap, title: "Split do Acervo", description: "Acesse um split já processado.", price: "R$ 4,90", unit: "por acesso", color: "#F59E0B" },
+  { icon: Sliders, title: "Custom Mix Adicional", description: "Crie um mix extra além da sua cota mensal.", price: "R$ 9,90", unit: "por mix", color: "#A78BFA" },
 ];
 
 export default function PlanosPage() {
@@ -240,6 +241,13 @@ export default function PlanosPage() {
                       label={Number(plan.features.splits) > 0
                         ? `${plan.features.splits} Splits/mês`
                         : "Split de músicas"}
+                    />
+                    <FeatureRow
+                      ok={Number(plan.features["custom-mix"]) > 0}
+                      label={Number(plan.features["custom-mix"]) > 0
+                        ? `${plan.features["custom-mix"]} Custom Mix/mês`
+                        : "Custom Mix"}
+                      tag={Number(plan.features["custom-mix"]) > 0 ? "NOVO" : undefined}
                     />
                     <FeatureRow
                       ok={plan.slug !== "free" && plan.slug !== "gratuito"}

@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
 
     const mixes = await (prisma as any).customMix.findMany({
       where: { groupId: user.groupId },
-      include: { album: { select: { title: true, artist: true, coverUrl: true, stems: true } } },
+      include: { album: { select: { title: true, artist: true, coverUrl: true } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     if (limit === 0) return NextResponse.json({ error: "UPGRADE_REQUIRED", message: "Custom Mix está disponível nos planos Avançado e Igreja." }, { status: 402 });
     if (used >= limit) return NextResponse.json({ error: "QUOTA_EXCEEDED", message: `Você atingiu o limite de ${limit} Custom Mix este mês.` }, { status: 402 });
 
-    const { name, albumId, config, durationSec } = await req.json();
+    const { name, albumId, config, durationSec, fileKey } = await req.json();
     if (!name || !albumId || !config) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
 
     // Verificar que o album existe
@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
     if (!album) return NextResponse.json({ error: "Multitrack não encontrada" }, { status: 404 });
 
     const mix = await (prisma as any).customMix.create({
-      data: { name, albumId, groupId: user.groupId, userId: user.id, config, durationSec },
-      include: { album: { select: { title: true, artist: true, coverUrl: true, stems: true } } },
+      data: { name, albumId, groupId: user.groupId, userId: user.id, config, durationSec, fileKey: fileKey ?? null },
+      include: { album: { select: { title: true, artist: true, coverUrl: true } } },
     });
 
     return NextResponse.json({ mix });
@@ -115,6 +115,30 @@ export async function DELETE(req: NextRequest) {
     if (!mix) return NextResponse.json({ error: "Mix não encontrado" }, { status: 404 });
 
     await (prisma as any).customMix.delete({ where: { id: mixId } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// PATCH — atualizar fileKey após upload R2
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const user = session?.user as SessionUser | undefined;
+    if (!session || !user?.groupId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+    const { searchParams } = new URL(req.url);
+    const mixId = searchParams.get("id");
+    if (!mixId) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
+
+    const { fileKey } = await req.json();
+    if (!fileKey) return NextResponse.json({ error: "fileKey obrigatório" }, { status: 400 });
+
+    const mix = await (prisma as any).customMix.findFirst({ where: { id: mixId, groupId: user.groupId } });
+    if (!mix) return NextResponse.json({ error: "Mix não encontrado" }, { status: 404 });
+
+    await (prisma as any).customMix.update({ where: { id: mixId }, data: { fileKey } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
