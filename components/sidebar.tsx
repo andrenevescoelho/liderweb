@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Music, Calendar, NotebookPen, CreditCard,
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
-  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2,
+  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -101,6 +101,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN"], tag: "IA" },
         { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["pad.view"] },
         { label: "Split de músicas", href: "/splits", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["split.view"], tag: "NOVO" },
+        { label: "Custom Mix", href: "/custom-mix", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "NOVO" },
       ],
     },
     {
@@ -117,6 +118,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
         { label: "Multitracks Admin", href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Split Admin", href: "/split-admin", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Custom Mix Admin", href: "/custom-mix-admin", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Pads Admin", href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
         { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },

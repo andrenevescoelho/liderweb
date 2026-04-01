@@ -106,14 +106,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 });
     }
 
+    // Buscar BillingPlan correspondente pelo nome
+    const allBillingPlans = await (prisma as any).billingPlan.findMany({ where: { status: "ACTIVE" } });
+    const billingPlan = allBillingPlans.find((bp: any) =>
+      bp.name.toLowerCase() === plan.name.toLowerCase()
+    ) ?? null;
+
     // Criar assinatura
     const subscription = await prisma.subscription.create({
       data: {
         groupId,
         planId,
+        billingPlanId: billingPlan?.id ?? null,
         status: status || "ACTIVE",
         currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 dias
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
       include: {
         group: {
