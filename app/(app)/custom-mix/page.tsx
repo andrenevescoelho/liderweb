@@ -312,6 +312,23 @@ export default function CustomMixPage() {
 
   useEffect(() => { stopPreview(); stopPlayAll(); previewBufsRef.current.clear(); analyserNodes.current = []; vuBarRefs.current = []; }, [selectedAlbum]);
 
+  const addExtraToCart = async () => {
+    try {
+      const prodRes = await fetch("/api/billing/products?type=CUSTOM_MIX_EXTRA");
+      if (!prodRes.ok) { toast.error("Produto não disponível"); return; }
+      const prodData = await prodRes.json();
+      const product = prodData.products?.[0];
+      if (!product) { toast.error("Produto Custom Mix Avulso não encontrado. Configure em Products Admin."); return; }
+      const cartRes = await fetch("/api/billing/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add", productId: product.id, quantity: 1, metadata: {} }),
+      });
+      if (!cartRes.ok) { const e = await cartRes.json(); toast.error(e.error || "Erro ao adicionar ao carrinho"); return; }
+      router.push("/cart");
+    } catch (err: any) { toast.error(err.message); }
+  };
+
   const loadData = async () => {
     try {
       const [mr, ar] = await Promise.all([fetch("/api/custom-mix"), fetch("/api/multitracks?limit=50")]);
@@ -873,7 +890,15 @@ export default function CustomMixPage() {
             <Button onClick={handleBounce} disabled={bouncing || quota.remaining === 0 || stemConfigs.length === 0} className="w-full" size="lg">
               {bouncing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Processando...</> : <><CheckCircle2 className="mr-2 h-4 w-4"/>Criar Mix e Baixar WAV</>}
             </Button>
-            {quota.remaining === 0 && <p className="text-xs text-center text-red-500">Cota mensal esgotada.</p>}
+            {quota.remaining === 0 && (
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Cota mensal esgotada</p>
+                <p className="text-xs text-muted-foreground text-center">Você usou todos os {quota.limit} Custom Mix deste mês.</p>
+                <Button size="sm" variant="outline" onClick={addExtraToCart} className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />Comprar mix avulso — R$ 9,90
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

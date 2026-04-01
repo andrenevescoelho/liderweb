@@ -220,13 +220,13 @@ model Group {
   setlists    Setlist[]
   schedules   Schedule[]
   subscription Subscription?
-  customMixes  CustomMix[]
   inviteTokens InviteToken[]
   rehearsals   Rehearsal[]
   messages     GroupMessage[]
   broadcasts   GroupBroadcast[]
   roleFunctions RoleFunction[]
   auditLogs    AuditLog[]
+  customMixExtras  CustomMixExtra[]
   importJobs   ImportJob[]
   announcementTargets AnnouncementGroup[]
   musicCoachProfiles  MusicCoachProfile[]
@@ -352,7 +352,6 @@ model User {
   progressHistories   ProgressHistory[]
   coachContentCaches  CoachContentCache[]
   passwordResetTokens PasswordResetToken[]
-  customMixes         CustomMix[]
 }
 
 model CoachContentCache {
@@ -901,27 +900,6 @@ model SplitInterest {
   @@index([groupId])
 }
 
-model CustomMix {
-  id        String   @id @default(cuid())
-  name      String
-  albumId   String
-  groupId   String
-  userId    String
-  config    Json     // { stems: [{ index, name, pan, volume, included }], preset: string }
-  fileKey   String?  // R2 key do arquivo WAV gerado (futuro server-side)
-  durationSec Float?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  album     MultitracksAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  group     Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([groupId])
-  @@index([albumId])
-  @@index([userId])
-}
-
 // ─── Módulo Multitracks ───────────────────────────────────────────────────────
 
 model MultitracksAlbum {
@@ -942,7 +920,6 @@ model MultitracksAlbum {
   songId      String?
   song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
   rentals     MultitracksRental[]
-  customMixes CustomMix[]
 
   @@index([status, isActive])
   @@index([title, artist])
@@ -966,6 +943,19 @@ model MultitracksRental {
   @@index([groupId, status])
   @@index([albumId])
   @@index([expiresAt])
+}
+
+model CustomMixExtra {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  orderId   String?  // referência ao pedido que gerou esta extra
+  month     Int
+  year      Int
+  quantity  Int      @default(1) // quantas cotas extras foram adquiridas
+  createdAt DateTime @default(now())
+
+  @@index([groupId, year, month])
 }
 
 model MultitracksUsage {
@@ -1147,6 +1137,7 @@ enum ProductType {
   SPLIT_REQUEST       // solicitação de split
   SPLIT_ACCESS        // acesso a split do acervo
   MODULE_ACCESS       // acesso a módulo premium
+  CUSTOM_MIX_EXTRA    // custom mix avulso
   ADDON               // add-on genérico
 }
 

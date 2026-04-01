@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 
 const PRODUCT_TYPES = [
   { value: "MULTITRACK_RENTAL", label: "Multitrack Avulso" },
+  { value: "CUSTOM_MIX_EXTRA", label: "Custom Mix Avulso" },
   { value: "SPLIT_REQUEST", label: "Split Solicitação" },
   { value: "SPLIT_ACCESS", label: "Split Acervo" },
   { value: "MODULE_ACCESS", label: "Acesso a Módulo" },
