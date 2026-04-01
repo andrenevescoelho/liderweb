@@ -99,7 +99,8 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
         { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN"], tag: "IA" },
-        { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+        { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["pad.view"] },
+        { label: "Split de músicas", href: "/splits", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["split.view"], tag: "NOVO" },
       ],
     },
     {
@@ -115,6 +116,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Analytics Musicais", href: "/dashboard/analytics-musicais", icon: <BarChart2 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "SUPERADMIN"], tag: "NOVO" },
         { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
         { label: "Multitracks Admin", href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Split Admin", href: "/split-admin", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Pads Admin", href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
         { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
