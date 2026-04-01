@@ -224,6 +224,19 @@ export default function CustomMixPage() {
   const previewBufsRef = useRef<Map<number, AudioBuffer>>(new Map());
   const vuRafRef = useRef<number>(0);
 
+  // Play All — preview do mix completo
+  const [playingAll, setPlayingAll] = useState(false);
+  const [playAllProgress, setPlayAllProgress] = useState(0);
+  const [playAllDuration, setPlayAllDuration] = useState(0);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const playAllCtxRef = useRef<AudioContext | null>(null);
+  const playAllSrcsRef = useRef<AudioBufferSourceNode[]>([]);
+  const playAllGainsRef = useRef<GainNode[]>([]);
+  const playAllPansRef = useRef<StereoPannerNode[]>([]);
+  const playAllAnalysersRef = useRef<AnalyserNode[]>([]);
+  const playAllStartRef = useRef(0);
+  const playAllIntervalRef = useRef<any>(null);
+
   // Player mixes salvos
   const [playingMixId, setPlayingMixId] = useState<string | null>(null);
   const [playerMix, setPlayerMix] = useState<CustomMix | null>(null);
@@ -242,7 +255,7 @@ export default function CustomMixPage() {
     return () => { cancelAnimationFrame(vuRafRef.current); };
   }, [status, user]);
 
-  useEffect(() => { stopPreview(); previewBufsRef.current.clear(); analyserNodes.current = []; setVuLevels([]); }, [selectedAlbum]);
+  useEffect(() => { stopPreview(); stopPlayAll(); previewBufsRef.current.clear(); analyserNodes.current = []; setVuLevels([]); }, [selectedAlbum]);
 
   const loadData = async () => {
     try {
@@ -278,15 +291,16 @@ export default function CustomMixPage() {
   const updateStem = (i: number, u: Partial<StemConfig>) => {
     setStemConfigs(prev => {
       const next = prev.map((s, idx) => idx === i ? { ...s, ...u } : s);
-      // Solo exclusivo
       if (u.solo === true) return next.map((s, idx) => idx === i ? s : { ...s, solo: false });
       return next;
     });
-    // Atualizar pan/vol em tempo real se preview ativo
+    // Atualizar em tempo real se preview individual ativo
     if (previewingIdx === i && previewCtxRef.current) {
       if (u.pan !== undefined && previewPanRef.current) previewPanRef.current.pan.value = u.pan;
       if (u.volume !== undefined && previewGainRef.current) previewGainRef.current.gain.value = u.volume;
     }
+    // Atualizar em tempo real se play all ativo
+    if (playingAll) updateStemLive(i, u);
   };
 
   // VU meter loop via rAF
@@ -306,6 +320,117 @@ export default function CustomMixPage() {
     try { previewSrcRef.current?.stop(); } catch {}
     previewSrcRef.current = null; previewGainRef.current = null; previewPanRef.current = null;
     setPreviewingIdx(null); setVuLevels(prev => new Array(prev.length).fill(0));
+  };
+
+  const stopPlayAll = () => {
+    cancelAnimationFrame(vuRafRef.current);
+    clearInterval(playAllIntervalRef.current);
+    playAllSrcsRef.current.forEach(s => { try { s.stop(); } catch {} });
+    playAllSrcsRef.current = []; playAllGainsRef.current = []; playAllPansRef.current = []; playAllAnalysersRef.current = [];
+    setPlayingAll(false); setPlayAllProgress(0);
+    setVuLevels(prev => new Array(prev.length).fill(0));
+  };
+
+  const togglePlayAll = async () => {
+    if (playingAll) { stopPlayAll(); return; }
+    if (!selectedAlbum) return;
+
+    const included = stemConfigs.filter(s => s.included);
+    if (included.length === 0) { toast.error("Nenhuma faixa ativa"); return; }
+
+    stopPreview();
+    setLoadingAll(true);
+
+    if (!playAllCtxRef.current || playAllCtxRef.current.state === "closed") {
+      playAllCtxRef.current = new AudioContext();
+    }
+    const ctx = playAllCtxRef.current;
+    if (ctx.state === "suspended") await ctx.resume();
+
+    try {
+      toast.loading("Carregando faixas...", { id: "playall" });
+
+      // Carregar todos os buffers (com cache)
+      const bufs = await Promise.all(stemConfigs.map(async sc => {
+        let buf = previewBufsRef.current.get(sc.index);
+        if (!buf) {
+          const res = await fetch(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`);
+          if (!res.ok) throw new Error(`Falha ao carregar ${sc.name}`);
+          buf = await ctx.decodeAudioData(await res.arrayBuffer());
+          previewBufsRef.current.set(sc.index, buf);
+        }
+        return { sc, buffer: buf! };
+      }));
+
+      const maxDur = Math.max(...bufs.map(b => b.buffer.duration));
+      setPlayAllDuration(maxDur);
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = masterVol;
+      masterGain.connect(ctx.destination);
+
+      const srcs: AudioBufferSourceNode[] = [];
+      const gains: GainNode[] = [];
+      const pans: StereoPannerNode[] = [];
+      const analysers: AnalyserNode[] = [];
+
+      const startAt = ctx.currentTime + 0.05;
+      playAllStartRef.current = startAt;
+
+      bufs.forEach(({ sc, buffer }) => {
+        const src = ctx.createBufferSource(); src.buffer = buffer;
+        const gain = ctx.createGain(); gain.gain.value = sc.included ? sc.volume : 0;
+        const hasSol = stemConfigs.some(s => s.solo);
+        if (hasSol) gain.gain.value = sc.solo ? sc.volume : 0;
+        const pan = ctx.createStereoPanner(); pan.pan.value = sc.pan;
+        const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        src.connect(gain); gain.connect(pan); pan.connect(analyser); analyser.connect(masterGain);
+        src.start(startAt);
+        srcs.push(src); gains.push(gain); pans.push(pan); analysers.push(analyser);
+      });
+
+      playAllSrcsRef.current = srcs;
+      playAllGainsRef.current = gains;
+      playAllPansRef.current = pans;
+      playAllAnalysersRef.current = analysers;
+
+      setPlayingAll(true);
+      toast.dismiss("playall");
+
+      // VU loop
+      startVuLoop(analysers);
+
+      // Progress
+      playAllIntervalRef.current = setInterval(() => {
+        const elapsed = ctx.currentTime - startAt;
+        setPlayAllProgress(Math.min(1, elapsed / maxDur));
+        if (elapsed >= maxDur) { stopPlayAll(); }
+      }, 100);
+
+      srcs[0].onended = () => {};
+
+    } catch (err: any) {
+      toast.dismiss("playall");
+      toast.error(err.message);
+      setPlayingAll(false);
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
+  // Atualizar gain/pan em tempo real durante play all
+  const updateStemLive = (i: number, u: Partial<StemConfig>) => {
+    if (playAllGainsRef.current[i] && u.volume !== undefined) {
+      const hasSol = stemConfigs.some((s, idx) => idx !== i && s.solo);
+      if (!hasSol) playAllGainsRef.current[i].gain.setTargetAtTime(u.volume, playAllCtxRef.current!.currentTime, 0.02);
+    }
+    if (playAllPansRef.current[i] && u.pan !== undefined) {
+      playAllPansRef.current[i].pan.setTargetAtTime(u.pan, playAllCtxRef.current!.currentTime, 0.02);
+    }
+    if (u.included !== undefined && playAllGainsRef.current[i]) {
+      const vol = u.included ? stemConfigs[i].volume : 0;
+      playAllGainsRef.current[i].gain.setTargetAtTime(vol, playAllCtxRef.current!.currentTime, 0.02);
+    }
   };
 
   const previewStem = async (sc: StemConfig) => {
@@ -519,16 +644,47 @@ export default function CustomMixPage() {
 
             {/* Mixer */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-xs font-medium text-muted-foreground">Mixer</label>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">Volume master</span>
+                  <label className="text-xs font-medium text-muted-foreground">Mixer</label>
+                  {/* Play All button */}
+                  <button
+                    onClick={togglePlayAll}
+                    disabled={loadingAll || stemConfigs.length === 0}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all",
+                      playingAll
+                        ? "border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                        : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20",
+                      (loadingAll || stemConfigs.length === 0) && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {loadingAll
+                      ? <><Loader2 className="h-3 w-3 animate-spin" />Carregando...</>
+                      : playingAll
+                      ? <><Pause className="h-3 w-3" />Parar preview</>
+                      : <><Play className="h-3 w-3" />Preview do mix</>}
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">Master</span>
                   <div className="flex items-center gap-2">
                     <input type="range" min={0} max={1} step={0.01} value={masterVol} onChange={e => setMasterVol(Number(e.target.value))} className="w-20 accent-primary h-1"/>
                     <span className="text-xs font-semibold tabular-nums text-primary w-8">{Math.round(masterVol*100)}%</span>
                   </div>
                 </div>
               </div>
+              {/* Progress bar do Play All */}
+              {playingAll && (
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all duration-100" style={{ width: `${playAllProgress * 100}%` }} />
+                  </div>
+                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                    {Math.floor(playAllProgress * playAllDuration / 60)}:{String(Math.floor((playAllProgress * playAllDuration) % 60)).padStart(2, "0")} / {Math.floor(playAllDuration / 60)}:{String(Math.floor(playAllDuration % 60)).padStart(2, "0")}
+                  </span>
+                </div>
+              )}
 
               {loadingStems ? (
                 <div className="flex items-center gap-2 py-10 justify-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Carregando faixas...</div>
