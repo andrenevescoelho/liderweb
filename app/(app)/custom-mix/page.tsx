@@ -55,19 +55,13 @@ function PanKnob({ value, onChange, color, disabled }: { value: number; onChange
   );
 }
 
-// ── VU Meter ─────────────────────────────────────────────────────────────────
-function VUMeter({ level, color, muted }: { level: number; color: string; muted: boolean }) {
-  const bars = 12;
-  return (
-    <div className="flex gap-px items-end" style={{ height: 32 }}>
-      {Array.from({ length: bars }).map((_, i) => {
-        const threshold = (i + 1) / bars;
-        const lit = !muted && level >= threshold;
-        const barColor = i >= 10 ? "#ef4444" : i >= 8 ? "#f59e0b" : color;
-        return <div key={i} className="rounded-sm flex-1" style={{ height: `${((i+1)/bars)*100}%`, backgroundColor: lit ? barColor : "rgba(255,255,255,0.05)", transition: "background-color 60ms linear" }} />;
-      })}
-    </div>
-  );
+// ── VU Meter barra horizontal — atualizado via DOM ref, zero re-renders ────────
+// Mesmo padrão do player de multitrack
+function updateVuDom(el: HTMLDivElement | null, level: number, color: string, muted: boolean) {
+  if (!el) return;
+  const pct = muted ? 0 : Math.min(100, level * 100);
+  el.style.width = `${pct}%`;
+  el.style.backgroundColor = (!muted && level > 0.8) ? "#ef4444" : (!muted && level > 0.5) ? "#f59e0b" : color;
 }
 
 // ── Fader vertical ────────────────────────────────────────────────────────────
@@ -104,22 +98,31 @@ function Fader({ value, onChange, color, disabled }: { value: number; onChange: 
 }
 
 // ── Canal do mixer ────────────────────────────────────────────────────────────
-function MixerChannel({ sc, idx, color, vuLevel, onChange, onPreview, previewing, hasSolo }: {
-  sc: StemConfig; idx: number; color: string; vuLevel: number;
+function MixerChannel({ sc, idx, color, vuBarRef, onChange, onPreview, previewing, hasSolo }: {
+  sc: StemConfig; idx: number; color: string;
+  vuBarRef: (el: HTMLDivElement | null) => void;
   onChange: (u: Partial<StemConfig>) => void;
   onPreview: () => void; previewing: boolean; hasSolo: boolean;
 }) {
-  const audible = sc.solo || (!hasSolo && sc.included);
   const muted = !sc.included || (hasSolo && !sc.solo);
   return (
-    <div className={cn("flex flex-col items-center rounded-xl border transition-all select-none", "bg-[#0f0f12] border-white/8", previewing && "ring-1 ring-primary/50 border-primary/30", muted && "opacity-50")} style={{ minWidth: 72, borderTop: `2px solid ${color}` }}>
+    <div className={cn("flex flex-col items-center rounded-xl border transition-all select-none", "bg-[#0f0f12] border-white/8", previewing && "ring-1 ring-primary/20 border-primary/20", muted && "opacity-50")} style={{ minWidth: 72, borderTop: `2px solid ${color}` }}>
       {/* Nome */}
       <div className="w-full px-1.5 pt-2 pb-1">
-        <p className="text-[9px] font-bold text-center truncate" style={{ color }} title={sc.name}>{sc.name}</p>
+        <p className="text-[9px] font-bold text-center truncate w-full" style={{ color }} title={sc.name}>{sc.name}</p>
       </div>
-      {/* VU + Fader */}
+      {/* VU barra + Fader */}
       <div className="flex items-end gap-1.5 px-2 py-1">
-        <VUMeter level={previewing ? vuLevel : (audible ? vuLevel : 0)} color={color} muted={muted} />
+        {/* VU horizontal igual ao player de multitrack */}
+        <div className="flex flex-col justify-end gap-0.5" style={{ height: 90, width: 10 }}>
+          <div className="w-full rounded-full bg-white/5 overflow-hidden flex-shrink-0" style={{ height: 4 }}>
+            <div
+              ref={vuBarRef}
+              className="h-full rounded-full"
+              style={{ width: "0%", backgroundColor: color, transition: "width 60ms linear" }}
+            />
+          </div>
+        </div>
         <Fader value={sc.volume} onChange={v => onChange({ volume: v })} color={color} disabled={muted} />
       </div>
       {/* Vol label */}
@@ -191,6 +194,57 @@ function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   return ab;
 }
 
+// ── Cache em memória (por sessão) + Cache API quando disponível (7 dias) ──────
+const AUDIO_CACHE_NAME = "liderweb-stems-v1";
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Cache em memória — sempre funciona, dura a sessão
+const memoryAudioCache = new Map<string, ArrayBuffer>();
+
+async function fetchAudioCached(url: string): Promise<ArrayBuffer> {
+  // 1. Cache em memória (sessão atual)
+  if (memoryAudioCache.has(url)) {
+    return memoryAudioCache.get(url)!.slice(0);
+  }
+
+  // 2. Cache API (persiste entre sessões — só funciona em HTTPS ou localhost)
+  try {
+    if ("caches" in window) {
+      const cache = await caches.open(AUDIO_CACHE_NAME);
+      const cached = await cache.match(url);
+      if (cached) {
+        const cachedAt = cached.headers.get("x-cached-at");
+        const expired = cachedAt && (Date.now() - Number(cachedAt)) > CACHE_TTL_MS;
+        if (!expired) {
+          const buf = await cached.arrayBuffer();
+          memoryAudioCache.set(url, buf.slice(0));
+          return buf;
+        }
+        await cache.delete(url);
+      }
+    }
+  } catch {}
+
+  // 3. Fetch da rede
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Falha ao carregar áudio: ${res.status}`);
+  const buf = await res.arrayBuffer();
+
+  // Salvar no cache em memória
+  memoryAudioCache.set(url, buf.slice(0));
+
+  // Salvar no Cache API (silencioso se não disponível)
+  try {
+    if ("caches" in window) {
+      const cache = await caches.open(AUDIO_CACHE_NAME);
+      await cache.put(url, new Response(buf.slice(0), {
+        headers: { "Content-Type": "audio/wav", "x-cached-at": String(Date.now()) },
+      }));
+    }
+  } catch {}
+
+  return buf;
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function CustomMixPage() {
   const { data: session, status } = useSession() || {};
@@ -211,8 +265,9 @@ export default function CustomMixPage() {
   const [loadingStems, setLoadingStems] = useState(false);
   const [masterVol, setMasterVol] = useState(1);
 
-  // VU meters (atualizados via requestAnimationFrame, sem re-render)
-  const [vuLevels, setVuLevels] = useState<number[]>([]);
+  // VU meters via DOM refs (zero re-renders — sem useState)
+  const vuBarRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const vuColors = useRef<string[]>([]);
   const analyserNodes = useRef<AnalyserNode[]>([]);
 
   // Preview individual
@@ -255,7 +310,7 @@ export default function CustomMixPage() {
     return () => { cancelAnimationFrame(vuRafRef.current); };
   }, [status, user]);
 
-  useEffect(() => { stopPreview(); stopPlayAll(); previewBufsRef.current.clear(); analyserNodes.current = []; setVuLevels([]); }, [selectedAlbum]);
+  useEffect(() => { stopPreview(); stopPlayAll(); previewBufsRef.current.clear(); analyserNodes.current = []; vuBarRefs.current = []; }, [selectedAlbum]);
 
   const loadData = async () => {
     try {
@@ -278,7 +333,6 @@ export default function CustomMixPage() {
       const data = await res.json();
       const stems: { name: string }[] = (data.stems ?? []).filter((s: any) => !s.name.startsWith("."));
       setStemConfigs(stems.map((s, i) => ({ index: i, name: s.name, included: true, pan: 0, volume: 1, solo: false })));
-      setVuLevels(new Array(stems.length).fill(0));
     } catch { toast.error("Erro ao carregar faixas."); setSelectedAlbum(null); }
     finally { setLoadingStems(false); }
   };
@@ -291,25 +345,51 @@ export default function CustomMixPage() {
   const updateStem = (i: number, u: Partial<StemConfig>) => {
     setStemConfigs(prev => {
       const next = prev.map((s, idx) => idx === i ? { ...s, ...u } : s);
-      if (u.solo === true) return next.map((s, idx) => idx === i ? s : { ...s, solo: false });
-      return next;
+      const finalConfigs = u.solo === true ? next.map((s, idx) => idx === i ? s : { ...s, solo: false }) : next;
+      // Atualizar em tempo real se play all ativo (usar novos configs)
+      if (playingAll) {
+        // Se mudou solo, atualizar todos os canais
+        if (u.solo !== undefined) {
+          finalConfigs.forEach((sc, idx) => updateStemLive(idx, {}, finalConfigs));
+        } else {
+          updateStemLive(i, u, finalConfigs);
+        }
+      }
+      return finalConfigs;
     });
-    // Atualizar em tempo real se preview individual ativo
+    // Atualizar preview individual em tempo real
     if (previewingIdx === i && previewCtxRef.current) {
       if (u.pan !== undefined && previewPanRef.current) previewPanRef.current.pan.value = u.pan;
       if (u.volume !== undefined && previewGainRef.current) previewGainRef.current.gain.value = u.volume;
     }
-    // Atualizar em tempo real se play all ativo
-    if (playingAll) updateStemLive(i, u);
   };
 
   // VU meter loop via rAF
-  const startVuLoop = useCallback((analysers: AnalyserNode[]) => {
+  // Ref para stemConfigs para evitar closure stale no rAF loop
+  const stemConfigsRef = useRef<StemConfig[]>([]);
+  useEffect(() => { stemConfigsRef.current = stemConfigs; }, [stemConfigs]);
+
+  const startVuLoop = useCallback((analysers: AnalyserNode[], colorsList?: string[]) => {
     cancelAnimationFrame(vuRafRef.current);
-    const data = new Float32Array(256);
+    const dataArray = new Uint8Array(32); // igual ao player de multitrack
     const tick = () => {
-      const levels = analysers.map(an => { an.getFloatTimeDomainData(data); let rms = 0; for (let i=0;i<data.length;i++) rms += data[i]*data[i]; return Math.min(1, Math.sqrt(rms/data.length) * 4); });
-      setVuLevels(levels);
+      const configs = stemConfigsRef.current;
+      const hasSol = configs.some(s => s.solo);
+      analysers.forEach((an, i) => {
+        if (!an) return;
+        an.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for (let k = 0; k < dataArray.length; k++) {
+          const v = (dataArray[k] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        const sc = configs[i];
+        const muted = sc ? (!sc.included || (hasSol && !sc.solo)) : false;
+        const level = muted ? 0 : Math.min(1, rms * 4);
+        const color = colorsList?.[i] ?? vuColors.current[i] ?? "#8b5cf6";
+        updateVuDom(vuBarRefs.current[i] ?? null, level, color, muted);
+      });
       vuRafRef.current = requestAnimationFrame(tick);
     };
     vuRafRef.current = requestAnimationFrame(tick);
@@ -319,7 +399,9 @@ export default function CustomMixPage() {
     cancelAnimationFrame(vuRafRef.current);
     try { previewSrcRef.current?.stop(); } catch {}
     previewSrcRef.current = null; previewGainRef.current = null; previewPanRef.current = null;
-    setPreviewingIdx(null); setVuLevels(prev => new Array(prev.length).fill(0));
+    setPreviewingIdx(null);
+    // Limpar VU via DOM
+    vuBarRefs.current.forEach((el, i) => updateVuDom(el, 0, vuColors.current[i] ?? "#8b5cf6", true));
   };
 
   const stopPlayAll = () => {
@@ -328,11 +410,17 @@ export default function CustomMixPage() {
     playAllSrcsRef.current.forEach(s => { try { s.stop(); } catch {} });
     playAllSrcsRef.current = []; playAllGainsRef.current = []; playAllPansRef.current = []; playAllAnalysersRef.current = [];
     setPlayingAll(false); setPlayAllProgress(0);
-    setVuLevels(prev => new Array(prev.length).fill(0));
+    vuBarRefs.current.forEach((el, i) => updateVuDom(el, 0, vuColors.current[i] ?? "#8b5cf6", true));
   };
 
   const togglePlayAll = async () => {
     if (playingAll) { stopPlayAll(); return; }
+    // Parar player de mix salvo se estiver tocando
+    if (isPlaying) {
+      sourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+      clearInterval(playerIntervalRef.current);
+      setIsPlaying(false); setPlayingMixId(null); setPlayerMix(null); setProgress(0);
+    }
     if (!selectedAlbum) return;
 
     const included = stemConfigs.filter(s => s.included);
@@ -354,9 +442,8 @@ export default function CustomMixPage() {
       const bufs = await Promise.all(stemConfigs.map(async sc => {
         let buf = previewBufsRef.current.get(sc.index);
         if (!buf) {
-          const res = await fetch(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`);
-          if (!res.ok) throw new Error(`Falha ao carregar ${sc.name}`);
-          buf = await ctx.decodeAudioData(await res.arrayBuffer());
+          const url = `/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`;
+          buf = await ctx.decodeAudioData(await fetchAudioCached(url));
           previewBufsRef.current.set(sc.index, buf);
         }
         return { sc, buffer: buf! };
@@ -383,7 +470,7 @@ export default function CustomMixPage() {
         const hasSol = stemConfigs.some(s => s.solo);
         if (hasSol) gain.gain.value = sc.solo ? sc.volume : 0;
         const pan = ctx.createStereoPanner(); pan.pan.value = sc.pan;
-        const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
         src.connect(gain); gain.connect(pan); pan.connect(analyser); analyser.connect(masterGain);
         src.start(startAt);
         srcs.push(src); gains.push(gain); pans.push(pan); analysers.push(analyser);
@@ -397,8 +484,8 @@ export default function CustomMixPage() {
       setPlayingAll(true);
       toast.dismiss("playall");
 
-      // VU loop
-      startVuLoop(analysers);
+      // VU loop com cores dos canais
+      startVuLoop(analysers, stemConfigs.map((_, i) => CHANNEL_COLORS[i % CHANNEL_COLORS.length]));
 
       // Progress
       playAllIntervalRef.current = setInterval(() => {
@@ -419,17 +506,18 @@ export default function CustomMixPage() {
   };
 
   // Atualizar gain/pan em tempo real durante play all
-  const updateStemLive = (i: number, u: Partial<StemConfig>) => {
-    if (playAllGainsRef.current[i] && u.volume !== undefined) {
-      const hasSol = stemConfigs.some((s, idx) => idx !== i && s.solo);
-      if (!hasSol) playAllGainsRef.current[i].gain.setTargetAtTime(u.volume, playAllCtxRef.current!.currentTime, 0.02);
-    }
+  const updateStemLive = (i: number, u: Partial<StemConfig>, newConfigs?: StemConfig[]) => {
+    if (!playAllCtxRef.current || !playAllGainsRef.current[i]) return;
+    const t = playAllCtxRef.current.currentTime;
+    const configs = newConfigs ?? stemConfigs;
+    const sc = { ...configs[i], ...u };
+    const hasSol = configs.some((s, idx) => idx !== i ? s.solo : (u.solo !== undefined ? u.solo : s.solo));
+    const isSolo = u.solo !== undefined ? u.solo : configs[i]?.solo;
+    const included = u.included !== undefined ? u.included : configs[i]?.included;
+    const effectiveVol = (!included || (hasSol && !isSolo)) ? 0 : (u.volume ?? sc.volume ?? 1);
+    playAllGainsRef.current[i].gain.setTargetAtTime(effectiveVol, t, 0.015);
     if (playAllPansRef.current[i] && u.pan !== undefined) {
-      playAllPansRef.current[i].pan.setTargetAtTime(u.pan, playAllCtxRef.current!.currentTime, 0.02);
-    }
-    if (u.included !== undefined && playAllGainsRef.current[i]) {
-      const vol = u.included ? stemConfigs[i].volume : 0;
-      playAllGainsRef.current[i].gain.setTargetAtTime(vol, playAllCtxRef.current!.currentTime, 0.02);
+      playAllPansRef.current[i].pan.setTargetAtTime(u.pan, t, 0.015);
     }
   };
 
@@ -445,23 +533,23 @@ export default function CustomMixPage() {
       let buf = previewBufsRef.current.get(sc.index);
       if (!buf) {
         toast.loading(`Carregando ${sc.name}...`, { id: "prev" });
-        const res = await fetch(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`);
-        if (!res.ok) throw new Error("Falha");
-        buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        const url = `/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`;
+        const ab = await fetchAudioCached(url);
+        buf = await ctx.decodeAudioData(ab);
         previewBufsRef.current.set(sc.index, buf);
         toast.dismiss("prev");
       }
       const src = ctx.createBufferSource(); src.buffer = buf;
       const gain = ctx.createGain(); gain.gain.value = sc.volume;
       const pan = ctx.createStereoPanner(); pan.pan.value = sc.pan;
-      const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+      const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
       src.connect(gain); gain.connect(pan); pan.connect(analyser); analyser.connect(ctx.destination);
       src.start(0);
       previewSrcRef.current = src; previewGainRef.current = gain; previewPanRef.current = pan;
-      // Criar array de analysers com apenas este canal ativo
+      // Criar array de analysers — só o canal ativo tem sinal
       const analysers = stemConfigs.map((_, i) => i === sc.index ? analyser : ctx.createAnalyser());
-      startVuLoop(analysers);
-      src.onended = () => { cancelAnimationFrame(vuRafRef.current); setPreviewingIdx(null); setVuLevels(prev => new Array(prev.length).fill(0)); };
+      startVuLoop(analysers, CHANNEL_COLORS.map((_, i) => CHANNEL_COLORS[i % CHANNEL_COLORS.length]));
+      src.onended = () => { cancelAnimationFrame(vuRafRef.current); setPreviewingIdx(null); vuBarRefs.current.forEach((el, i) => updateVuDom(el, 0, vuColors.current[i] ?? '#8b5cf6', true)); };
     } catch (err: any) { toast.dismiss("prev"); toast.error(err.message); setPreviewingIdx(null); }
   };
 
@@ -493,55 +581,123 @@ export default function CustomMixPage() {
       });
       const rendered = await offCtx.startRendering(); tmpCtx.close();
       toast.loading("Gerando WAV...", { id: "bounce" });
-      const blob = new Blob([audioBufferToWav(rendered)], { type: "audio/wav" });
+      const wavBuffer = audioBufferToWav(rendered);
+      const blob = new Blob([wavBuffer], { type: "audio/wav" });
+
+      // Salvar no banco primeiro para obter o ID
       const saveRes = await fetch("/api/custom-mix", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: mixName, albumId: selectedAlbum.id, config: { stems: stemConfigs, preset: selectedPreset }, durationSec: maxDur }) });
       const sd = await saveRes.json();
       if (!saveRes.ok) { toast.dismiss("bounce"); toast.error(sd.message || sd.error); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = `${mixName.replace(/[^a-z0-9]/gi,"_")}.wav`; a.click(); URL.revokeObjectURL(url);
+
+      const mixId = sd.mix.id;
+
+      // Upload do WAV para o R2
+      try {
+        toast.loading("Salvando no servidor...", { id: "bounce" });
+        const urlRes = await fetch("/api/custom-mix/upload-url", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mixId }),
+        });
+        if (urlRes.ok) {
+          const { uploadUrl, fileKey } = await urlRes.json();
+          await fetch(uploadUrl, { method: "PUT", body: blob, headers: { "Content-Type": "audio/wav" } });
+          // Atualizar o mix com o fileKey
+          await fetch(`/api/custom-mix?id=${mixId}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileKey }),
+          });
+        }
+      } catch { /* Upload R2 falhou — mix salvo sem fileKey, player vai rebounce */ }
+
+      // Download local
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = dlUrl; a.download = `${mixName.replace(/[^a-z0-9]/gi,"_")}.wav`; a.click(); URL.revokeObjectURL(dlUrl);
       toast.dismiss("bounce"); toast.success("Mix criado e baixado!"); await loadData(); setSelectedAlbum(null);
     } catch (err: any) { toast.dismiss("bounce"); toast.error(err.message); }
     finally { setBouncing(false); }
   };
 
   const playMix = async (mix: CustomMix) => {
+    // Parar play all se estiver rodando
+    if (playingAll) stopPlayAll();
+
     if (playingMixId === mix.id && isPlaying) {
       sourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
-      clearInterval(playerIntervalRef.current); setIsPlaying(false); setPlayingMixId(null); setPlayerMix(null); setProgress(0); return;
+      clearInterval(playerIntervalRef.current);
+      setIsPlaying(false); setPlayingMixId(null); setPlayerMix(null); setProgress(0); return;
     }
-    sourcesRef.current.forEach(s => { try { s.stop(); } catch {} }); clearInterval(playerIntervalRef.current); setIsPlaying(false);
+    // Parar qualquer mix anterior antes de iniciar novo
+    sourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+    clearInterval(playerIntervalRef.current); setIsPlaying(false);
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
     setPlayerMix(mix); setPlayingMixId(mix.id);
-    const included = (mix.config.stems as StemConfig[]).filter(s => s.included);
+
     try {
       toast.loading("Carregando player...", { id: "player" });
-      const bufs = await Promise.all(included.map(async sc => { const res = await fetch(`/api/multitracks/${mix.albumId}/audio/${sc.index}`); return { sc, buffer: await ctx.decodeAudioData(await res.arrayBuffer()) }; }));
-      const maxDur = Math.max(...bufs.map(b => b.buffer.duration)); setDuration(maxDur);
-      const startAt = ctx.currentTime; startTimeRef.current = startAt;
-      const srcs: AudioBufferSourceNode[] = [];
-      bufs.forEach(({ sc, buffer }) => {
+
+      let buffer: AudioBuffer;
+
+      if ((mix as any).fileKey) {
+        // ✅ Mix salvo no R2 — carrega arquivo único com cache
+        const url = `/api/custom-mix/${mix.id}/audio`;
+        const ab = await fetchAudioCached(url);
+        buffer = await ctx.decodeAudioData(ab);
         const src = ctx.createBufferSource(); src.buffer = buffer;
-        const gain = ctx.createGain(); gain.gain.value = sc.volume;
-        const pan = ctx.createStereoPanner(); pan.pan.value = sc.pan;
-        src.connect(gain); gain.connect(pan); pan.connect(ctx.destination); src.start(startAt); srcs.push(src);
-      });
-      sourcesRef.current = srcs; setIsPlaying(true); toast.dismiss("player");
-      playerIntervalRef.current = setInterval(() => {
-        const el = ctx.currentTime - startAt; setProgress(Math.min(1, el/maxDur));
-        if (el >= maxDur) { clearInterval(playerIntervalRef.current); setIsPlaying(false); setProgress(0); }
-      }, 200);
+        src.connect(ctx.destination);
+        const startAt = ctx.currentTime; startTimeRef.current = startAt;
+        setDuration(buffer.duration); src.start(startAt);
+        sourcesRef.current = [src]; setIsPlaying(true); toast.dismiss("player");
+        playerIntervalRef.current = setInterval(() => {
+          const el = ctx.currentTime - startAt; setProgress(Math.min(1, el / buffer.duration));
+          if (el >= buffer.duration) { clearInterval(playerIntervalRef.current); setIsPlaying(false); setProgress(0); }
+        }, 100);
+        src.onended = () => { clearInterval(playerIntervalRef.current); setIsPlaying(false); setProgress(0); };
+      } else {
+        // ⚠️ Mix antigo sem fileKey — rebounce a partir dos stems (fallback)
+        const included = (mix.config.stems as StemConfig[]).filter(s => s.included);
+        const bufs = await Promise.all(included.map(async sc => {
+          const url = `/api/multitracks/${mix.albumId}/audio/${sc.index}`;
+          return { sc, buffer: await ctx.decodeAudioData(await fetchAudioCached(url)) };
+        }));
+        const maxDur = Math.max(...bufs.map(b => b.buffer.duration));
+        setDuration(maxDur);
+        const startAt = ctx.currentTime; startTimeRef.current = startAt;
+        const srcs: AudioBufferSourceNode[] = [];
+        bufs.forEach(({ sc, buf: _buf, ...rest }: any) => {
+          const { buffer: buf, sc: s } = rest.sc ? { buffer: (rest as any).buffer, sc: (rest as any).sc } : { buffer: (rest as any).buffer, sc };
+        });
+        bufs.forEach(({ sc: stemCfg, buffer: stemBuf }) => {
+          const src = ctx.createBufferSource();
+          src.buffer = stemBuf;
+          const gain = ctx.createGain(); gain.gain.value = stemCfg.volume;
+          const pan = ctx.createStereoPanner(); pan.pan.value = stemCfg.pan;
+          src.connect(gain); gain.connect(pan); pan.connect(ctx.destination);
+          src.start(startAt); srcs.push(src);
+        });
+        sourcesRef.current = srcs; setIsPlaying(true); toast.dismiss("player");
+        playerIntervalRef.current = setInterval(() => {
+          const el = ctx.currentTime - startAt; setProgress(Math.min(1, el / maxDur));
+          if (el >= maxDur) { clearInterval(playerIntervalRef.current); setIsPlaying(false); setProgress(0); }
+        }, 200);
+      }
     } catch (err: any) { toast.dismiss("player"); toast.error(err.message); }
   };
 
   const deleteMix = async (id: string) => {
-    if (!confirm("Remover este mix?")) return;
-    await fetch(`/api/custom-mix?id=${id}`, { method: "DELETE" });
-    setMixes(prev => prev.filter(m => m.id !== id));
-    if (playingMixId === id) { sourcesRef.current.forEach(s => { try { s.stop(); } catch {} }); setIsPlaying(false); setPlayingMixId(null); }
-    toast.success("Mix removido");
+    if (!window.confirm("Remover este mix?")) return;
+    try {
+      const res = await fetch(`/api/custom-mix?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || "Erro ao remover"); return; }
+      setMixes(prev => prev.filter(m => m.id !== id));
+      if (playingMixId === id) {
+        sourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+        setIsPlaying(false); setPlayingMixId(null); setPlayerMix(null);
+      }
+      toast.success("Mix removido");
+    } catch (err: any) { toast.error("Erro ao remover: " + err.message); }
   };
 
   const downloadMix = async (mix: CustomMix) => {
@@ -697,7 +853,10 @@ export default function CustomMixPage() {
                       <div key={i} className="flex-1" style={{ minWidth: 72, maxWidth: 96 }}>
                         <MixerChannel
                           sc={sc} idx={i} color={CHANNEL_COLORS[i % CHANNEL_COLORS.length]}
-                          vuLevel={vuLevels[i] ?? 0}
+                          vuBarRef={el => {
+                            vuBarRefs.current[i] = el;
+                            vuColors.current[i] = CHANNEL_COLORS[i % CHANNEL_COLORS.length];
+                          }}
                           onChange={u => updateStem(i, u)}
                           onPreview={() => previewStem(sc)}
                           previewing={previewingIdx === sc.index}
