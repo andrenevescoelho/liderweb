@@ -6,6 +6,7 @@ import Image from "next/image";
 import {
   LayoutDashboard, Users, Music, Calendar, NotebookPen, CreditCard,
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
+  CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
   GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders,
 } from "lucide-react";
@@ -108,6 +109,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       label: "Comunicação",
       items: [
         { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.comunicados > 0 ? String(badges.comunicados) : undefined },
+        { label: "FAQ", href: "/faq", icon: <CircleHelp className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
       ],
     },
     {
