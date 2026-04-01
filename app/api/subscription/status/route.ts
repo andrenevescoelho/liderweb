@@ -81,6 +81,7 @@ export async function GET() {
         split: Number(f.splits ?? 0),
         pads: f.pads !== undefined ? Boolean(f.pads) : legacyAccess.pads,
         admin: f.admin !== undefined ? Boolean(f.admin) : legacyAccess.admin,
+        customMix: Number(f["custom-mix"] ?? f.customMix ?? 0),
       };
     } else {
       moduleAccess = getModuleAccess(subscription.plan.features, effectivePlan.name);
