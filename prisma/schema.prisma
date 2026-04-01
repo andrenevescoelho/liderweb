@@ -1,11 +1,11 @@
 generator client {
-    provider = "prisma-client-js"
-    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -208,27 +208,27 @@ enum ImportJobStatus {
 }
 
 model Group {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  logo        String?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  users       User[]
-  songs       Song[]
-  setlists    Setlist[]
-  schedules   Schedule[]
-  subscription Subscription?
-  inviteTokens InviteToken[]
-  rehearsals   Rehearsal[]
-  messages     GroupMessage[]
-  broadcasts   GroupBroadcast[]
-  roleFunctions RoleFunction[]
-  auditLogs    AuditLog[]
-  customMixExtras  CustomMixExtra[]
-  customMixes      CustomMix[]
-  importJobs   ImportJob[]
+  id                  String               @id @default(cuid())
+  name                String
+  description         String?
+  logo                String?
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  users               User[]
+  songs               Song[]
+  setlists            Setlist[]
+  schedules           Schedule[]
+  subscription        Subscription?
+  inviteTokens        InviteToken[]
+  rehearsals          Rehearsal[]
+  messages            GroupMessage[]
+  broadcasts          GroupBroadcast[]
+  roleFunctions       RoleFunction[]
+  auditLogs           AuditLog[]
+  customMixExtras     CustomMixExtra[]
+  customMixes         CustomMix[]
+  importJobs          ImportJob[]
   announcementTargets AnnouncementGroup[]
   musicCoachProfiles  MusicCoachProfile[]
   practiceSubmissions PracticeSubmission[]
@@ -242,15 +242,15 @@ model Group {
 }
 
 model SubscriptionPlan {
-  id            String   @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String
-  stripePriceId String   @unique
+  stripePriceId String         @unique
   price         Float
-  userLimit     Int      // Limite de usuários (0 = ilimitado)
-  features      String[] @default([])
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  userLimit     Int // Limite de usuários (0 = ilimitado)
+  features      String[]       @default([])
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   subscriptions Subscription[]
 }
 
@@ -322,38 +322,38 @@ model CouponRedemption {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  password      String?
-  role          Role      @default(MEMBER)
-  groupId       String?
-  group         Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  profile       MemberProfile?
-  scheduleRoles ScheduleRole[]
+  id                   String                @id @default(cuid())
+  name                 String
+  email                String                @unique
+  password             String?
+  role                 Role                  @default(MEMBER)
+  groupId              String?
+  group                Group?                @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  profile              MemberProfile?
+  scheduleRoles        ScheduleRole[]
   rehearsalAttendances RehearsalAttendance[]
-  rehearsalTasks RehearsalTask[]
-  sentGroupMessages GroupMessage[] @relation("GroupMessageSender")
-  sentGroupBroadcasts GroupBroadcast[] @relation("GroupBroadcastSender")
-  memberFunctions MemberFunction[] @relation("UserMemberFunctions")
-  scheduleMemberRoles ScaleMemberRole[] @relation("ScaleMemberRolesByMember")
+  rehearsalTasks       RehearsalTask[]
+  sentGroupMessages    GroupMessage[]        @relation("GroupMessageSender")
+  sentGroupBroadcasts  GroupBroadcast[]      @relation("GroupBroadcastSender")
+  memberFunctions      MemberFunction[]      @relation("UserMemberFunctions")
+  scheduleMemberRoles  ScaleMemberRole[]     @relation("ScaleMemberRolesByMember")
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
-  createdCoupons Coupon[] @relation("CouponCreator")
-  redeemedCoupons CouponRedemption[] @relation("CouponRedeemer")
-  accounts      Account[]
-  sessions      Session[]
-  auditLogs     AuditLog[]
-  importJobs    ImportJob[]
-  createdAnnouncements Announcement[] @relation("AnnouncementCreator")
+  createdCoupons       Coupon[]              @relation("CouponCreator")
+  redeemedCoupons      CouponRedemption[]    @relation("CouponRedeemer")
+  accounts             Account[]
+  sessions             Session[]
+  auditLogs            AuditLog[]
+  importJobs           ImportJob[]
+  createdAnnouncements Announcement[]        @relation("AnnouncementCreator")
   announcementReceipts AnnouncementReceipt[]
-  musicCoachProfiles  MusicCoachProfile[]
-  practiceSubmissions PracticeSubmission[]
-  progressHistories   ProgressHistory[]
-  coachContentCaches  CoachContentCache[]
-  passwordResetTokens PasswordResetToken[]
-  customMixes         CustomMix[]
+  musicCoachProfiles   MusicCoachProfile[]
+  practiceSubmissions  PracticeSubmission[]
+  progressHistories    ProgressHistory[]
+  coachContentCaches   CoachContentCache[]
+  passwordResetTokens  PasswordResetToken[]
+  customMixes          CustomMix[]
 }
 
 model CoachContentCache {
@@ -559,48 +559,48 @@ model GroupBroadcast {
 }
 
 model MemberProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String                 @id @default(cuid())
+  userId            String                 @unique
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
-  memberFunction  String?
-  leadershipRole  String?
-  permissions     String[] @default([])
-  instruments     String[] @default([])
-  voiceType       VoiceType?
-  vocalRange      String?
-  comfortableKeys String[] @default([])
-  availability    String[] @default([])
-  phone           String?
-  birthDate       DateTime?
-  city            String?
-  state           String?
-  bio             String? @db.Text
-  avatarUrl       String?
-  profileVoiceType String?
-  vocalRangeKey   String?
-  skillLevel      SkillLevel?
-  availabilityNotes String? @db.Text
-  repertoirePrefs String? @db.Text
-  instagram       String?
-  youtube         String?
+  memberFunction    String?
+  leadershipRole    String?
+  permissions       String[]               @default([])
+  instruments       String[]               @default([])
+  voiceType         VoiceType?
+  vocalRange        String?
+  comfortableKeys   String[]               @default([])
+  availability      String[]               @default([])
+  phone             String?
+  birthDate         DateTime?
+  city              String?
+  state             String?
+  bio               String?                @db.Text
+  avatarUrl         String?
+  profileVoiceType  String?
+  vocalRangeKey     String?
+  skillLevel        SkillLevel?
+  availabilityNotes String?                @db.Text
+  repertoirePrefs   String?                @db.Text
+  instagram         String?
+  youtube           String?
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
-  memberFunctions MemberFunctionLegacy[] @default([])
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  memberFunctions   MemberFunctionLegacy[] @default([])
+  active            Boolean                @default(true)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
 }
 
 model RoleFunction {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  groupId     String?
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  members     MemberFunction[] @relation("RoleFunctionMembers")
-  scheduleAssignments ScaleMemberRole[] @relation("ScaleMemberRolesByFunction")
+  id                   String                @id @default(cuid())
+  name                 String
+  description          String?
+  groupId              String?
+  group                Group?                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  members              MemberFunction[]      @relation("RoleFunctionMembers")
+  scheduleAssignments  ScaleMemberRole[]     @relation("ScaleMemberRolesByFunction")
   rehearsalAssignments RehearsalMemberRole[] @relation("RehearsalMemberRolesByFunction")
 
   @@unique([groupId, name])
@@ -620,58 +620,58 @@ model MemberFunction {
 }
 
 model Song {
-  id               String             @id @default(cuid())
-  title            String
-  artist           String?
-  bpm              Int?
-  originalKey      String             @default("C")
-  timeSignature    String             @default("4/4")
-  tags             String[]           @default([])
-  lyrics           String?            @db.Text
-  chordPro         String?            @db.Text
-  chordUrl         String?            @db.Text
-  audioUrl         String?
-  youtubeUrl       String?
-  sourceType       SongSourceType?
-  analysisStatus   SongAnalysisStatus @default(PENDING)
-  analysisError    String?            @db.Text
-  bpmDetected      Int?
-  keyDetected      String?
-  modeDetected     String?
-  confidenceBpm    Float?
-  confidenceKey    Float?
-  bpmUserOverride  Int?
-  keyUserOverride  String?
-  groupId          String?
-  group            Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id                String             @id @default(cuid())
+  title             String
+  artist            String?
+  bpm               Int?
+  originalKey       String             @default("C")
+  timeSignature     String             @default("4/4")
+  tags              String[]           @default([])
+  lyrics            String?            @db.Text
+  chordPro          String?            @db.Text
+  chordUrl          String?            @db.Text
+  audioUrl          String?
+  youtubeUrl        String?
+  sourceType        SongSourceType?
+  analysisStatus    SongAnalysisStatus @default(PENDING)
+  analysisError     String?            @db.Text
+  bpmDetected       Int?
+  keyDetected       String?
+  modeDetected      String?
+  confidenceBpm     Float?
+  confidenceKey     Float?
+  bpmUserOverride   Int?
+  keyUserOverride   String?
+  groupId           String?
+  group             Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   multitracksAlbums MultitracksAlbum[]
-  padBoards        PadBoard[]
-  setlistItems     SetlistItem[]
-  attachments      Attachment[]
-  rehearsalSongs   RehearsalSong[]
+  padBoards         PadBoard[]
+  setlistItems      SetlistItem[]
+  attachments       Attachment[]
+  rehearsalSongs    RehearsalSong[]
 }
 
 model Attachment {
-  id              String   @id @default(cuid())
-  songId          String
-  song            Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
-  fileName        String
-  fileType        String
+  id               String   @id @default(cuid())
+  songId           String
+  song             Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  fileName         String
+  fileType         String
   cloudStoragePath String
-  isPublic        Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  isPublic         Boolean  @default(false)
+  createdAt        DateTime @default(now())
 }
 
 model Setlist {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   name      String
   date      DateTime
   groupId   String?
-  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  group     Group?        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
   items     SetlistItem[]
   schedules Schedule[]
 }
@@ -687,15 +687,15 @@ model SetlistItem {
 }
 
 model Schedule {
-  id        String   @id @default(cuid())
-  date      DateTime
-  setlistId String?
-  setlist   Setlist? @relation(fields: [setlistId], references: [id], onDelete: SetNull)
-  groupId   String?
-  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  roles     ScheduleRole[]
+  id          String            @id @default(cuid())
+  date        DateTime
+  setlistId   String?
+  setlist     Setlist?          @relation(fields: [setlistId], references: [id], onDelete: SetNull)
+  groupId     String?
+  group       Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  roles       ScheduleRole[]
   memberRoles ScaleMemberRole[] @relation("ScaleMemberRolesBySchedule")
 }
 
@@ -734,29 +734,29 @@ model InviteToken {
   email     String
   groupId   String
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  invitedBy String   // ID do usuário que convidou
+  invitedBy String // ID do usuário que convidou
   used      Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
 
 model Rehearsal {
-  id          String   @id @default(cuid())
-  groupId     String?
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  dateTime    DateTime
-  location    String?
-  notes       String?
-  type        RehearsalType   @default(GENERAL)
-  status      RehearsalStatus @default(DRAFT)
-  estimatedMinutes Int?
-  reminder24hEnabled Boolean @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  songs       RehearsalSong[]
-  attendance  RehearsalAttendance[]
-  checklist   RehearsalChecklistItem[]
-  memberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByRehearsal")
+  id                 String                   @id @default(cuid())
+  groupId            String?
+  group              Group?                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  dateTime           DateTime
+  location           String?
+  notes              String?
+  type               RehearsalType            @default(GENERAL)
+  status             RehearsalStatus          @default(DRAFT)
+  estimatedMinutes   Int?
+  reminder24hEnabled Boolean                  @default(true)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  songs              RehearsalSong[]
+  attendance         RehearsalAttendance[]
+  checklist          RehearsalChecklistItem[]
+  memberRoles        RehearsalMemberRole[]    @relation("RehearsalMemberRolesByRehearsal")
 
   @@index([groupId, dateTime])
 }
@@ -779,11 +779,11 @@ model RehearsalMemberRole {
 }
 
 model RehearsalSong {
-  id          String   @id @default(cuid())
+  id          String              @id @default(cuid())
   rehearsalId String
-  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  rehearsal   Rehearsal           @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
   songId      String?
-  song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
+  song        Song?               @relation(fields: [songId], references: [id], onDelete: SetNull)
   title       String
   artist      String?
   order       Int
@@ -793,66 +793,65 @@ model RehearsalSong {
   notes       String?
   audioUrl    String?
   youtubeUrl  String?
-  tags        String[] @default([])
+  tags        String[]            @default([])
   status      RehearsalSongStatus @default(REHEARSAL_ONLY)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
   tasks       RehearsalTask[]
 
   @@index([rehearsalId, order])
 }
 
 model RehearsalAttendance {
-  id          String   @id @default(cuid())
-  rehearsalId String
-  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
-  memberId    String
-  member      User     @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  status      RehearsalAttendanceStatus @default(PENDING)
+  id            String                    @id @default(cuid())
+  rehearsalId   String
+  rehearsal     Rehearsal                 @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        User                      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  status        RehearsalAttendanceStatus @default(PENDING)
   justification String?
-  updatedAt   DateTime @updatedAt
-  createdAt   DateTime @default(now())
+  updatedAt     DateTime                  @updatedAt
+  createdAt     DateTime                  @default(now())
 
   @@unique([rehearsalId, memberId])
 }
 
 model RehearsalChecklistItem {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   rehearsalId String
   rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
   label       String
-  done        Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  done        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model RehearsalTask {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   rehearsalSongId String
   rehearsalSong   RehearsalSong @relation(fields: [rehearsalSongId], references: [id], onDelete: Cascade)
   memberId        String
-  member          User     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member          User          @relation(fields: [memberId], references: [id], onDelete: Cascade)
   notes           String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@unique([rehearsalSongId, memberId])
 }
 
-
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String? @db.Text
-  access_token       String? @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String? @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -915,14 +914,14 @@ model MultitracksAlbum {
   description String?                @db.Text
   status      MultitracksAlbumStatus @default(PENDING)
   markers     Json                   @default("[]")
-  stems       Json                   // Array de { name: string, driveUrl: string, r2Key: string | null }
+  stems       Json // Array de { name: string, driveUrl: string, r2Key: string | null }
   isActive    Boolean                @default(true)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   songId      String?
-  song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
+  song        Song?                  @relation(fields: [songId], references: [id], onDelete: SetNull)
   rentals     MultitracksRental[]
-  customMixes  CustomMix[]
+  customMixes CustomMix[]
 
   @@index([status, isActive])
   @@index([title, artist])
@@ -934,8 +933,8 @@ model MultitracksRental {
   group     Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
   albumId   String
   album     MultitracksAlbum        @relation(fields: [albumId], references: [id], onDelete: Restrict)
-  rentedBy  String                  // userId de quem alugou
-  r2Folder  String                  // pasta no R2: multitracks/{groupId}/{albumId}
+  rentedBy  String // userId de quem alugou
+  r2Folder  String // pasta no R2: multitracks/{groupId}/{albumId}
   status    MultitracksRentalStatus @default(ACTIVE)
   rentedAt  DateTime                @default(now())
   expiresAt DateTime
@@ -952,7 +951,7 @@ model CustomMixExtra {
   id        String   @id @default(cuid())
   groupId   String
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  orderId   String?  // referência ao pedido que gerou esta extra
+  orderId   String? // referência ao pedido que gerou esta extra
   month     Int
   year      Int
   quantity  Int      @default(1) // quantas cotas extras foram adquiridas
@@ -965,7 +964,7 @@ model MultitracksUsage {
   id        String   @id @default(cuid())
   groupId   String
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  month     Int      // 1-12
+  month     Int // 1-12
   year      Int
   count     Int      @default(0)
   createdAt DateTime @default(now())
@@ -1027,29 +1026,29 @@ model Pad {
 
 // Plano dinâmico gerenciado pelo superadmin via painel
 model BillingPlan {
-  id            String            @id @default(cuid())
-  slug          String            @unique  // ex: "basico", "pro", "enterprise"
-  name          String                     // ex: "Básico"
-  description   String?
-  tagline       String?                    // ex: "Para ministérios pequenos"
-  price         Float                      // preço base em BRL
-  period        BillingPeriod     @default(MONTHLY)
-  trialDays     Int               @default(7)
-  status        BillingPlanStatus @default(ACTIVE)
-  isPopular     Boolean           @default(false)  // destaque visual
-  badge         String?                    // ex: "Mais Popular"
-  sortOrder     Int               @default(0)
-  userLimit     Int               @default(0)       // 0 = ilimitado
+  id              String                  @id @default(cuid())
+  slug            String                  @unique // ex: "basico", "pro", "enterprise"
+  name            String // ex: "Básico"
+  description     String?
+  tagline         String? // ex: "Para ministérios pequenos"
+  price           Float // preço base em BRL
+  period          BillingPeriod           @default(MONTHLY)
+  trialDays       Int                     @default(7)
+  status          BillingPlanStatus       @default(ACTIVE)
+  isPopular       Boolean                 @default(false) // destaque visual
+  badge           String? // ex: "Mais Popular"
+  sortOrder       Int                     @default(0)
+  userLimit       Int                     @default(0) // 0 = ilimitado
   // Feature flags como JSON — ex: {"multitracks": 3, "professor": true, "splits": 0}
-  features      Json              @default("{}")
+  features        Json                    @default("{}")
   // Mapeamentos para gateways externos
   gatewayMappings BillingGatewayMapping[]
   // Assinaturas vinculadas a este plano
-  subscriptions   Subscription[]  @relation("BillingPlanSubscriptions")
+  subscriptions   Subscription[]          @relation("BillingPlanSubscriptions")
   // Transações vinculadas a este plano
-  transactions    PaymentTransaction[] @relation("PlanTransactions")
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  transactions    PaymentTransaction[]    @relation("PlanTransactions")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
   @@index([status, sortOrder])
   @@index([slug])
@@ -1058,20 +1057,19 @@ model BillingPlan {
 // Vínculo entre um plano e um ID externo num gateway
 // Ex: plano "basico" no Stripe tem price_id "price_1TFeL1..."
 model BillingGatewayMapping {
-  id            String         @id @default(cuid())
-  planId        String
-  plan          BillingPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
-  gateway       BillingGateway
-  externalId    String         // price_id no Stripe, external_id no Asaas, etc.
-  externalData  Json?          // dados extras do gateway (produto, ambiente, etc.)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  planId       String
+  plan         BillingPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  gateway      BillingGateway
+  externalId   String // price_id no Stripe, external_id no Asaas, etc.
+  externalData Json? // dados extras do gateway (produto, ambiente, etc.)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   @@unique([planId, gateway])
   @@index([gateway, isActive])
 }
-
 
 // ─── Billing v2 — Fase 2 ─────────────────────────────────────────────────────
 
@@ -1091,24 +1089,24 @@ enum WebhookEventStatus {
 
 // Histórico de transações de pagamento
 model PaymentTransaction {
-  id                   String                   @id @default(cuid())
-  groupId              String
-  group                Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  billingPlanId        String?
-  billingPlan          BillingPlan?             @relation("PlanTransactions", fields: [billingPlanId], references: [id])
-  gateway              BillingGateway
-  externalId           String                   // ID da invoice/charge no gateway
-  externalSubscriptionId String?                // ID da subscription no gateway
-  status               PaymentTransactionStatus
-  amount               Float                    // valor em BRL
-  currency             String                   @default("BRL")
-  description          String?
-  paidAt               DateTime?
-  failedAt             DateTime?
-  failureReason        String?
-  gatewayData          Json?                    // dados brutos do gateway
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
+  id                     String                   @id @default(cuid())
+  groupId                String
+  group                  Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  billingPlanId          String?
+  billingPlan            BillingPlan?             @relation("PlanTransactions", fields: [billingPlanId], references: [id])
+  gateway                BillingGateway
+  externalId             String // ID da invoice/charge no gateway
+  externalSubscriptionId String? // ID da subscription no gateway
+  status                 PaymentTransactionStatus
+  amount                 Float // valor em BRL
+  currency               String                   @default("BRL")
+  description            String?
+  paidAt                 DateTime?
+  failedAt               DateTime?
+  failureReason          String?
+  gatewayData            Json? // dados brutos do gateway
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   @@unique([gateway, externalId])
   @@index([groupId, status])
@@ -1117,31 +1115,30 @@ model PaymentTransaction {
 
 // Log de eventos de webhook recebidos — idempotência e auditoria
 model WebhookEvent {
-  id            String             @id @default(cuid())
-  gateway       BillingGateway
-  externalId    String             // event ID do gateway
-  eventType     String             // ex: "checkout.session.completed"
-  status        WebhookEventStatus @default(RECEIVED)
-  payload       Json               // payload completo do evento
-  errorMessage  String?
-  processedAt   DateTime?
-  createdAt     DateTime           @default(now())
+  id           String             @id @default(cuid())
+  gateway      BillingGateway
+  externalId   String // event ID do gateway
+  eventType    String // ex: "checkout.session.completed"
+  status       WebhookEventStatus @default(RECEIVED)
+  payload      Json // payload completo do evento
+  errorMessage String?
+  processedAt  DateTime?
+  createdAt    DateTime           @default(now())
 
-  @@unique([gateway, externalId])   // garante idempotência
+  @@unique([gateway, externalId]) // garante idempotência
   @@index([gateway, eventType])
   @@index([status])
 }
 
-
 // ─── Billing v2 — Fase 3 ─────────────────────────────────────────────────────
 
 enum ProductType {
-  MULTITRACK_RENTAL   // aluguel avulso de multitrack
-  SPLIT_REQUEST       // solicitação de split
-  SPLIT_ACCESS        // acesso a split do acervo
-  MODULE_ACCESS       // acesso a módulo premium
-  CUSTOM_MIX_EXTRA    // custom mix avulso
-  ADDON               // add-on genérico
+  MULTITRACK_RENTAL // aluguel avulso de multitrack
+  SPLIT_REQUEST // solicitação de split
+  SPLIT_ACCESS // acesso a split do acervo
+  MODULE_ACCESS // acesso a módulo premium
+  CUSTOM_MIX_EXTRA // custom mix avulso
+  ADDON // add-on genérico
 }
 
 enum ProductStatus {
@@ -1167,24 +1164,24 @@ enum OrderStatus {
 
 // Produto avulso
 model BillingProduct {
-  id           String        @id @default(cuid())
-  slug         String        @unique
-  name         String
-  description  String?
-  type         ProductType
-  status       ProductStatus @default(ACTIVE)
-  price        Float
-  currency     String        @default("BRL")
-  isRecurring  Boolean       @default(false)
-  sortOrder    Int           @default(0)
-  imageUrl     String?
-  metadata     Json          @default("{}")
+  id              String                         @id @default(cuid())
+  slug            String                         @unique
+  name            String
+  description     String?
+  type            ProductType
+  status          ProductStatus                  @default(ACTIVE)
+  price           Float
+  currency        String                         @default("BRL")
+  isRecurring     Boolean                        @default(false)
+  sortOrder       Int                            @default(0)
+  imageUrl        String?
+  metadata        Json                           @default("{}")
   // Mapeamentos de gateway para este produto
   gatewayMappings BillingProductGatewayMapping[]
-  cartItems    CartItem[]
-  orderItems   OrderItem[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
 
   @@index([status, type])
   @@index([slug])
@@ -1192,13 +1189,13 @@ model BillingProduct {
 
 // Mapeamento de produto avulso para gateway
 model BillingProductGatewayMapping {
-  id          String         @id @default(cuid())
-  productId   String
-  product     BillingProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  gateway     BillingGateway
-  externalId  String
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
+  id         String         @id @default(cuid())
+  productId  String
+  product    BillingProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  gateway    BillingGateway
+  externalId String
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
 
   @@unique([productId, gateway])
 }
@@ -1235,18 +1232,18 @@ model CartItem {
 
 // Pedido
 model Order {
-  id          String      @id @default(cuid())
+  id          String          @id @default(cuid())
   groupId     String
-  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group       Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
   userId      String
-  status      OrderStatus @default(PENDING)
+  status      OrderStatus     @default(PENDING)
   totalAmount Float
-  currency    String      @default("BRL")
+  currency    String          @default("BRL")
   gateway     BillingGateway?
-  externalId  String?     // session/charge ID no gateway
+  externalId  String? // session/charge ID no gateway
   items       OrderItem[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([groupId, status])
   @@index([externalId])
@@ -1254,17 +1251,16 @@ model Order {
 
 // Item do pedido
 model OrderItem {
-  id          String         @id @default(cuid())
-  orderId     String
-  order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId   String
-  product     BillingProduct @relation(fields: [productId], references: [id])
-  quantity    Int            @default(1)
-  unitPrice   Float
-  metadata    Json           @default("{}")
-  createdAt   DateTime       @default(now())
+  id        String         @id @default(cuid())
+  orderId   String
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   BillingProduct @relation(fields: [productId], references: [id])
+  quantity  Int            @default(1)
+  unitPrice Float
+  metadata  Json           @default("{}")
+  createdAt DateTime       @default(now())
 }
-
 
 model CustomMix {
   id          String   @id @default(cuid())
@@ -1278,11 +1274,39 @@ model CustomMix {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  album     MultitracksAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  group     Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  album MultitracksAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  group Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([groupId])
   @@index([albumId])
   @@index([userId])
+}
+
+model FaqCategory {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  order     Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  items     FaqItem[]
+}
+
+model FaqItem {
+  id          String      @id @default(cuid())
+  categoryId  String
+  category    FaqCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  question    String
+  answer      String
+  tags        String[]    @default([])
+  order       Int         @default(0)
+  isPublished Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([categoryId, question])
+  @@index([categoryId, order])
+  @@index([isPublished])
 }
