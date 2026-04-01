@@ -227,6 +227,7 @@ model Group {
   roleFunctions RoleFunction[]
   auditLogs    AuditLog[]
   customMixExtras  CustomMixExtra[]
+  customMixes      CustomMix[]
   importJobs   ImportJob[]
   announcementTargets AnnouncementGroup[]
   musicCoachProfiles  MusicCoachProfile[]
@@ -352,6 +353,7 @@ model User {
   progressHistories   ProgressHistory[]
   coachContentCaches  CoachContentCache[]
   passwordResetTokens PasswordResetToken[]
+  customMixes         CustomMix[]
 }
 
 model CoachContentCache {
@@ -920,6 +922,7 @@ model MultitracksAlbum {
   songId      String?
   song        Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
   rentals     MultitracksRental[]
+  customMixes  CustomMix[]
 
   @@index([status, isActive])
   @@index([title, artist])
@@ -1262,3 +1265,24 @@ model OrderItem {
   createdAt   DateTime       @default(now())
 }
 
+
+model CustomMix {
+  id          String   @id @default(cuid())
+  name        String
+  albumId     String
+  groupId     String
+  userId      String
+  config      Json
+  fileKey     String?
+  durationSec Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  album     MultitracksAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  group     Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([albumId])
+  @@index([userId])
+}
