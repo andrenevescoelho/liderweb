@@ -8,7 +8,7 @@ import {
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
   CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
-  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy,
+  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy, Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -110,7 +110,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       items: [
         { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.comunicados > 0 ? String(badges.comunicados) : undefined },
         { label: "FAQ", href: "/faq", icon: <CircleHelp className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
-        { label: "Suporte", href: "/dashboard/suporte", icon: <LifeBuoy className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
+        { label: "Suporte", href: "/dashboard/suporte", icon: <LifeBuoy className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
       ],
     },
     {
@@ -130,6 +130,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Assinaturas", href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Cupons", href: "/cupons", icon: <TicketPercent className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Planos Billing", href: "/billing-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], tag: "NOVO" },
+        { label: "Atendimento", href: "/support-admin", icon: <Headphones className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
         { label: "Produtos Avulsos", href: "/products-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
       ],
     },

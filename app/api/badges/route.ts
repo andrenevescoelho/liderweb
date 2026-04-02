@@ -17,7 +17,15 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const user = session.user as SessionUser;
-    if (!user.id || !user.groupId) return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0 });
+    // SUPERADMIN — retornar tickets abertos
+    if (user.role === "SUPERADMIN") {
+      const openTickets = await (prisma as any).supportTicket.count({
+        where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+      }).catch(() => 0);
+      return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: openTickets });
+    }
+
+    if (!user.id || !user.groupId) return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: 0 });
 
     const now = new Date();
     const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -97,9 +105,9 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ escalas, comunicados, chat, ensaios, aniversariantes, musicas });
+    return NextResponse.json({ escalas, comunicados, chat, ensaios, aniversariantes, musicas, tickets: 0 });
   } catch (err) {
     console.error("[badges] error:", err);
-    return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0 });
+    return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: 0 });
   }
 }

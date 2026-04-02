@@ -9,9 +9,10 @@ interface Badges {
   ensaios: number;
   aniversariantes: number;
   musicas: number;
+  tickets: number;
 }
 
-const EMPTY: Badges = { escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0 };
+const EMPTY: Badges = { escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: 0 };
 
 const SECTIONS = ["chat", "comunicados", "musicas", "ensaios", "aniversariantes"] as const;
 
