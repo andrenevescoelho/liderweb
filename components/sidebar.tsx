@@ -8,7 +8,7 @@ import {
   Megaphone, MessageCircle, Cake, Building2, Shield, ChevronLeft,
   CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
-  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders,
+  GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SessionUser } from "@/lib/types";
@@ -110,6 +110,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       items: [
         { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.comunicados > 0 ? String(badges.comunicados) : undefined },
         { label: "FAQ", href: "/faq", icon: <CircleHelp className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
+        { label: "Suporte", href: "/dashboard/suporte", icon: <LifeBuoy className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
       ],
     },
     {
