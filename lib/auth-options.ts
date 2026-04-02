@@ -324,6 +324,10 @@ export const authOptions: NextAuthOptions = {
         token.hasActiveSubscription = (user as any).hasActiveSubscription;
         token.subscriptionStatus = (user as any).subscriptionStatus;
         token.musicCoachEnabled = (user as any).musicCoachEnabled ?? false;
+        // Registrar último login
+        if (user.id) {
+          prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
+        }
       }
 
       if (token.id && typeof token.id === "string") {

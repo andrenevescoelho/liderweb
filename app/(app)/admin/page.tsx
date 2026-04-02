@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Modal } from "@/components/ui/modal";
 import {
   Building2,
@@ -58,6 +59,7 @@ interface User {
   email: string;
   role: string;
   groupId: string | null;
+  lastLoginAt: string | null;
   group: {
     id: string;
     name: string;
@@ -67,6 +69,28 @@ interface User {
     instruments: string[];
     active: boolean;
   } | null;
+  sessions: { expires: string }[];
+}
+
+function isUserOnline(user: User): boolean {
+  if (!user.lastLoginAt) return false;
+  const diffMs = Date.now() - new Date(user.lastLoginAt).getTime();
+  return diffMs < 15 * 60 * 1000; // online se logou nos últimos 15min
+}
+
+function formatLastLogin(date: string | null): string {
+  if (!date) return "Nunca";
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffH = Math.floor(diffMin / 60);
+  const diffD = Math.floor(diffH / 24);
+  if (diffMin < 1) return "Agora";
+  if (diffMin < 60) return `${diffMin}min atrás`;
+  if (diffH < 24) return `${diffH}h atrás`;
+  if (diffD < 7) return `${diffD}d atrás`;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
 type TabType = "groups" | "users" | "subscriptions";
@@ -707,6 +731,7 @@ export default function AdminPage() {
                         <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Usuário</th>
                         <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Função</th>
                         <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Grupo</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Último Login</th>
                         <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ações</th>
                       </tr>
                     </thead>
@@ -715,10 +740,16 @@ export default function AdminPage() {
                         <tr key={user.id} className="hover:bg-muted/20 transition-colors">
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <span className="text-sm font-bold text-primary">
-                                  {user.name.charAt(0).toUpperCase()}
-                                </span>
+                              <div className="relative flex-shrink-0">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <span className="text-sm font-bold text-primary">
+                                    {user.name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className={cn(
+                                  "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card",
+                                  isUserOnline(user) ? "bg-emerald-500 shadow-[0_0_4px_rgba(34,197,94,0.8)]" : "bg-slate-400"
+                                )} title={isUserOnline(user) ? "Online" : "Offline"} />
                               </div>
                               <div>
                                 <p className="font-medium text-sm">{user.name}</p>
@@ -736,6 +767,21 @@ export default function AdminPage() {
                             ) : (
                               <span className="text-xs text-muted-foreground italic">Sem grupo</span>
                             )}
+                          </td>
+                          <td className="py-3 px-4 hidden md:table-cell">
+                            <div className="flex items-center gap-1.5">
+                              {isUserOnline(user) ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span className="text-[11px] font-semibold text-emerald-500">Online</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/10 border border-slate-500/20 px-2 py-0.5">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                                  <span className="text-[11px] text-muted-foreground">{formatLastLogin(user.lastLoginAt)}</span>
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex gap-1 justify-end">
