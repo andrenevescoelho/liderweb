@@ -6,16 +6,17 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 
-const SIMILARITY_THRESHOLD = 0.3;
+const SIMILARITY_THRESHOLD = 0.4;
 
 // Busca no FAQ por similaridade de texto e tags
 async function searchFAQ(question: string): Promise<{ item: any; score: number } | null> {
+  const STOPWORDS = new Set(["com", "que", "minha", "meu", "para", "uma", "como", "por", "dos", "das", "nos", "nas", "esta", "isso", "nao", "nao", "sim", "ter", "tem", "ser", "foi", "meus", "suas", "seu", "sua", "este", "essa", "esses", "essas", "muito", "mais", "mas", "quando", "onde", "qual", "quais", "quem", "cujo", "ainda", "pois", "esta", "estou", "estao", "problema", "problemas", "ajuda"]);
   const words = question
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, "")
     .split(/\s+/)
-    .filter(w => w.length > 2);
+    .filter(w => w.length > 2 && !STOPWORDS.has(w));
 
   if (words.length === 0) return null;
 
@@ -86,19 +87,38 @@ async function callLLM(question: string, faqContext?: string): Promise<string | 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const prompt = `Você é o assistente de suporte da plataforma Liderweb, um sistema SaaS para ministérios de louvor cristão.
+  const systemContext = `Você é o assistente de suporte da plataforma Liderweb.
 
-A plataforma inclui: Escalas, Músicas, Ensaios, Multitracks, Custom Mix, Pads & Loops, Professor IA, Chat, Comunicados e Analytics.
+SOBRE A PLATAFORMA:
+- Liderweb é um SaaS para ministérios de louvor cristão
+- Módulos: Escalas, Músicas/Cifras, Ensaios, Multitracks, Custom Mix, Pads & Loops, Professor IA, Chat do Grupo, Comunicados, Analytics
+- Planos: Gratuito, Básico (R$49,90), Intermediário (R$89,90), Avançado (R$119,90), Igreja (R$199,90)
+- Multitracks: aluguel por 30 dias, cota mensal por plano
+- Custom Mix: mixagem personalizada de stems, exporta em WAV
+- Professor IA: feedback de prática musical via Gemini
+- Suporte: e-mail suporte@multitrackgospel.com
 
-${faqContext ? `CONTEXTO DO FAQ (use como base principal):\n${faqContext}\n\n` : ""}
+SOBRE FATURAMENTO/ASSINATURA:
+- Pagamentos processados via Stripe
+- Para problemas com cobrança, cancelamento ou reembolso → orientar a contatar suporte@multitrackgospel.com
+- Para trocar de plano → acessar "Meu Plano" no menu
+- Para cancelar → acessar "Meu Plano" e clicar em cancelar
 
-REGRAS:
-- Responda APENAS sobre a plataforma Liderweb
-- Se não souber, diga honestamente e sugira abrir um ticket
-- Seja objetivo, amigável e em português brasileiro
-- Máximo 3 parágrafos
+${faqContext ? `INFORMAÇÕES RELEVANTES DO FAQ:\n${faqContext}\n` : ""}
 
-PERGUNTA DO USUÁRIO: ${question}`;
+REGRAS IMPORTANTES:
+1. Responda APENAS sobre o Liderweb — nunca sobre outros sistemas
+2. Se a pergunta for sobre cobrança/fatura/pagamento → SEMPRE direcionar para suporte@multitrackgospel.com
+3. Se não tiver certeza → admita e sugira abrir um ticket
+4. Seja direto, objetivo e amigável em português brasileiro
+5. Máximo 2 parágrafos curtos
+6. NUNCA invente funcionalidades que não existem`;
+
+  const prompt = `${systemContext}
+
+PERGUNTA: ${question}
+
+RESPOSTA:`;
 
   try {
     const res = await fetch(
@@ -106,12 +126,21 @@ PERGUNTA DO USUÁRIO: ${question}`;
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,  // baixo para respostas mais precisas
+            maxOutputTokens: 400,
+          },
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          ],
+        }),
       }
     );
     if (!res.ok) return null;
     const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
   } catch {
     return null;
   }
@@ -164,14 +193,15 @@ export async function POST(req: NextRequest) {
       if (llmAnswer) {
         answer = llmAnswer;
         source = "llm";
+        suggestions = getSuggestions("", message);
       } else {
-        answer = "Não encontrei uma resposta específica para essa dúvida no nosso FAQ. Você pode abrir um chamado de suporte e nossa equipe responderá em breve.";
+        answer = "Não encontrei uma resposta específica para essa dúvida. Nossa equipe pode ajudar — abra um chamado de suporte ou envie um e-mail para suporte@multitrackgospel.com.";
         source = "fallback";
       }
     }
 
-    // Salvar log
-    await (prisma as any).supportChatLog.create({
+    // Salvar log (silencioso — tabela pode não existir ainda)
+    (prisma as any).supportChatLog?.create({
       data: {
         groupId: user.groupId ?? null,
         userId: user.id,
@@ -180,7 +210,7 @@ export async function POST(req: NextRequest) {
         source,
         faqItemId: faqItemId ?? null,
       },
-    });
+    }).catch(() => {});
 
     return NextResponse.json({
       answer,
