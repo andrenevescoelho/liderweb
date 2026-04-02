@@ -228,6 +228,7 @@ model Group {
   auditLogs           AuditLog[]
   customMixExtras     CustomMixExtra[]
   customMixes         CustomMix[]
+  supportTickets      SupportTicket[]
   importJobs          ImportJob[]
   announcementTargets AnnouncementGroup[]
   musicCoachProfiles  MusicCoachProfile[]
@@ -331,7 +332,6 @@ model User {
   group                Group?                @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
-  lastLoginAt          DateTime?
   profile              MemberProfile?
   scheduleRoles        ScheduleRole[]
   rehearsalAttendances RehearsalAttendance[]
@@ -355,6 +355,7 @@ model User {
   coachContentCaches   CoachContentCache[]
   passwordResetTokens  PasswordResetToken[]
   customMixes          CustomMix[]
+  supportTickets       SupportTicket[]
 }
 
 model CoachContentCache {
@@ -1310,4 +1311,51 @@ model FaqItem {
   @@unique([categoryId, question])
   @@index([categoryId, order])
   @@index([isPublished])
+}
+
+model SupportTicket {
+  id          String              @id @default(cuid())
+  groupId     String
+  userId      String
+  subject     String
+  message     String              @db.Text
+  status      SupportTicketStatus @default(OPEN)
+  priority    SupportPriority     @default(NORMAL)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  group       Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, status])
+  @@index([userId])
+}
+
+model SupportChatLog {
+  id          String   @id @default(cuid())
+  groupId     String?
+  userId      String?
+  question    String   @db.Text
+  answer      String   @db.Text
+  source      String   // "faq" | "llm" | "fallback"
+  faqItemId   String?
+  helpful     Boolean?
+  createdAt   DateTime @default(now())
+
+  @@index([groupId])
+  @@index([faqItemId])
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
