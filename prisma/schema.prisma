@@ -331,6 +331,7 @@ model User {
   group                Group?                @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  lastLoginAt          DateTime?
   profile              MemberProfile?
   scheduleRoles        ScheduleRole[]
   rehearsalAttendances RehearsalAttendance[]

@@ -58,12 +58,18 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
+        lastLoginAt: true,
         profile: {
           select: {
             phone: true,
             instruments: true,
             active: true,
           },
+        },
+        sessions: {
+          select: { expires: true },
+          orderBy: { expires: "desc" },
+          take: 1,
         },
       },
       orderBy: { name: "asc" },
