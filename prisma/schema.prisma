@@ -228,7 +228,6 @@ model Group {
   auditLogs           AuditLog[]
   customMixExtras     CustomMixExtra[]
   customMixes         CustomMix[]
-  supportTickets      SupportTicket[]
   importJobs          ImportJob[]
   announcementTargets AnnouncementGroup[]
   musicCoachProfiles  MusicCoachProfile[]
@@ -239,6 +238,7 @@ model Group {
   multitracksUsage    MultitracksUsage[]
   paymentTransactions PaymentTransaction[]
   carts               Cart[]
+  supportTickets      SupportTicket[]
   orders              Order[]
 }
 
@@ -356,6 +356,7 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   customMixes          CustomMix[]
   supportTickets       SupportTicket[]
+  supportReplies       SupportTicketReply[]
 }
 
 model CoachContentCache {
@@ -1326,9 +1327,24 @@ model SupportTicket {
 
   group       Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies     SupportTicketReply[]
 
   @@index([groupId, status])
   @@index([userId])
+}
+
+model SupportTicketReply {
+  id          String        @id @default(cuid())
+  ticketId    String
+  authorId    String
+  message     String        @db.Text
+  isInternal  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }
 
 model SupportChatLog {
