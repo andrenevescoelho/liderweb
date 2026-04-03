@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SessionUser } from "@/lib/types";
@@ -21,7 +21,8 @@ type Tab = "chat" | "faq" | "tickets";
 interface ChatMsg { role: "user" | "assistant"; content: string; source?: string; suggestions?: { label: string; href: string }[]; related?: { id: string; question: string }[]; canOpenTicket?: boolean; }
 interface FaqItem { id: string; question: string; answer: string; tags: string[]; category: { name: string; slug: string }; }
 interface FaqCategory { id: string; name: string; slug: string; }
-interface Ticket { id: string; subject: string; message: string; status: string; priority: string; createdAt: string; }
+interface Reply { id: string; message: string; isInternal: boolean; createdAt: string; author: { id: string; name: string; role: string }; }
+interface Ticket { id: string; subject: string; message: string; status: string; priority: string; createdAt: string; replies?: Reply[]; }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   OPEN:        { label: "Aberto",      color: "text-blue-400 bg-blue-400/10 border-blue-400/20",   icon: Clock },
@@ -296,6 +297,8 @@ function FAQTab() {
 
 // ── Tickets ───────────────────────────────────────────────────────────────────
 function TicketsTab() {
+  const { data: session } = useSession() || {};
+  const me = (session?.user as SessionUser)?.id;
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isPremium, setIsPremium] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -304,6 +307,11 @@ function TicketsTab() {
   const [message, setMessage] = useState("");
   const [priority, setPriority] = useState("NORMAL");
   const [submitting, setSubmitting] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [reply, setReply] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -315,7 +323,17 @@ function TicketsTab() {
     } finally { setLoading(false); }
   };
 
+  const fetchTicketDetail = async (id: string) => {
+    setLoadingDetail(true);
+    try {
+      const res = await fetch(`/api/support/tickets?id=${id}`);
+      const data = await res.json();
+      setSelectedTicket(data.ticket);
+    } finally { setLoadingDetail(false); }
+  };
+
   useEffect(() => { fetchTickets(); }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [selectedTicket?.replies]);
 
   const handleSubmit = async () => {
     if (!subject.trim() || !message.trim()) { toast.error("Preencha assunto e mensagem"); return; }
@@ -331,6 +349,20 @@ function TicketsTab() {
       setShowForm(false); setSubject(""); setMessage(""); setPriority("NORMAL");
       fetchTickets();
     } finally { setSubmitting(false); }
+  };
+
+  const sendReply = async () => {
+    if (!reply.trim() || !selectedTicket) return;
+    setSendingReply(true);
+    try {
+      const res = await fetch("/api/support/tickets", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedTicket.id, reply }),
+      });
+      if (!res.ok) { toast.error("Erro ao enviar"); return; }
+      setReply("");
+      await fetchTicketDetail(selectedTicket.id);
+    } finally { setSendingReply(false); }
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
@@ -349,6 +381,92 @@ function TicketsTab() {
       </Button>
     </div>
   );
+
+  // ── Detalhe do ticket ──
+  if (selectedTicket) {
+    const cfg = STATUS_CONFIG[selectedTicket.status] ?? STATUS_CONFIG.OPEN;
+    const StatusIcon = cfg.icon;
+    const isClosed = selectedTicket.status === "CLOSED" || selectedTicket.status === "RESOLVED";
+    return (
+      <div className="flex flex-col" style={{ minHeight: 480 }}>
+        {/* Header */}
+        <div className="flex items-center gap-2 pb-3 border-b border-border mb-4">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedTicket(null)}>
+            ← Voltar
+          </Button>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{selectedTicket.subject}</p>
+          </div>
+          <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold flex-shrink-0", cfg.color)}>
+            <StatusIcon className="h-3 w-3" />{cfg.label}
+          </span>
+        </div>
+
+        {/* Conversa */}
+        <div className="flex-1 space-y-3 overflow-y-auto pb-4">
+          {/* Mensagem original */}
+          <div className="flex gap-2.5">
+            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
+              V
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold">Você</span>
+                <span className="text-[10px] text-muted-foreground">{new Date(selectedTicket.createdAt).toLocaleDateString("pt-BR")}</span>
+              </div>
+              <div className="rounded-2xl rounded-tl-sm bg-muted/40 border border-border/50 px-4 py-3 text-sm whitespace-pre-wrap">
+                {selectedTicket.message}
+              </div>
+            </div>
+          </div>
+
+          {/* Replies */}
+          {loadingDetail ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+          ) : (
+            selectedTicket.replies?.filter(r => !r.isInternal).map(r => {
+              const isSupport = r.author.role === "SUPERADMIN";
+              return (
+                <div key={r.id} className={cn("flex gap-2.5", isSupport && "justify-end")}>
+                  {!isSupport && (
+                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
+                      {r.author.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className={cn("max-w-[80%]", isSupport && "items-end flex flex-col")}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold">{isSupport ? "Suporte Liderweb" : r.author.name}</span>
+                      <span className="text-[10px] text-muted-foreground">{new Date(r.createdAt).toLocaleDateString("pt-BR")}</span>
+                    </div>
+                    <div className={cn(
+                      "rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
+                      isSupport ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted/40 border border-border/50 rounded-tl-sm"
+                    )}>
+                      {r.message}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input resposta */}
+        {!isClosed && (
+          <div className="border-t border-border pt-3 flex gap-2 mt-2">
+            <Input value={reply} onChange={e => setReply(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); sendReply(); } }}
+              placeholder="Adicionar informação ao chamado..." disabled={sendingReply} className="flex-1" />
+            <Button size="icon" onClick={sendReply} disabled={!reply.trim() || sendingReply}>
+              {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+        )}
+        {isClosed && <p className="text-xs text-muted-foreground text-center pt-2">Este chamado está {cfg.label.toLowerCase()}.</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -396,12 +514,21 @@ function TicketsTab() {
           {tickets.map(ticket => {
             const cfg = STATUS_CONFIG[ticket.status] ?? STATUS_CONFIG.OPEN;
             const Icon = cfg.icon;
+            const hasReplies = (ticket.replies?.length ?? 0) > 0;
             return (
-              <div key={ticket.id} className="rounded-xl border border-border bg-card p-4">
+              <button key={ticket.id} onClick={() => fetchTicketDetail(ticket.id)}
+                className="w-full text-left rounded-xl border border-border bg-card hover:border-primary/30 hover:bg-primary/5 transition-all p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{ticket.subject}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ticket.message}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm truncate">{ticket.subject}</p>
+                      {hasReplies && (
+                        <span className="flex-shrink-0 text-[10px] rounded-full bg-primary/15 text-primary border border-primary/20 px-1.5 py-0.5">
+                          {ticket.replies?.length} resposta{(ticket.replies?.length ?? 0) > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{ticket.message}</p>
                     <p className="text-[10px] text-muted-foreground mt-1.5">
                       {new Date(ticket.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                     </p>
@@ -410,7 +537,7 @@ function TicketsTab() {
                     <Icon className="h-3 w-3" />{cfg.label}
                   </span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
