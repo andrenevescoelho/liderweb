@@ -11,21 +11,25 @@ type Props = {
   onBuyAvulso?: () => void;
   avulsoLabel?: string;
   avulsoPrice?: string;
+  permissionDenied?: boolean;
 };
 
-export function ModuleAccessOverlay({ moduleLabel, isAdmin, onUpgrade, onBuyAvulso, avulsoLabel, avulsoPrice }: Props) {
+export function ModuleAccessOverlay({ moduleLabel, isAdmin, onUpgrade, onBuyAvulso, avulsoLabel, avulsoPrice, permissionDenied }: Props) {
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center backdrop-blur-md bg-background/40 p-4">
       <Card className="max-w-lg w-full border-primary/25 shadow-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Lock className="h-5 w-5 text-primary" />
-            Recurso indisponível no plano atual
+            {permissionDenied ? "Acesso restrito" : "Recurso indisponível no plano atual"}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p className="text-muted-foreground">
-            O recurso <strong>{moduleLabel}</strong> não está incluído na assinatura do seu grupo.
+            {permissionDenied
+              ? <>Você não tem permissão para acessar <strong>{moduleLabel}</strong>. Fale com o líder do seu ministério.</>
+              : <>O recurso <strong>{moduleLabel}</strong> não está incluído na assinatura do seu grupo.</>
+            }
           </p>
           {isAdmin ? (
             <>

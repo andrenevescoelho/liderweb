@@ -9,6 +9,8 @@ import { canAccessFeature, getQuota } from "@/lib/billing/entitlements";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { createS3Client, getBucketConfig } from "@/lib/aws-config";
 
+import { hasPermission } from "@/lib/authorization";
+
 // GET — listar jobs do grupo
 export async function GET(req: NextRequest) {
   try {
@@ -37,6 +39,17 @@ export async function GET(req: NextRequest) {
 
     const hasAccess = await canAccessFeature(user.groupId, "splits");
     const quota = hasAccess ? await getQuota(user.groupId, "splits") : 0;
+
+    // Verificar permissão granular RBAC — só se o plano libera
+    if (hasAccess && (user.role === "MEMBER" || user.role === "LEADER")) {
+      const profile = await prisma.memberProfile.findUnique({
+        where: { userId: user.id },
+        select: { permissions: true },
+      });
+      if (!hasPermission(user.role as any, "split.view", profile?.permissions)) {
+        return NextResponse.json({ error: "Sem permissão para acessar Split de músicas" }, { status: 403 });
+      }
+    }
 
     // Contar uso mensal
     const now = new Date();

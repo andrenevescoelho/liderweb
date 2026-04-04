@@ -99,10 +99,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Metrônomo", href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
         { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
         ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
-        { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN"], tag: "IA" },
+        { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "MEMBER", "LEADER"], permissions: ["coach.config.manage"], tag: "IA" },
         { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["pad.view"] },
         { label: "Split de músicas", href: "/splits", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["split.view"], tag: "NOVO" },
-        { label: "Custom Mix", href: "/custom-mix", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "NOVO" },
+        { label: "Custom Mix", href: "/custom-mix", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["custom.mix.view"], tag: "NOVO" },
       ],
     },
     {
@@ -117,14 +117,14 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       label: "Gestão",
       items: [
         { label: "Administração", href: "/dashboard/admin", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
-        { label: "Analytics Musicais", href: "/dashboard/analytics-musicais", icon: <BarChart2 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "SUPERADMIN"], tag: "NOVO" },
+        { label: "Analytics Musicais", href: "/dashboard/analytics-musicais", icon: <BarChart2 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "SUPERADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"], tag: "NOVO" },
         { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
         { label: "Multitracks Admin", href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Split Admin", href: "/split-admin", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Custom Mix Admin", href: "/custom-mix-admin", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Pads Admin", href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
-        { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN"] },
+        { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["member.manage"] },
+        { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"] },
         { label: "Grupos", href: "/admin?tab=groups", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Membros", href: "/admin?tab=users", icon: <Users className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Assinaturas", href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
@@ -140,9 +140,21 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     if (item.href === "/meu-plano" && userRole === "SUPERADMIN") return false;
     if (item.href === "/aniversariantes" && userRole === "SUPERADMIN") return false;
     if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) return false;
-    if (item.roles.includes(userRole)) return true;
-    if (!item.permissions?.length) return false;
-    return item.permissions.some((p) => userPermissions.includes(p));
+
+    // SUPERADMIN vê tudo (exceto exceções acima)
+    if (userRole === "SUPERADMIN") return true;
+
+    // Se o item tem permissões granulares:
+    // a permissão sozinha é suficiente — não exige role específico
+    if (item.permissions?.length) {
+      // ADMIN sempre tem acesso se está no roles do item
+      if (userRole === "ADMIN" && item.roles.includes("ADMIN")) return true;
+      // Qualquer role: verifica se tem ao menos uma das permissões
+      return item.permissions.some((p) => userPermissions.includes(p));
+    }
+
+    // Sem permissions: controle puramente por role
+    return item.roles.includes(userRole);
   };
 
   const visibleSections = sections

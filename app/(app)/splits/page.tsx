@@ -246,6 +246,7 @@ export default function SplitsPage() {
   const [jobs, setJobs] = useState<SplitJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
+  const [blockedByPermission, setBlockedByPermission] = useState(false);
   const [quota, setQuota] = useState(0);
   const [usedThisMonth, setUsedThisMonth] = useState(0);
 
@@ -268,6 +269,11 @@ export default function SplitsPage() {
   const fetchJobs = useCallback(async () => {
     try {
       const res = await fetch("/api/splits");
+      if (res.status === 403) {
+        setBlockedByPermission(true);
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       setJobs(data.jobs ?? []);
       setHasAccess(data.hasAccess ?? false);
@@ -307,6 +313,22 @@ export default function SplitsPage() {
       fetchJobs();
     } finally { setUploading(false); }
   };
+
+  if (blockedByPermission && !loading) return (
+    <div className="max-w-2xl mx-auto space-y-6 py-8">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Scissors className="h-5 w-5 text-primary" /></div>
+        <div><h1 className="text-2xl font-bold">Split de músicas</h1><p className="text-sm text-muted-foreground">Separe qualquer música em stems com IA</p></div>
+      </div>
+      <div className="rounded-2xl border border-dashed border-border p-10 text-center space-y-4">
+        <Lock className="h-12 w-12 text-muted-foreground/20 mx-auto" />
+        <div>
+          <h3 className="font-semibold text-lg">Acesso restrito</h3>
+          <p className="text-sm text-muted-foreground mt-1">Você não tem permissão para acessar o Split de músicas. Fale com o líder do seu ministério.</p>
+        </div>
+      </div>
+    </div>
+  );
 
   if (!hasAccess && !loading) return (
     <div className="max-w-2xl mx-auto space-y-6 py-8">

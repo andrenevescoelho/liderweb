@@ -132,6 +132,7 @@ export default function PadsPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
   const [blockedByPlan, setBlockedByPlan] = useState(false);
+  const [blockedByPermission, setBlockedByPermission] = useState(false);
   const [boards, setBoards] = useState<PadBoard[]>([]);
   const [activeBoard, setActiveBoard] = useState<PadBoard|null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,14 +211,22 @@ export default function PadsPage() {
           setLoading(false);
           return;
         }
-        fetch("/api/pads").then(r=>r.json()).then(d=>{
+        fetch("/api/pads").then(r=>{
+          if(r.status===403){setBlockedByPermission(true);setLoading(false);return null;}
+          return r.json();
+        }).then(d=>{
+          if(!d) return;
           const bs=d.boards||[];
           setBoards(bs);
           if(bs.length>0){setActiveBoard(bs[0]); if(bs[0].bpm) setBpm(bs[0].bpm);}
         }).finally(()=>setLoading(false));
       })
       .catch(()=>{
-        fetch("/api/pads").then(r=>r.json()).then(d=>{
+        fetch("/api/pads").then(r=>{
+          if(r.status===403){setBlockedByPermission(true);setLoading(false);return null;}
+          return r.json();
+        }).then(d=>{
+          if(!d) return;
           const bs=d.boards||[];
           setBoards(bs);
           if(bs.length>0){setActiveBoard(bs[0]); if(bs[0].bpm) setBpm(bs[0].bpm);}
@@ -295,6 +304,27 @@ export default function PadsPage() {
     const idx=((Math.round(p))%12+12)%12;
     return NOTE_NAMES[idx];
   };
+
+  if(blockedByPermission) return (
+    <div className="relative h-[calc(100vh-120px)] overflow-hidden">
+      <div className="opacity-60 pointer-events-none select-none space-y-6 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10"><Grid3x3 className="w-4 h-4 text-primary" /></div>
+          <div><h1 className="text-lg font-bold">Worship Pads</h1><p className="text-xs text-muted-foreground">Pads e atmosferas ao vivo</p></div>
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          {Array.from({length: 16}).map((_,i) => (
+            <div key={i} className="aspect-square rounded-xl bg-muted/50 border border-border/50" />
+          ))}
+        </div>
+      </div>
+      <ModuleAccessOverlay
+        moduleLabel="Pads & Loops"
+        isAdmin={false}
+        permissionDenied={true}
+      />
+    </div>
+  );
 
   if(blockedByPlan) return (
     <div className="relative h-[calc(100vh-120px)] overflow-hidden">

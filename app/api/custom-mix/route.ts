@@ -5,26 +5,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
+import { getGroupEntitlements } from "@/lib/billing/entitlements";
+import { hasPermission } from "@/lib/authorization";
 
 async function getQuota(groupId: string): Promise<{ limit: number; used: number }> {
-  const subscription = await prisma.subscription.findUnique({
-    where: { groupId },
-    include: { plan: true, billingPlan: true },
-  });
-
-  const isActive = ["ACTIVE", "TRIALING"].includes(subscription?.status ?? "");
-  if (!isActive) return { limit: 0, used: 0 };
-
-  let limit = 0;
-
-  if ((subscription as any)?.billingPlan) {
-    const f = ((subscription as any).billingPlan.features as any) ?? {};
-    limit = Number(f["custom-mix"] ?? f.customMix ?? 0);
-  } else {
-    const planName = (subscription?.plan?.name ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (planName.includes("avancado")) limit = 10;
-    else if (planName.includes("igreja") || planName.includes("enterprise")) limit = 20;
-  }
+  const ent = await getGroupEntitlements(groupId);
+  const limit = ent.canAccessCustomMix ? ent.customMixPerMonth : 0;
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -53,7 +39,22 @@ export async function GET(req: NextRequest) {
     const user = session?.user as SessionUser | undefined;
     if (!session || !user?.groupId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
+    // 1. Billing — plano tem acesso?
     const { limit, used } = await getQuota(user.groupId);
+    if (limit === 0 && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+      return NextResponse.json({ error: "Plano sem acesso ao Custom Mix" }, { status: 402 });
+    }
+
+    // 2. RBAC — membro tem permissão?
+    if (user.role === "MEMBER" || user.role === "LEADER") {
+      const profile = await prisma.memberProfile.findUnique({
+        where: { userId: user.id },
+        select: { permissions: true },
+      });
+      if (!hasPermission(user.role as any, "custom.mix.view", profile?.permissions)) {
+        return NextResponse.json({ error: "Sem permissão para acessar Custom Mix" }, { status: 403 });
+      }
+    }
 
     const mixes = await prisma.$queryRaw<any[]>`
       SELECT cm.*, row_to_json(ma) as album
@@ -79,7 +80,22 @@ export async function POST(req: NextRequest) {
     const user = session?.user as SessionUser | undefined;
     if (!session || !user?.groupId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
+    // 1. Billing
     const { limit, used } = await getQuota(user.groupId);
+    if (limit === 0 && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+      return NextResponse.json({ error: "Plano sem acesso ao Custom Mix" }, { status: 402 });
+    }
+
+    // 2. RBAC
+    if (user.role === "MEMBER" || user.role === "LEADER") {
+      const profile = await prisma.memberProfile.findUnique({
+        where: { userId: user.id },
+        select: { permissions: true },
+      });
+      if (!hasPermission(user.role as any, "custom.mix.view", profile?.permissions)) {
+        return NextResponse.json({ error: "Sem permissão para acessar Custom Mix" }, { status: 403 });
+      }
+    }
     if (limit === 0) return NextResponse.json({ error: "UPGRADE_REQUIRED", message: "Custom Mix está disponível nos planos Avançado e Igreja." }, { status: 402 });
     if (used >= limit) return NextResponse.json({ error: "QUOTA_EXCEEDED", message: `Você atingiu o limite de ${limit} Custom Mix este mês.` }, { status: 402 });
 

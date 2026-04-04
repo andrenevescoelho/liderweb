@@ -48,6 +48,7 @@ export default function MultitracksPage() {
   const [filterArtist, setFilterArtist] = useState("");
   const [renting, setRenting] = useState<string | null>(null);
   const [blockedByPlan, setBlockedByPlan] = useState(false);
+  const [blockedByPermission, setBlockedByPermission] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [canRent, setCanRent] = useState(false);
   const [viewMode, setViewMode] = useState<"large" | "small" | "list">("large");
@@ -60,6 +61,11 @@ export default function MultitracksPage() {
     try {
       setLoading(true);
       const res = await fetch(`/api/multitracks?q=${encodeURIComponent(q)}`);
+      if (res.status === 403) {
+        setBlockedByPermission(true);
+        setAlbums([]);
+        return;
+      }
       if (res.status === 402) {
         setBlockedByPlan(true);
         setAlbums([]);
@@ -381,6 +387,13 @@ export default function MultitracksPage() {
       );
       })()}
       </div>
+      {blockedByPermission && (
+        <ModuleAccessOverlay
+          moduleLabel="Visualizar catálogo de multitracks"
+          isAdmin={false}
+          permissionDenied={true}
+        />
+      )}
       {blockedByPlan && (
         <ModuleAccessOverlay
           moduleLabel="Multitracks"
