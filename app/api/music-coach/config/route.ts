@@ -32,11 +32,11 @@ export async function GET(req: NextRequest) {
         email: true,
         role: true,
         profile: {
-          select: {
-            memberFunction: true,
-            instruments: true,
-            voiceType: true,
-          },
+          select: { voiceType: true },
+        },
+        memberFunctions: {
+          where: { isPending: false },
+          include: { roleFunction: { select: { name: true } } },
         },
         musicCoachProfiles: {
           where: { groupId },
@@ -46,18 +46,21 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    const result = members.map((m) => ({
-      id: m.id,
-      name: m.name,
-      email: m.email,
-      role: m.role,
-      memberFunction: m.profile?.memberFunction || null,
-      instruments: m.profile?.instruments || [],
-      voiceType: m.profile?.voiceType || null,
-      coachEnabled: m.musicCoachProfiles[0]?.enabled ?? false,
-      coachLevel: m.musicCoachProfiles[0]?.level ?? 1,
-      coachProfileId: m.musicCoachProfiles[0]?.id ?? null,
-    }));
+    const result = members.map((m) => {
+      const roles = m.memberFunctions.map((mf) => mf.roleFunction.name);
+      return {
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        memberFunction: roles[0] || null,
+        memberFunctions: roles,
+        voiceType: m.profile?.voiceType || null,
+        coachEnabled: m.musicCoachProfiles[0]?.enabled ?? false,
+        coachLevel: m.musicCoachProfiles[0]?.level ?? 1,
+        coachProfileId: m.musicCoachProfiles[0]?.id ?? null,
+      };
+    });
 
     return NextResponse.json(result);
   } catch (err) {

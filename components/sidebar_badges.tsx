@@ -70,7 +70,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     {
       label: "Equipe",
       items: [
-        { label: "Membros", href: "/members", icon: <Users className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
+        { label: "Membros", href: "/members", icon: <Users className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"], badge: badges.pendingRoles > 0 ? String(badges.pendingRoles) : undefined },
         { label: "Escalas", href: "/schedules", icon: <Calendar className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.escalas > 0 ? String(badges.escalas) : undefined },
         { label: "Ensaios", href: "/ensaios", icon: <NotebookPen className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.ensaios > 0 ? "!" : undefined },
         { label: "Chat do Grupo", href: "/chat-grupo", icon: <MessageCircle className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.chat > 0 ? String(badges.chat) : undefined },

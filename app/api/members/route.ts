@@ -8,37 +8,50 @@ import bcrypt from "bcryptjs";
 import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
 import { getEffectivePlanFromCoupon } from "@/lib/coupons";
-
-const getOptionalMemberProfileData = ({
-  memberFunction,
-  leadershipRole,
-  permissions,
-}: {
-  memberFunction?: string | null;
-  leadershipRole?: string | null;
-  permissions?: string[];
-}) => {
-  return {
-    memberFunction: memberFunction ?? null,
-    leadershipRole: leadershipRole ?? null,
-    ...(permissions !== undefined ? { permissions } : {}),
-  };
-};
+import { ensureDefaultRoleFunctions } from "@/lib/role-functions";
 
 const parseBirthDate = (birthDate?: string | null) => {
   if (!birthDate) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
     return new Date(`${birthDate}T12:00:00.000Z`);
   }
-
   const parsedDate = new Date(birthDate);
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
 
-
 const hasRequestedPermissions = (permissions?: string[]) => {
   return Array.isArray(permissions) && permissions.length > 0;
 };
+
+/** Sincroniza roles aprovados na tabela MemberFunction (usado pelo líder) */
+async function syncMemberFunctions(memberId: string, groupId: string, roleValues: string[]) {
+  const roleFunctionMap = await ensureDefaultRoleFunctions(groupId);
+
+  const current = await prisma.memberFunction.findMany({
+    where: { memberId, isPending: false },
+    select: { id: true, roleFunctionId: true },
+  });
+
+  const desiredIds = new Set(
+    roleValues
+      .map((v) => roleFunctionMap[v as keyof typeof roleFunctionMap])
+      .filter(Boolean)
+  );
+  const currentIds = new Set(current.map((c) => c.roleFunctionId));
+
+  const toRemove = current.filter((c) => !desiredIds.has(c.roleFunctionId)).map((c) => c.id);
+  if (toRemove.length > 0) {
+    await prisma.memberFunction.deleteMany({ where: { id: { in: toRemove } } });
+  }
+
+  for (const roleFunctionId of desiredIds) {
+    if (!currentIds.has(roleFunctionId)) {
+      await prisma.memberFunction.create({
+        data: { memberId, roleFunctionId, isPending: false, approvedAt: new Date() },
+      });
+    }
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -49,26 +62,19 @@ export async function GET(req: NextRequest) {
 
     const user = session.user as SessionUser;
     const searchParams = req?.nextUrl?.searchParams;
-    const instrument = searchParams?.get?.("instrument");
+    const roleFilter = searchParams?.get?.("instrument"); // mantém param "instrument" por compatibilidade
     const voice = searchParams?.get?.("voice");
     const active = searchParams?.get?.("active");
 
     const where: any = {};
 
-    // SuperAdmin vê todos, outros veem apenas do seu grupo
     if (user.role !== "SUPERADMIN") {
-      if (!user.groupId) {
-        return NextResponse.json([]);
-      }
+      if (!user.groupId) return NextResponse.json([]);
       where.groupId = user.groupId;
     }
 
-    // Não mostrar SUPERADMIN na lista de membros
     where.role = { not: "SUPERADMIN" };
 
-    if (instrument) {
-      where.profile = { ...where?.profile, instruments: { has: instrument } };
-    }
     if (voice) {
       where.profile = { ...where?.profile, voiceType: voice };
     }
@@ -78,11 +84,27 @@ export async function GET(req: NextRequest) {
 
     const members = await prisma.user.findMany({
       where,
-      include: { profile: true },
+      include: {
+        profile: true,
+        memberFunctions: {
+          where: { isPending: false },
+          include: { roleFunction: { select: { name: true } } },
+        },
+      },
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json(members ?? []);
+    // Serializa approvedRoles como values (ex: "VOCAL") a partir dos labels (ex: "Vocal")
+    const { MEMBER_FUNCTION_OPTIONS } = await import("@/lib/member-profile");
+    const result = members.map((m) => ({
+      ...m,
+      approvedRoles: m.memberFunctions.map((mf) => {
+        const option = MEMBER_FUNCTION_OPTIONS.find((o) => o.label === mf.roleFunction.name);
+        return option?.value ?? mf.roleFunction.name;
+      }),
+    }));
+
+    return NextResponse.json(result ?? []);
   } catch (error) {
     console.error("Get members error:", error);
     return NextResponse.json({ error: "Erro ao buscar membros" }, { status: 500 });
@@ -114,52 +136,44 @@ export async function POST(req: NextRequest) {
       hasPermission(requester.role as any, "permission.manage", requester.profile?.permissions);
 
     const body = await req.json();
-    const { 
-      // Campos para criar novo usuário
-      name, 
-      email, 
+    const {
+      name,
+      email,
       password,
-      // Campos para atualizar perfil existente
-      userId, 
-      instruments, 
-      voiceType, 
-      vocalRange, 
-      comfortableKeys, 
-      availability, 
-      phone, 
+      userId,
+      roles,         // array de values: ["VOCAL", "TECLADO"]
+      voiceType,
+      vocalRange,
+      comfortableKeys,
+      availability,
+      phone,
       birthDate,
       active,
-      memberFunction,
       leadershipRole,
       permissions,
     } = body ?? {};
 
-    // Se tem email e password, criar novo usuário
+    // Criar novo usuário
     if (email && password) {
       if (!name) {
         return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 });
       }
 
-      // Verificar se email já existe
       const existingUser = await prisma.user.findUnique({ where: { email } });
       if (existingUser) {
         return NextResponse.json({ error: "Email já está em uso" }, { status: 400 });
       }
 
-      // Definir groupId
       let groupId = null;
       if (userRole === "SUPERADMIN") {
-        // SuperAdmin pode especificar o grupo ou deixar sem grupo
         groupId = body.groupId || null;
       } else {
-        // Admin só pode criar membros no seu próprio grupo
         if (!currentUser?.groupId) {
           return NextResponse.json({ error: "Você não está associado a nenhum grupo" }, { status: 400 });
         }
         groupId = currentUser.groupId;
       }
 
-      // Verificar limite de usuários do plano
       if (groupId) {
         const subscription = await prisma.subscription.findUnique({
           where: { groupId },
@@ -181,10 +195,9 @@ export async function POST(req: NextRequest) {
 
         if (effectivePlan && effectivePlan.userLimit > 0) {
           const userCount = await prisma.user.count({ where: { groupId } });
-          
           if (userCount >= effectivePlan.userLimit) {
             return NextResponse.json(
-              { 
+              {
                 error: `Limite de usuários atingido (${effectivePlan.userLimit}). Faça upgrade do seu plano para adicionar mais membros.`,
                 limitReached: true,
               },
@@ -199,11 +212,6 @@ export async function POST(req: NextRequest) {
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      const optionalProfileData = getOptionalMemberProfileData({
-        memberFunction,
-        leadershipRole,
-        permissions: canManageMemberPermissions ? permissions : undefined,
-      });
 
       const newUser = await prisma.user.create({
         data: {
@@ -214,7 +222,6 @@ export async function POST(req: NextRequest) {
           groupId,
           profile: {
             create: {
-              instruments: instruments ?? [],
               voiceType: voiceType ?? null,
               vocalRange: vocalRange ?? null,
               comfortableKeys: comfortableKeys ?? [],
@@ -222,25 +229,29 @@ export async function POST(req: NextRequest) {
               phone: phone ?? null,
               birthDate: parseBirthDate(birthDate),
               active: active ?? true,
-              ...optionalProfileData,
+              leadershipRole: leadershipRole ?? null,
+              ...(canManageMemberPermissions ? { permissions: permissions ?? [] } : {}),
             },
           },
         },
         include: { profile: true },
       });
 
+      // Sincroniza roles após criar o usuário
+      if (Array.isArray(roles) && roles.length > 0 && groupId) {
+        await syncMemberFunctions(newUser.id, groupId, roles);
+      }
+
       return NextResponse.json(newUser, { status: 201 });
     }
 
-    // Se tem userId, atualizar perfil existente
+    // Atualizar perfil existente (path legado via userId)
     if (userId) {
-      // Verificar se o usuário sendo editado pertence ao mesmo grupo
       if (userRole !== "SUPERADMIN") {
         const targetUser = await prisma.user.findUnique({ where: { id: userId } });
         if (!targetUser || targetUser.groupId !== currentUser?.groupId) {
           return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
         }
-
         if (targetUser.role === "ADMIN" && userRole !== "ADMIN") {
           return NextResponse.json(
             { error: "O administrador do grupo só pode ser alterado por um admin do grupo ou superadmin global." },
@@ -253,16 +264,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Sem permissão para alterar permissões de outros membros" }, { status: 403 });
       }
 
-      const optionalProfileData = getOptionalMemberProfileData({
-        memberFunction,
-        leadershipRole,
-        permissions: canManageMemberPermissions ? permissions : undefined,
-      });
+      const targetUser = await prisma.user.findUnique({ where: { id: userId } });
 
       const profile = await prisma.memberProfile.upsert({
         where: { userId },
         update: {
-          instruments: instruments ?? [],
           voiceType: voiceType ?? null,
           vocalRange: vocalRange ?? null,
           comfortableKeys: comfortableKeys ?? [],
@@ -270,11 +276,11 @@ export async function POST(req: NextRequest) {
           phone: phone ?? null,
           birthDate: parseBirthDate(birthDate),
           active: active ?? true,
-          ...optionalProfileData,
+          leadershipRole: leadershipRole ?? null,
+          ...(canManageMemberPermissions ? { permissions: permissions ?? [] } : {}),
         },
         create: {
           userId,
-          instruments: instruments ?? [],
           voiceType: voiceType ?? null,
           vocalRange: vocalRange ?? null,
           comfortableKeys: comfortableKeys ?? [],
@@ -282,9 +288,14 @@ export async function POST(req: NextRequest) {
           phone: phone ?? null,
           birthDate: parseBirthDate(birthDate),
           active: active ?? true,
-          ...optionalProfileData,
+          leadershipRole: leadershipRole ?? null,
+          ...(canManageMemberPermissions ? { permissions: permissions ?? [] } : {}),
         },
       });
+
+      if (Array.isArray(roles) && targetUser?.groupId) {
+        await syncMemberFunctions(userId, targetUser.groupId, roles);
+      }
 
       return NextResponse.json(profile);
     }

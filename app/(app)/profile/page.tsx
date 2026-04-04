@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Clock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { MEMBER_FUNCTION_OPTIONS, PROFILE_VOICE_TYPE_OPTIONS, SKILL_LEVEL_OPTIONS } from "@/lib/member-profile";
 
@@ -16,6 +16,7 @@ type ProfileForm = {
   displayName: string;
   birthDate: string;
   memberFunctions: string[];
+  pendingRoles: string[];
   phone: string;
   city: string;
   state: string;
@@ -35,6 +36,7 @@ const initialForm: ProfileForm = {
   displayName: "",
   birthDate: "",
   memberFunctions: [],
+  pendingRoles: [],
   phone: "",
   city: "",
   state: "",
@@ -113,9 +115,10 @@ export default function ProfilePage() {
         setForm({
           ...initialForm,
           ...data,
+          memberFunctions: Array.isArray(data?.memberFunctions) ? data.memberFunctions : [],
+          pendingRoles: Array.isArray(data?.pendingRoles) ? data.pendingRoles : [],
           availability: Array.isArray(data?.availability) ? data.availability : [],
         });
-        // Verificar se é usuário Google
         setIsGoogleUser(Boolean(data.isGoogleUser));
       } catch (error: any) {
         toast({ title: "Erro ao carregar perfil", description: error?.message ?? "Tente novamente." });
@@ -123,7 +126,6 @@ export default function ProfilePage() {
         setLoading(false);
       }
     };
-
     load();
   }, []);
 
@@ -134,34 +136,41 @@ export default function ProfilePage() {
   const toggleFunction = (value: string, checked: boolean) => {
     setForm((prev) => ({
       ...prev,
-      memberFunctions: checked ? [...prev.memberFunctions, value] : prev.memberFunctions.filter((item) => item !== value),
+      memberFunctions: checked
+        ? [...prev.memberFunctions, value]
+        : prev.memberFunctions.filter((item) => item !== value),
     }));
   };
 
   const toggleAvailabilityDay = (value: string, checked: boolean) => {
     setForm((prev) => ({
       ...prev,
-      availability: checked ? [...prev.availability, value] : prev.availability.filter((item) => item !== value),
+      availability: checked
+        ? [...prev.availability, value]
+        : prev.availability.filter((item) => item !== value),
     }));
   };
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
-
     try {
       const res = await fetch("/api/me/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-        }),
+        body: JSON.stringify({ ...form }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Erro ao salvar perfil");
 
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Erro ao salvar perfil");
-      }
+      // Recarrega para mostrar estado atualizado (pendente ou aprovado)
+      const updated = await fetch("/api/me/profile", { cache: "no-store" });
+      const updatedData = await updated.json();
+      setForm((prev) => ({
+        ...prev,
+        memberFunctions: Array.isArray(updatedData?.memberFunctions) ? updatedData.memberFunctions : [],
+        pendingRoles: Array.isArray(updatedData?.pendingRoles) ? updatedData.pendingRoles : [],
+      }));
 
       toast({ title: "Salvo com sucesso" });
     } catch (error: any) {
@@ -224,17 +233,63 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Funções no ministério *</Label>
+                <div className="flex items-center gap-2">
+                  <Label>Funções no ministério</Label>
+                  {form.pendingRoles.length > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                      <Clock className="h-3 w-3" />
+                      {form.pendingRoles.length} sugestão aguardando aprovação
+                    </span>
+                  )}
+                </div>
+
+                {/* Roles aprovados (definidos pelo líder) */}
+                {form.memberFunctions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {form.memberFunctions.map((v) => {
+                      const label = MEMBER_FUNCTION_OPTIONS.find((o) => o.value === v)?.label ?? v;
+                      return (
+                        <span
+                          key={v}
+                          className="inline-flex items-center rounded-full bg-purple-100 px-3 py-1 text-sm font-medium text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
+                    <span className="text-xs text-muted-foreground self-center">
+                      Aprovados pelo líder
+                    </span>
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Selecione suas funções. A sugestão será enviada ao líder para aprovação.
+                </p>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  {MEMBER_FUNCTION_OPTIONS.map((option) => (
-                    <label key={option.value} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={form.memberFunctions.includes(option.value)}
-                        onCheckedChange={(checked) => toggleFunction(option.value, checked === true)}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
+                  {MEMBER_FUNCTION_OPTIONS.map((option) => {
+                    const isApproved = form.memberFunctions.includes(option.value);
+                    const isPending = form.pendingRoles.includes(option.value);
+                    return (
+                      <label key={option.value} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={isApproved || isPending}
+                          onCheckedChange={(checked) => toggleFunction(option.value, checked === true)}
+                          // Aprovados ficam disabled — só o líder remove via Editar Membro
+                          disabled={isApproved}
+                          className={isApproved ? "opacity-60" : ""}
+                        />
+                        <span className={isApproved ? "text-muted-foreground" : ""}>
+                          {option.label}
+                          {isPending && (
+                            <span className="ml-1 text-xs text-yellow-600 dark:text-yellow-400">
+                              (pendente)
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -333,7 +388,7 @@ export default function ProfilePage() {
         </div>
       </form>
 
-      {/* Seção de troca de senha — só para usuários locais (não Google) */}
+      {/* Seção de troca de senha */}
       {isGoogleUser === false && (
         <Card className="mt-6">
           <CardHeader>
@@ -346,43 +401,18 @@ export default function ProfilePage() {
             <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
               <div className="space-y-2">
                 <Label htmlFor="current-password">Senha atual</Label>
-                <Input
-                  id="current-password"
-                  type="password"
-                  value={passwordForm.current}
-                  onChange={(e) => setPasswordForm(p => ({ ...p, current: e.target.value }))}
-                  placeholder="Digite sua senha atual"
-                  autoComplete="current-password"
-                />
+                <Input id="current-password" type="password" value={passwordForm.current} onChange={(e) => setPasswordForm(p => ({ ...p, current: e.target.value }))} placeholder="Digite sua senha atual" autoComplete="current-password" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-password">Nova senha</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  value={passwordForm.newPass}
-                  onChange={(e) => setPasswordForm(p => ({ ...p, newPass: e.target.value }))}
-                  placeholder="Mínimo 8 caracteres"
-                  autoComplete="new-password"
-                />
+                <Input id="new-password" type="password" value={passwordForm.newPass} onChange={(e) => setPasswordForm(p => ({ ...p, newPass: e.target.value }))} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar nova senha</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  value={passwordForm.confirm}
-                  onChange={(e) => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
-                  placeholder="Repita a nova senha"
-                  autoComplete="new-password"
-                />
+                <Input id="confirm-password" type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm(p => ({ ...p, confirm: e.target.value }))} placeholder="Repita a nova senha" autoComplete="new-password" />
               </div>
-              {passwordError && (
-                <p className="text-sm text-red-500">{passwordError}</p>
-              )}
-              {passwordSuccess && (
-                <p className="text-sm text-green-500">Senha alterada com sucesso!</p>
-              )}
+              {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
+              {passwordSuccess && <p className="text-sm text-green-500">Senha alterada com sucesso!</p>}
               <Button type="submit" disabled={savingPassword || !passwordForm.current || !passwordForm.newPass || !passwordForm.confirm}>
                 {savingPassword ? "Alterando..." : "Alterar senha"}
               </Button>

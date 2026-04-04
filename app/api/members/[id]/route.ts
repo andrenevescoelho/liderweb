@@ -6,13 +6,14 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
+import { ensureDefaultRoleFunctions } from "@/lib/role-functions";
+import { MEMBER_FUNCTION_OPTIONS } from "@/lib/member-profile";
 
 const parseBirthDate = (birthDate?: string | null) => {
   if (!birthDate) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
     return new Date(`${birthDate}T12:00:00.000Z`);
   }
-
   const parsedDate = new Date(birthDate);
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
@@ -28,6 +29,61 @@ const isGroupAdminProtected = (
   requester.role !== "SUPERADMIN" &&
   requester.role !== "ADMIN" &&
   targetUser.role === "ADMIN";
+
+/** Inclui memberFunctions aprovadas no retorno do membro */
+const includeMemberFunctions = {
+  profile: true,
+  memberFunctions: {
+    where: { isPending: false },
+    include: { roleFunction: { select: { name: true } } },
+  },
+} as const;
+
+/** Sincroniza os roles do líder na tabela MemberFunction (aprovados direto) */
+async function syncMemberFunctions(
+  memberId: string,
+  groupId: string,
+  roleValues: string[]
+) {
+  const roleFunctionMap = await ensureDefaultRoleFunctions(groupId);
+
+  // Busca functions atuais aprovadas
+  const current = await prisma.memberFunction.findMany({
+    where: { memberId, isPending: false },
+    select: { id: true, roleFunctionId: true },
+  });
+
+  const desiredIds = new Set(
+    roleValues
+      .map((v) => roleFunctionMap[v as keyof typeof roleFunctionMap])
+      .filter(Boolean)
+  );
+
+  const currentIds = new Set(current.map((c) => c.roleFunctionId));
+
+  // Remover os que não estão mais na lista
+  const toRemove = current
+    .filter((c) => !desiredIds.has(c.roleFunctionId))
+    .map((c) => c.id);
+
+  if (toRemove.length > 0) {
+    await prisma.memberFunction.deleteMany({ where: { id: { in: toRemove } } });
+  }
+
+  // Adicionar os novos
+  for (const roleFunctionId of desiredIds) {
+    if (!currentIds.has(roleFunctionId)) {
+      await prisma.memberFunction.create({
+        data: {
+          memberId,
+          roleFunctionId,
+          isPending: false,
+          approvedAt: new Date(),
+        },
+      });
+    }
+  }
+}
 
 export async function GET(
   req: NextRequest,
@@ -52,7 +108,7 @@ export async function GET(
 
     const member = await prisma.user.findUnique({
       where: { id: params?.id },
-      include: { profile: true },
+      include: includeMemberFunctions,
     });
 
     if (!member) {
@@ -63,7 +119,15 @@ export async function GET(
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
-    return NextResponse.json(member);
+    // Serializa roles aprovados como array de values (ex: ["VOCAL", "TECLADO"])
+    const approvedRoles = member.memberFunctions.map((mf) => {
+      const option = MEMBER_FUNCTION_OPTIONS.find(
+        (o) => o.label === mf.roleFunction.name
+      );
+      return option?.value ?? mf.roleFunction.name;
+    });
+
+    return NextResponse.json({ ...member, approvedRoles });
   } catch (error) {
     console.error("Get member error:", error);
     return NextResponse.json({ error: "Erro ao buscar membro" }, { status: 500 });
@@ -92,7 +156,21 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, role, instruments, voiceType, vocalRange, comfortableKeys, availability, phone, birthDate, active, memberFunction, leadershipRole, permissions } = body ?? {};
+    const {
+      name,
+      role,
+      // roles[] substitui instruments + memberFunction (fonte única)
+      roles,
+      voiceType,
+      vocalRange,
+      comfortableKeys,
+      availability,
+      phone,
+      birthDate,
+      active,
+      leadershipRole,
+      permissions,
+    } = body ?? {};
 
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -132,7 +210,6 @@ export async function PUT(
     await prisma.memberProfile.upsert({
       where: { userId: params?.id },
       update: {
-        instruments: instruments ?? [],
         voiceType: voiceType ?? null,
         vocalRange: vocalRange ?? null,
         comfortableKeys: comfortableKeys ?? [],
@@ -140,13 +217,11 @@ export async function PUT(
         phone: phone ?? null,
         birthDate: parseBirthDate(birthDate),
         active: active ?? true,
-        memberFunction: memberFunction ?? null,
         leadershipRole: leadershipRole ?? null,
         ...(canManagePermissions ? { permissions: permissions ?? [] } : {}),
       },
       create: {
         userId: params?.id,
-        instruments: instruments ?? [],
         voiceType: voiceType ?? null,
         vocalRange: vocalRange ?? null,
         comfortableKeys: comfortableKeys ?? [],
@@ -154,18 +229,29 @@ export async function PUT(
         phone: phone ?? null,
         birthDate: parseBirthDate(birthDate),
         active: active ?? true,
-        memberFunction: memberFunction ?? null,
         leadershipRole: leadershipRole ?? null,
         ...(canManagePermissions ? { permissions: permissions ?? [] } : {}),
       },
     });
 
+    // Sincroniza roles na tabela MemberFunction (líder aprova direto)
+    if (Array.isArray(roles) && targetUser.groupId) {
+      await syncMemberFunctions(params?.id, targetUser.groupId, roles);
+    }
+
     const updatedUser = await prisma.user.findUnique({
       where: { id: params?.id },
-      include: { profile: true },
+      include: includeMemberFunctions,
     });
 
-    return NextResponse.json(updatedUser);
+    const approvedRoles = (updatedUser?.memberFunctions ?? []).map((mf) => {
+      const option = MEMBER_FUNCTION_OPTIONS.find(
+        (o) => o.label === mf.roleFunction.name
+      );
+      return option?.value ?? mf.roleFunction.name;
+    });
+
+    return NextResponse.json({ ...updatedUser, approvedRoles });
   } catch (error) {
     console.error("Update member error:", error);
     return NextResponse.json({ error: "Erro ao atualizar membro" }, { status: 500 });
@@ -210,9 +296,7 @@ export async function DELETE(
       );
     }
 
-    await prisma.user.delete({
-      where: { id: params?.id },
-    });
+    await prisma.user.delete({ where: { id: params?.id } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
