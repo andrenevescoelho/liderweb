@@ -334,6 +334,7 @@ model User {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   profile              MemberProfile?
+  lastLoginAt          DateTime?
   scheduleRoles        ScheduleRole[]
   rehearsalAttendances RehearsalAttendance[]
   rehearsalTasks       RehearsalTask[]
