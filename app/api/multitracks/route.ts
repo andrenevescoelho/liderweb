@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { getGroupEntitlements } from "@/lib/billing/entitlements";
+import { hasPermission } from "@/lib/authorization";
 
 export async function GET(req: NextRequest) {
   try {
@@ -80,6 +81,17 @@ export async function GET(req: NextRequest) {
           where: { groupId_month_year: { groupId: user.groupId, month: now.getMonth() + 1, year: now.getFullYear() } },
         });
         usage = { count: usageRecord?.count ?? 0, limit: ent.multitracksPerMonth };
+      }
+    }
+
+    // Verificar permissão granular RBAC — só após confirmar acesso do plano
+    if (canRent && (user.role === "MEMBER" || user.role === "LEADER")) {
+      const profile = await prisma.memberProfile.findUnique({
+        where: { userId: user.id },
+        select: { permissions: true },
+      });
+      if (!hasPermission(user.role as any, "multitrack.view", profile?.permissions)) {
+        return NextResponse.json({ error: "Sem permissão para visualizar multitracks" }, { status: 403 });
       }
     }
 

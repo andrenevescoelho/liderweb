@@ -256,6 +256,7 @@ export default function CustomMixPage() {
   const [quota, setQuota] = useState({ limit: 0, used: 0, remaining: 0 });
   const [loading, setLoading] = useState(true);
   const [blocked, setBlocked] = useState(false);
+  const [blockedByPermission, setBlockedByPermission] = useState(false);
 
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [stemConfigs, setStemConfigs] = useState<StemConfig[]>([]);
@@ -305,7 +306,8 @@ export default function CustomMixPage() {
 
   useEffect(() => {
     if (status === "loading") return;
-    if (!user || !["ADMIN","SUPERADMIN","LEADER"].includes(user.role)) { router.replace("/dashboard"); return; }
+    if (!user) { router.replace("/dashboard"); return; }
+    // Acesso controlado pela API (billing + RBAC) — não bloqueia por role aqui
     loadData();
     return () => { cancelAnimationFrame(vuRafRef.current); };
   }, [status, user]);
@@ -332,6 +334,8 @@ export default function CustomMixPage() {
   const loadData = async () => {
     try {
       const [mr, ar] = await Promise.all([fetch("/api/custom-mix"), fetch("/api/multitracks?limit=50")]);
+      if (mr.status === 402) { setBlocked(true); setLoading(false); return; }
+      if (mr.status === 403) { setBlockedByPermission(true); setLoading(false); return; }
       const md = await mr.json();
       if (!mr.ok) { setBlocked(true); setLoading(false); return; }
       setMixes(md.mixes ?? []); setQuota(md.quota ?? { limit:0, used:0, remaining:0 });
@@ -736,6 +740,16 @@ export default function CustomMixPage() {
   const hasSolo = stemConfigs.some(s => s.solo);
 
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+
+  if (blockedByPermission) return (
+    <div className="max-w-lg mx-auto mt-16 text-center space-y-6">
+      <div className="flex justify-center"><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10"><Lock className="h-8 w-8 text-primary" /></div></div>
+      <div>
+        <h1 className="text-2xl font-bold mb-2">Custom Mix</h1>
+        <p className="text-muted-foreground">Você não tem permissão para acessar o Custom Mix. Fale com o líder do seu ministério.</p>
+      </div>
+    </div>
+  );
 
   if (blocked || quota.limit === 0) return (
     <div className="max-w-lg mx-auto mt-16 text-center space-y-6">

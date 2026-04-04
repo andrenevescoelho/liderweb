@@ -4,12 +4,34 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 
+import { hasPermission } from "@/lib/authorization";
+import { getGroupEntitlements } from "@/lib/billing/entitlements";
+
 // GET — listar boards com URLs de proxy
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const user = session.user as SessionUser;
   const isSuperAdmin = user.role === "SUPERADMIN";
+
+  // 1. Verificar billing — plano tem acesso a pads?
+  if (!isSuperAdmin && user.groupId) {
+    const ent = await getGroupEntitlements(user.groupId);
+    if (!ent.canAccessPads || !ent.isActive) {
+      return NextResponse.json({ error: "Plano sem acesso a Pads & Loops" }, { status: 402 });
+    }
+  }
+
+  // 2. Verificar permissão granular RBAC — só se o plano libera
+  if (user.role === "MEMBER" || user.role === "LEADER") {
+    const profile = await prisma.memberProfile.findUnique({
+      where: { userId: user.id },
+      select: { permissions: true },
+    });
+    if (!hasPermission(user.role as any, "pad.view", profile?.permissions)) {
+      return NextResponse.json({ error: "Sem permissão para visualizar Pads & Loops" }, { status: 403 });
+    }
+  }
 
   const boards = await prisma.padBoard.findMany({
     where: isSuperAdmin ? {} : { isActive: true },

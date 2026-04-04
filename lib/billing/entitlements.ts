@@ -15,6 +15,7 @@ export type FeatureKey =
   | "audio_upload"     // upload de áudio
   | "members"          // limite de membros
   | "pads"             // acesso a pads
+  | "custom_mix"       // acesso a custom mix
 
 export interface Entitlements {
   // Feature flags — booleano
@@ -23,6 +24,8 @@ export interface Entitlements {
   canAccessSplits: boolean;
   canUploadAudio: boolean;
   canAccessPads: boolean;
+  canAccessCustomMix: boolean;
+  customMixPerMonth: number;
   // Quotas — numérico (0 = sem acesso, -1 = ilimitado)
   multitracksPerMonth: number;
   splitsPerMonth: number;
@@ -40,6 +43,8 @@ const FREE_ENTITLEMENTS: Entitlements = {
   canAccessSplits: false,
   canUploadAudio: false,
   canAccessPads: true,
+  canAccessCustomMix: false,
+  customMixPerMonth: 0,
   multitracksPerMonth: 0,
   splitsPerMonth: 0,
   membersLimit: 10,
@@ -88,6 +93,7 @@ function resolveFromBillingPlan(plan: any, isActive: boolean): Entitlements {
   const f = plan.features ?? {};
   const multitracks = Number(f.multitracks ?? 0);
   const splits = Number(f.splits ?? 0);
+  const customMix = Number(f["custom-mix"] ?? f.customMix ?? 0);
 
   return {
     canAccessMultitracks: multitracks > 0,
@@ -95,6 +101,8 @@ function resolveFromBillingPlan(plan: any, isActive: boolean): Entitlements {
     canAccessSplits: splits > 0,
     canUploadAudio: Boolean(f.audio_upload),
     canAccessPads: true,
+    canAccessCustomMix: customMix > 0,
+    customMixPerMonth: customMix,
     multitracksPerMonth: multitracks,
     splitsPerMonth: splits,
     membersLimit: plan.userLimit ?? 0,
@@ -122,6 +130,7 @@ function resolveFromLegacyPlan(plan: any, isActive: boolean): Entitlements {
 
   const multitracks = getNum("multitracks");
   const splits = getNum("splits");
+  const customMixLegacy = (()=>{ const n=getNum("custom-mix")||getNum("customMix"); if(n) return n; const pn=(plan?.name??"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); if(pn.includes("avancado")) return 10; if(pn.includes("igreja")||pn.includes("enterprise")) return 20; return 0; })();
 
   return {
     canAccessMultitracks: multitracks > 0,
@@ -129,6 +138,8 @@ function resolveFromLegacyPlan(plan: any, isActive: boolean): Entitlements {
     canAccessSplits: splits > 0,
     canUploadAudio: true,
     canAccessPads: true,
+    canAccessCustomMix: customMixLegacy > 0,
+    customMixPerMonth: customMixLegacy,
     multitracksPerMonth: multitracks,
     splitsPerMonth: splits,
     membersLimit: plan.userLimit ?? 0,
@@ -155,6 +166,7 @@ export async function canAccessFeature(
     case "splits":        return ent.canAccessSplits;
     case "audio_upload":  return ent.canUploadAudio;
     case "pads":          return ent.canAccessPads;
+    case "custom_mix":    return ent.canAccessCustomMix;
     case "members":       return true; // sempre tem acesso, mas com limite
     default:              return false;
   }
@@ -173,6 +185,7 @@ export async function getQuota(
   switch (feature) {
     case "multitracks": return ent.multitracksPerMonth;
     case "splits":      return ent.splitsPerMonth;
+    case "custom_mix":  return ent.customMixPerMonth;
     case "members":     return ent.membersLimit;
     default:            return 0;
   }
@@ -191,10 +204,12 @@ export function serializeEntitlements(ent: Entitlements) {
       splits: ent.canAccessSplits,
       audioUpload: ent.canUploadAudio,
       pads: ent.canAccessPads,
+      customMix: ent.canAccessCustomMix,
     },
     quotas: {
       multitracksPerMonth: ent.multitracksPerMonth,
       splitsPerMonth: ent.splitsPerMonth,
+      customMixPerMonth: ent.customMixPerMonth,
       membersLimit: ent.membersLimit,
     },
   };
