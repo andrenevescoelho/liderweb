@@ -17,6 +17,9 @@ import {
   Send,
   CheckCircle,
   Copy,
+  Clock,
+  Check,
+  X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,15 +27,15 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { INSTRUMENTS, VOICE_TYPES, WEEKDAYS } from "@/lib/types";
+import { VOICE_TYPES, WEEKDAYS } from "@/lib/types";
 import { SessionUser } from "@/lib/types";
 import {
-  MINISTRY_MEMBER_FUNCTIONS,
   MINISTRY_LEADERSHIP_ROLES,
   PERMISSIONS,
   PERMISSION_CATEGORIES,
   PERMISSION_PRESETS,
 } from "@/lib/permissions";
+import { MEMBER_FUNCTION_OPTIONS } from "@/lib/member-profile";
 
 export default function MembersPage() {
   const { data: session } = useSession() || {};
@@ -79,6 +82,10 @@ export default function MembersPage() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [pendingInvitesLoading, setPendingInvitesLoading] = useState(false);
 
+  // Pending role suggestions state
+  const [pendingSuggestions, setPendingSuggestions] = useState<any[]>([]);
+  const [pendingSuggestionsLoading, setPendingSuggestionsLoading] = useState(false);
+
   const fetchMembers = async () => {
     try {
       let url = "/api/members?";
@@ -91,6 +98,21 @@ export default function MembersPage() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPendingSuggestions = async () => {
+    if (!canEdit) return;
+    setPendingSuggestionsLoading(true);
+    try {
+      const res = await fetch("/api/members/pending-roles");
+      const data = await res.json();
+      setPendingSuggestions(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setPendingSuggestions([]);
+    } finally {
+      setPendingSuggestionsLoading(false);
     }
   };
 
@@ -113,11 +135,13 @@ export default function MembersPage() {
   useEffect(() => {
     fetchMembers();
     fetchPendingInvites();
+    fetchPendingSuggestions();
   }, [filterInstrument, filterVoice]);
 
   // Recarrega convites quando sessão/permissões estiverem prontas
   useEffect(() => {
     fetchPendingInvites();
+    fetchPendingSuggestions();
   }, [sessionUser?.id, userRole]);
 
   const filtered = members?.filter?.((m) =>
@@ -204,6 +228,21 @@ export default function MembersPage() {
     }
   };
 
+  const handleRoleSuggestion = async (memberId: string, roleValue: string, action: "approve" | "reject") => {
+    try {
+      const res = await fetch(`/api/members/${memberId}/roles`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, roles: [roleValue] }),
+      });
+      if (!res.ok) throw new Error("Erro ao processar");
+      fetchPendingSuggestions();
+      fetchMembers();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const copyInviteLink = () => {
     if (inviteSuccess?.link) {
       const fullLink = window.location.origin + inviteSuccess.link;
@@ -253,8 +292,8 @@ export default function MembersPage() {
           value={filterInstrument}
           onChange={(e) => setFilterInstrument(e?.target?.value ?? '')}
           options={[
-            { value: "", label: "Todos instrumentos" },
-            ...INSTRUMENTS?.map?.((i) => ({ value: i, label: i })) ?? [],
+            { value: "", label: "Todas funções" },
+            ...(MEMBER_FUNCTION_OPTIONS?.map?.((o) => ({ value: o.value, label: o.label })) ?? []),
           ]}
           className="w-48"
         />
@@ -268,6 +307,68 @@ export default function MembersPage() {
           className="w-40"
         />
       </div>
+
+      {canEdit && (pendingSuggestions?.length ?? 0) > 0 && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-yellow-500" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Sugestões de funções pendentes
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Membros sugeriram alterações nas suas funções
+                  </p>
+                </div>
+              </div>
+              {pendingSuggestionsLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin text-yellow-500" />
+              ) : (
+                <Badge variant="warning">{pendingSuggestions?.length ?? 0}</Badge>
+              )}
+            </div>
+            <div className="space-y-2">
+              {pendingSuggestions.map((s: any) => (
+                <div
+                  key={`${s.memberId}-${s.roleValue}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-yellow-500/20 bg-background p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-white">
+                      {s.memberName}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Quer adicionar função: <span className="font-semibold text-yellow-600 dark:text-yellow-400">{s.roleLabel}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-green-500/50 hover:bg-green-500/10 text-green-600"
+                      onClick={() => handleRoleSuggestion(s.memberId, s.roleValue, "approve")}
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      Aprovar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-500/50 hover:bg-red-500/10 text-red-500"
+                      onClick={() => handleRoleSuggestion(s.memberId, s.roleValue, "reject")}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Rejeitar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {canEdit && (
         <Card>
@@ -367,14 +468,13 @@ export default function MembersPage() {
                   </div>
                 )}
 
-                {(member?.profile?.instruments?.length ?? 0) > 0 && (
+                {(member?.approvedRoles?.length ?? 0) > 0 && (
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <Music className="w-4 h-4 text-purple-600" />
-                    {member?.profile?.instruments?.map?.((i: string) => (
-                      <Badge key={i} variant="default">
-                        {i}
-                      </Badge>
-                    ))}
+                    {member?.approvedRoles?.map?.((r: string) => {
+                      const label = MEMBER_FUNCTION_OPTIONS.find((o) => o.value === r)?.label ?? r;
+                      return <Badge key={r} variant="default">{label}</Badge>;
+                    })}
                   </div>
                 )}
 
@@ -385,14 +485,9 @@ export default function MembersPage() {
                   </div>
                 )}
 
-                {(member?.profile?.memberFunction || member?.profile?.leadershipRole) && (
+                {member?.profile?.leadershipRole && (
                   <div className="flex flex-wrap gap-2 mb-2">
-                    {member?.profile?.memberFunction && (
-                      <Badge variant="secondary">{member.profile.memberFunction}</Badge>
-                    )}
-                    {member?.profile?.leadershipRole && (
-                      <Badge variant="warning">{member.profile.leadershipRole}</Badge>
-                    )}
+                    <Badge variant="warning">{member.profile.leadershipRole}</Badge>
                   </div>
                 )}
 
@@ -543,13 +638,12 @@ function MemberModal({
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [birthDate, setBirthDate] = useState("");
-  const [instruments, setInstruments] = useState<string[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
   const [voiceType, setVoiceType] = useState("");
   const [vocalRange, setVocalRange] = useState("");
   const [comfortableKeys, setComfortableKeys] = useState<string[]>([]);
   const [availability, setAvailability] = useState<string[]>([]);
   const [active, setActive] = useState(true);
-  const [memberFunction, setMemberFunction] = useState("");
   const [leadershipRole, setLeadershipRole] = useState("");
   const [permissions, setPermissions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -572,13 +666,12 @@ function MemberModal({
       setEmail(member?.email ?? "");
       setPhone(member?.profile?.phone ?? "");
       setBirthDate(member?.profile?.birthDate ? String(member.profile.birthDate).slice(0, 10) : "");
-      setInstruments(member?.profile?.instruments ?? []);
+      setRoles(member?.approvedRoles ?? []);
       setVoiceType(member?.profile?.voiceType ?? "");
       setVocalRange(member?.profile?.vocalRange ?? "");
       setComfortableKeys(member?.profile?.comfortableKeys ?? []);
       setAvailability(member?.profile?.availability ?? []);
       setActive(member?.profile?.active ?? true);
-      setMemberFunction(member?.profile?.memberFunction ?? "");
       setLeadershipRole(member?.profile?.leadershipRole ?? "");
       setPermissions(member?.profile?.permissions ?? []);
       setPassword("");
@@ -589,13 +682,12 @@ function MemberModal({
       setPassword("");
       setPhone("");
       setBirthDate("");
-      setInstruments([]);
+      setRoles([]);
       setVoiceType("");
       setVocalRange("");
       setComfortableKeys([]);
       setAvailability([]);
       setActive(true);
-      setMemberFunction("");
       setLeadershipRole("");
       setPermissions([]);
       setError("");
@@ -625,13 +717,12 @@ function MemberModal({
             password,
             phone,
             birthDate: birthDate || null,
-            instruments,
+            roles,
             voiceType: voiceType || null,
             vocalRange,
             comfortableKeys,
             availability,
             active,
-            memberFunction: memberFunction || null,
             leadershipRole: leadershipRole || null,
             permissions,
           }),
@@ -650,13 +741,12 @@ function MemberModal({
             name,
             phone,
             birthDate: birthDate || null,
-            instruments,
+            roles,
             voiceType: voiceType || null,
             vocalRange,
             comfortableKeys,
             availability,
             active,
-            memberFunction: memberFunction || null,
             leadershipRole: leadershipRole || null,
             permissions,
           }),
@@ -791,15 +881,27 @@ function MemberModal({
           onChange={(e) => setBirthDate(e?.target?.value ?? '')}
         />
 
-        <Select
-          label="Função no time"
-          value={memberFunction}
-          onChange={(e) => setMemberFunction(e?.target?.value ?? '')}
-          options={[
-            { value: "", label: "Selecione" },
-            ...(MINISTRY_MEMBER_FUNCTIONS?.map?.((item) => ({ value: item, label: item })) ?? []),
-          ]}
-        />
+        <div>
+          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            Funções no ministério
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {MEMBER_FUNCTION_OPTIONS?.map?.((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleItem(roles, option.value, setRoles)}
+                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                  roles?.includes?.(option.value)
+                    ? "bg-purple-600 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <Select
           label="Cargo de liderança"
@@ -810,28 +912,6 @@ function MemberModal({
             ...(MINISTRY_LEADERSHIP_ROLES?.map?.((item) => ({ value: item, label: item })) ?? []),
           ]}
         />
-
-        <div>
-          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-            Instrumentos
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {INSTRUMENTS?.map?.((inst) => (
-              <button
-                key={inst}
-                type="button"
-                onClick={() => toggleItem(instruments, inst, setInstruments)}
-                className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                  instruments?.includes?.(inst)
-                    ? "bg-purple-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                {inst}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <Select
           label="Tipo de Voz"

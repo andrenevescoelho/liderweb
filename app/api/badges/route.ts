@@ -22,10 +22,10 @@ export async function GET(request: NextRequest) {
       const openTickets = await (prisma as any).supportTicket.count({
         where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
       }).catch(() => 0);
-      return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: openTickets });
+      return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: openTickets, pendingRoles: 0 });
     }
 
-    if (!user.id || !user.groupId) return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: 0 });
+    if (!user.id || !user.groupId) return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: 0, pendingRoles: 0 });
 
     const now = new Date();
     const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -105,7 +105,18 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ escalas, comunicados, chat, ensaios, aniversariantes, musicas, tickets: 0 });
+    // Sugestões de roles pendentes — só para quem pode gerenciar membros
+    let pendingRoles = 0;
+    if (user.role === "ADMIN" || user.role === "LEADER") {
+      pendingRoles = await prisma.memberFunction.count({
+        where: {
+          isPending: true,
+          member: { groupId: user.groupId },
+        },
+      });
+    }
+
+    return NextResponse.json({ escalas, comunicados, chat, ensaios, aniversariantes, musicas, tickets: 0, pendingRoles });
   } catch (err) {
     console.error("[badges] error:", err);
     return NextResponse.json({ escalas: 0, comunicados: 0, chat: 0, ensaios: 0, aniversariantes: 0, musicas: 0, tickets: 0 });

@@ -6,6 +6,7 @@ import { MEMBER_FUNCTION_OPTIONS, PROFILE_VOICE_TYPE_OPTIONS, SKILL_LEVEL_OPTION
 import { SessionUser } from "@/lib/types";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
+import { ensureDefaultRoleFunctions } from "@/lib/role-functions";
 
 const MAX_BIO_LENGTH = 2000;
 const MAX_NOTES_LENGTH = 1000;
@@ -27,17 +28,14 @@ const normalizeOptionalText = (value: unknown, maxLength = MAX_TEXT_LENGTH) => {
 const parseBirthDate = (value: unknown) => {
   if (typeof value !== "string" || !value) return { date: null } as const;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return { error: "Data de aniversário inválida" } as const;
-
   const date = new Date(`${value}T12:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return { error: "Data de aniversário inválida" } as const;
-
   return { date } as const;
 };
 
 const validateHttpsUrl = (value: unknown, fieldLabel: string) => {
   if (typeof value !== "string" || !value.trim()) return { value: null } as const;
   const sanitized = stripHtml(value);
-
   try {
     const parsed = new URL(sanitized);
     if (parsed.protocol !== "https:") {
@@ -59,7 +57,14 @@ export async function GET() {
     const user = session.user as SessionUser;
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
-      include: { profile: true, accounts: { select: { provider: true } } },
+      include: {
+        profile: true,
+        accounts: { select: { provider: true } },
+        memberFunctions: {
+          include: { roleFunction: { select: { name: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
     });
 
     if (!dbUser) {
@@ -67,12 +72,30 @@ export async function GET() {
     }
 
     const profile = dbUser.profile;
-    const isGoogleUser = dbUser.accounts.some(a => a.provider === "google");
+    const isGoogleUser = dbUser.accounts.some((a) => a.provider === "google");
+
+    // Roles aprovados (fonte única de verdade)
+    const approvedRoles = dbUser.memberFunctions
+      .filter((mf) => !mf.isPending)
+      .map((mf) => {
+        const option = MEMBER_FUNCTION_OPTIONS.find((o) => o.label === mf.roleFunction.name);
+        return option?.value ?? mf.roleFunction.name;
+      });
+
+    // Roles pendentes (sugeridos pelo membro, aguardando líder)
+    const pendingRoles = dbUser.memberFunctions
+      .filter((mf) => mf.isPending)
+      .map((mf) => {
+        const option = MEMBER_FUNCTION_OPTIONS.find((o) => o.label === mf.roleFunction.name);
+        return option?.value ?? mf.roleFunction.name;
+      });
 
     return NextResponse.json({
       displayName: dbUser.name,
       birthDate: profile?.birthDate ? profile.birthDate.toISOString().slice(0, 10) : "",
-      memberFunctions: profile?.memberFunctions ?? [],
+      // Fonte única: approvedRoles
+      memberFunctions: approvedRoles,
+      pendingRoles,
       availability: profile?.availability ?? [],
       phone: profile?.phone ?? "",
       city: profile?.city ?? "",
@@ -120,11 +143,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: birthDateParsed.error }, { status: 400 });
     }
 
+    // Valida roles enviados pelo membro
     const functions = Array.isArray(body?.memberFunctions)
       ? body.memberFunctions.filter((value: unknown) => typeof value === "string")
       : [];
 
-    const invalidFunction = functions.find((value: string) => !memberFunctionValues.has(value as any));
+    const invalidFunction = functions.find(
+      (value: string) => !memberFunctionValues.has(value as any)
+    );
     if (invalidFunction) {
       return NextResponse.json({ error: `Função inválida: ${invalidFunction}` }, { status: 400 });
     }
@@ -154,6 +180,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: youtubeCheck.error }, { status: 400 });
     }
 
+    // Salva dados do perfil (sem roles — roles vão para MemberFunction)
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
@@ -179,7 +206,6 @@ export async function PATCH(req: NextRequest) {
           repertoirePrefs: normalizeOptionalText(body?.repertoirePrefs, MAX_NOTES_LENGTH),
           instagram: instagramCheck.value,
           youtube: youtubeCheck.value,
-          memberFunctions: functions as any,
         },
         update: {
           phone: normalizeOptionalText(body?.phone, 30),
@@ -198,10 +224,40 @@ export async function PATCH(req: NextRequest) {
           repertoirePrefs: normalizeOptionalText(body?.repertoirePrefs, MAX_NOTES_LENGTH),
           instagram: instagramCheck.value,
           youtube: youtubeCheck.value,
-          memberFunctions: functions as any,
         },
       }),
     ]);
+
+    // Salva roles como sugestões pendentes (membro sugere, líder aprova)
+    if (functions.length > 0 && user.groupId) {
+      const roleFunctionMap = await ensureDefaultRoleFunctions(user.groupId);
+
+      // Remove sugestões pendentes anteriores
+      await prisma.memberFunction.deleteMany({
+        where: { memberId: user.id, isPending: true },
+      });
+
+      // Busca aprovados atuais para não duplicar
+      const approved = await prisma.memberFunction.findMany({
+        where: { memberId: user.id, isPending: false },
+        select: { roleFunctionId: true },
+      });
+      const approvedIds = new Set(approved.map((a) => a.roleFunctionId));
+
+      for (const roleValue of functions) {
+        const roleFunctionId = roleFunctionMap[roleValue as keyof typeof roleFunctionMap];
+        if (!roleFunctionId || approvedIds.has(roleFunctionId)) continue;
+
+        await prisma.memberFunction.create({
+          data: {
+            memberId: user.id,
+            roleFunctionId,
+            isPending: true,
+            suggestedAt: new Date(),
+          },
+        });
+      }
+    }
 
     const after = await prisma.user.findUnique({
       where: { id: user.id },
