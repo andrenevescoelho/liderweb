@@ -1,205 +1,459 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
 import {
-  Scissors, Music2, Headphones, Layers, Clock, CheckCircle2,
-  Loader2, Mail, Sparkles, Zap, ChevronRight,
+  Scissors, Upload, Loader2, Music2, Headphones, Layers, Mic2,
+  Guitar, Piano, Drumstick, Zap, Clock, CheckCircle2, XCircle,
+  Play, Pause, Volume2, VolumeX, Download, ChevronDown, ChevronRight,
+  Timer, MapPin, Lock, ArrowUpRight, RefreshCw, AlertCircle, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
 
-const FEATURES = [
-  { icon: Music2, title: "Voz isolada", description: "Extraia apenas a voz principal da música" },
-  { icon: Headphones, title: "Instrumentos separados", description: "Baixo, bateria, guitarra e teclado em faixas individuais" },
-  { icon: Layers, title: "Backing track", description: "Música sem a voz, perfeita para ensaios" },
-  { icon: Zap, title: "Alta qualidade", description: "Processamento com IA de última geração" },
+interface SplitStem { id: string; label: string; displayName: string; type: string; }
+interface SplitJob {
+  id: string; songName: string; artistName: string | null; status: string;
+  bpm: number | null; musicalKey: string | null; sections: any[] | null;
+  createdAt: string; durationSec: number | null; errorMessage: string | null;
+  stems: SplitStem[];
+}
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any; progress: number }> = {
+  PENDING:    { label: "Na fila",            color: "text-slate-400",   icon: Clock,        progress: 5  },
+  UPLOADING:  { label: "Enviando...",         color: "text-blue-400",    icon: Loader2,      progress: 15 },
+  PROCESSING: { label: "Separando stems...",  color: "text-violet-400",  icon: Loader2,      progress: 50 },
+  ANALYZING:  { label: "Analisando música...",color: "text-amber-400",   icon: Loader2,      progress: 75 },
+  GENERATING: { label: "Gerando guia...",     color: "text-emerald-400", icon: Loader2,      progress: 90 },
+  DONE:       { label: "Concluído",           color: "text-emerald-500", icon: CheckCircle2, progress: 100 },
+  FAILED:     { label: "Erro",                color: "text-red-400",     icon: XCircle,      progress: 0  },
+};
+
+const STEM_ICONS: Record<string, any> = {
+  vocals: Mic2, "vocals@0": Mic2, "vocals@1": Mic2,
+  drum: Drumstick, bass: Music2, piano: Piano,
+  electric_guitar: Guitar, acoustic_guitar: Guitar,
+  synthesizer: Zap, strings: Music2, wind: Music2,
+  no_vocals: Layers, metronome: Timer, guide: MapPin,
+};
+
+const STEM_OPTIONS = [
+  { value: "vocals",          label: "Vocais",          icon: Mic2 },
+  { value: "drum",            label: "Bateria",         icon: Drumstick },
+  { value: "bass",            label: "Baixo",           icon: Music2 },
+  { value: "piano",           label: "Piano",           icon: Piano },
+  { value: "electric_guitar", label: "Guitarra",        icon: Guitar },
+  { value: "acoustic_guitar", label: "Violão",          icon: Guitar },
+  { value: "synthesizer",     label: "Sintetizador",    icon: Zap },
 ];
 
-const USECASES = [
-  "Ensaiar com a backing track da sua música favorita",
-  "Estudar a linha de baixo ou guitarra isolada",
-  "Criar playbacks personalizados para o ministério",
-  "Extrair a voz para analisar a melodia",
-  "Preparar arranjos e cifras com mais precisão",
-];
-
-export default function SplitsPage() {
-  const { data: session, status } = useSession() || {};
-  const router = useRouter();
-  const user = session?.user as SessionUser | undefined;
-
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [name, setName] = useState(user?.name ?? "");
+function StemRow({ stem, jobId }: { stem: SplitStem; jobId: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [registered, setRegistered] = useState(false);
-  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
-  const [error, setError] = useState("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await fetch("/api/splits/interest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Erro ao registrar"); return; }
-      if (data.alreadyRegistered) { setAlreadyRegistered(true); return; }
-      setRegistered(true);
-    } catch {
-      setError("Erro inesperado. Tente novamente.");
-    } finally {
-      setLoading(false);
+  const typeColors: Record<string, string> = {
+    INSTRUMENT: "border-primary/30 bg-primary/5",
+    BACKING:    "border-violet-500/30 bg-violet-500/5",
+    METRONOME:  "border-amber-500/30 bg-amber-500/5",
+    GUIDE:      "border-emerald-500/30 bg-emerald-500/5",
+  };
+
+  const getUrl = async () => {
+    const res = await fetch(`/api/splits/audio?stemId=${stem.id}`);
+    const d = await res.json();
+    return d.url as string;
+  };
+
+  const togglePlay = async () => {
+    if (loading) return;
+    if (!audioRef.current) {
+      setLoading(true);
+      try {
+        const url = await getUrl();
+        audioRef.current = new Audio(url);
+        audioRef.current.onended = () => setPlaying(false);
+      } finally { setLoading(false); }
+    }
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
     }
   };
 
+  const handleDownload = async () => {
+    const url = await getUrl();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${stem.displayName}.wav`;
+    a.click();
+  };
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = muted;
+  }, [muted]);
+
+  const Icon = STEM_ICONS[stem.label] ?? Music2;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-10 pb-16">
+    <div className={cn("flex items-center gap-3 rounded-xl border px-4 py-3 transition-all", typeColors[stem.type] ?? "border-border bg-card")}>
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-background/50">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{stem.displayName}</p>
+        <p className="text-[10px] text-muted-foreground capitalize">{stem.type === "INSTRUMENT" ? "Stem" : stem.type === "BACKING" ? "Backing" : stem.type === "METRONOME" ? "Metrônomo" : "Guia"}</p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setMuted(v => !v)}
+          className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-background/50 transition-colors">
+          {muted ? <VolumeX className="h-3.5 w-3.5 text-muted-foreground" /> : <Volume2 className="h-3.5 w-3.5" />}
+        </button>
+        <button onClick={togglePlay}
+          className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-background/50 transition-colors">
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        </button>
+        <button onClick={handleDownload}
+          className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-background/50 transition-colors">
+          <Download className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {/* Hero */}
-      <div className="relative rounded-2xl overflow-hidden border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-violet-500/10 p-8 md:p-12">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(139,92,246,0.15),_transparent_60%)]" />
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-500">
-              <Clock className="h-3 w-3" /> Em breve
-            </span>
-            <span className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3 w-3" /> IA
-            </span>
+function JobCard({ job, onRefresh, onOpen, onDelete }: { job: SplitJob; onRefresh: () => void; onOpen: (id: string) => void; onDelete: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(job.status === "DONE");
+  const [cancelling, setCancelling] = useState(false);
+  const cfg = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.PENDING;
+  const StatusIcon = cfg.icon;
+  const isActive = !["DONE", "FAILED"].includes(job.status);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = setInterval(() => onRefresh(), 5000);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  const handleCancel = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Cancelar este split?")) return;
+    setCancelling(true);
+    try {
+      await fetch(`/api/splits?id=${job.id}`, { method: "DELETE" });
+      onRefresh();
+    } finally { setCancelling(false); }
+  };
+
+  const stemGroups = {
+    vocals:    job.stems.filter(s => s.label.startsWith("vocal")),
+    backing:   job.stems.filter(s => s.type === "BACKING"),
+    instr:     job.stems.filter(s => s.type === "INSTRUMENT" && !s.label.startsWith("vocal")),
+    special:   job.stems.filter(s => ["METRONOME", "GUIDE"].includes(s.type)),
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={() => setExpanded(v => !v)}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold truncate">{job.songName}</p>
+            {job.artistName && <span className="text-xs text-muted-foreground truncate">— {job.artistName}</span>}
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">
-            Split de músicas
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-xl">
-            Separe qualquer música em faixas individuais — voz, baixo, bateria, guitarra e mais.
-            Tudo com inteligência artificial, direto no LiderWeb.
-          </p>
-        </div>
-      </div>
-
-      {/* Features */}
-      <div>
-        <h2 className="text-xl font-bold mb-4">O que vai ser possível fazer</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {FEATURES.map((f, i) => (
-            <div key={i} className="flex items-start gap-4 rounded-xl border border-border bg-muted/20 p-5">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <f.icon className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">{f.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Use cases */}
-      <div className="rounded-xl border border-border bg-muted/20 p-6">
-        <h2 className="text-base font-bold mb-4">Como seu ministério vai usar</h2>
-        <ul className="space-y-2.5">
-          {USECASES.map((uc, i) => (
-            <li key={i} className="flex items-center gap-2.5 text-sm text-muted-foreground">
-              <ChevronRight className="h-4 w-4 text-primary flex-shrink-0" />
-              {uc}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Formulário de interesse */}
-      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-8">
-        {registered || alreadyRegistered ? (
-          <div className="flex flex-col items-center gap-4 text-center py-4">
-            <CheckCircle2 className="h-12 w-12 text-green-500" />
-            <div>
-              <p className="text-lg font-bold">
-                {alreadyRegistered ? "Você já está na lista!" : "Interesse registrado!"}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {alreadyRegistered
-                  ? "Já recebemos seu interesse. Você será o primeiro a saber quando lançar."
-                  : "Avisaremos você por email assim que o Split de músicas estiver disponível."}
-              </p>
-            </div>
-            {status === "unauthenticated" && (
-              <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
-                Entrar na plataforma
-              </Button>
-            )}
+          <div className="flex items-center gap-3 mt-1">
+            <span className={cn("flex items-center gap-1 text-xs font-medium", cfg.color)}>
+              <StatusIcon className={cn("h-3 w-3", isActive && "animate-spin")} />
+              {cfg.label}
+            </span>
+            {job.bpm && <span className="text-[11px] text-muted-foreground">{Math.round(job.bpm)} BPM</span>}
+            {job.musicalKey && <span className="text-[11px] text-muted-foreground">{job.musicalKey}</span>}
+            {job.stems.length > 0 && <span className="text-[11px] text-muted-foreground">{job.stems.length} faixas</span>}
           </div>
-        ) : (
-          <>
-            <div className="mb-6">
-              <h2 className="text-xl font-bold">Quero ser avisado quando lançar</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Cadastre seu email e seja o primeiro a ter acesso quando o Split de músicas for lançado.
-              </p>
-            </div>
-            <form onSubmit={handleSubmit} className="space-y-3 max-w-md">
-              {error && (
-                <p className="text-sm text-red-500">{error}</p>
-              )}
-              {status !== "authenticated" && (
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Seu nome"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              )}
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="Seu melhor email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9"
-                  required
-                />
+        </div>
+        {job.status === "DONE" && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={e => { e.stopPropagation(); onOpen(job.id); }}
+              className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium hover:bg-primary/20 transition-colors">
+              <Play className="h-3 w-3" />Player
+            </button>
+            <button onClick={e => { e.stopPropagation(); onDelete(job.id); }}
+              className="h-7 w-7 flex items-center justify-center rounded-lg border border-red-500/20 text-red-400/60 hover:text-red-400 hover:border-red-500/40 hover:bg-red-500/10 transition-colors">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        {job.status === "FAILED" && (
+          <button onClick={e => { e.stopPropagation(); onDelete(job.id); }}
+            className="h-7 w-7 flex items-center justify-center rounded-lg border border-red-500/20 text-red-400/60 hover:text-red-400 hover:border-red-500/40 hover:bg-red-500/10 transition-colors flex-shrink-0">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {isActive && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-20">
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full bg-primary transition-all duration-1000" style={{ width: `${cfg.progress}%` }} />
               </div>
-              <Button
-                type="submit"
-                className="w-full sm:w-auto"
-                disabled={loading || !email}
-              >
-                {loading
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Registrando...</>
-                  : <><Sparkles className="mr-2 h-4 w-4" />Quero ser avisado</>}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Sem spam. Só avisaremos quando o recurso estiver pronto.
-              </p>
-            </form>
-          </>
+              <p className="text-[9px] text-muted-foreground text-center mt-0.5">{cfg.progress}%</p>
+            </div>
+            <button onClick={handleCancel} disabled={cancelling}
+              className="h-7 w-7 flex items-center justify-center rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+              title="Cancelar">
+              {cancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        )}
+        {!isActive && (
+          <div className="h-7 w-7 flex-shrink-0 flex items-center justify-center">
+            {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          </div>
         )}
       </div>
 
-      {/* Acesso RBAC — info para admin */}
-      {(user?.role === "ADMIN" || user?.role === "SUPERADMIN") && (
-        <div className="rounded-xl border border-border/50 bg-muted/10 p-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Info para administradores
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Quando o Split for lançado, o acesso será controlado por permissões RBAC.
-            Membros com perfil <strong className="text-foreground">Músico</strong> ou <strong className="text-foreground">Ministro</strong> terão acesso automaticamente.
-            Você também pode conceder acesso individualmente na gestão de membros.
-          </p>
+      {isActive && (
+        <div className="px-4 pb-3">
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
+            <div className="h-full rounded-full bg-primary/50 animate-pulse" style={{ width: `${cfg.progress}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">{cfg.label} — isso pode levar alguns minutos...</p>
+        </div>
+      )}
+
+      {job.status === "FAILED" && (
+        <div className="px-4 pb-3">
+          <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" />{job.errorMessage || "Erro no processamento"}</p>
+        </div>
+      )}
+
+
+    </div>
+  );
+}
+
+export default function SplitsPage() {
+  const { data: session } = useSession() || {};
+  const user = session?.user as SessionUser | undefined;
+
+  const router = useRouter();
+  const [jobs, setJobs] = useState<SplitJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [quota, setQuota] = useState(0);
+  const [usedThisMonth, setUsedThisMonth] = useState(0);
+
+  // Upload form
+  const [dragging, setDragging] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [songName, setSongName] = useState("");
+  const [artistName, setArtistName] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [selectedStems, setSelectedStems] = useState<string[]>(["vocals", "drum", "bass", "piano"]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Remover este split?")) return;
+    await fetch(`/api/splits?id=${id}&action=delete`, { method: "DELETE" });
+    setJobs(prev => prev.filter(j => j.id !== id));
+    toast.success("Split removido");
+  };
+
+  const fetchJobs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/splits");
+      const data = await res.json();
+      setJobs(data.jobs ?? []);
+      setHasAccess(data.hasAccess ?? false);
+      setQuota(data.quota ?? 0);
+      setUsedThisMonth(data.usedThisMonth ?? 0);
+    } catch {}
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) { setFile(f); if (!songName) setSongName(f.name.replace(/\.[^.]+$/, "")); }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) { setFile(f); if (!songName) setSongName(f.name.replace(/\.[^.]+$/, "")); }
+  };
+
+  const handleSubmit = async () => {
+    if (!file || !songName.trim()) { toast.error("Selecione um arquivo e informe o nome da música"); return; }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("songName", songName.trim());
+      form.append("artistName", artistName.trim());
+      form.append("stems", selectedStems.join(","));
+      const res = await fetch("/api/splits", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.message || data.error || "Erro ao enviar"); return; }
+      toast.success("Split iniciado! Você será notificado quando concluir.");
+      setFile(null); setSongName(""); setArtistName("");
+      fetchJobs();
+    } finally { setUploading(false); }
+  };
+
+  if (!hasAccess && !loading) return (
+    <div className="max-w-2xl mx-auto space-y-6 py-8">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Scissors className="h-5 w-5 text-primary" /></div>
+        <div><h1 className="text-2xl font-bold">Split de músicas</h1><p className="text-sm text-muted-foreground">Separe qualquer música em stems com IA</p></div>
+      </div>
+      <div className="rounded-2xl border border-dashed border-border p-10 text-center space-y-4">
+        <Lock className="h-12 w-12 text-muted-foreground/20 mx-auto" />
+        <div>
+          <h3 className="font-semibold text-lg">Recurso Premium</h3>
+          <p className="text-sm text-muted-foreground mt-1">Split de músicas está disponível nos planos <strong>Avançado</strong> e <strong>Igreja</strong>.</p>
+        </div>
+        <Button onClick={() => window.open("/planos", "_blank")}><ArrowUpRight className="h-4 w-4 mr-1.5" />Ver planos</Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 pb-10">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Scissors className="h-5 w-5 text-primary" /></div>
+          <div>
+            <h1 className="text-2xl font-bold">Split de músicas</h1>
+            <p className="text-sm text-muted-foreground">Stems separados com IA + metrônomo e guia automáticos</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-bold">{usedThisMonth}<span className="text-muted-foreground text-sm font-normal">/{quota}</span></p>
+          <p className="text-xs text-muted-foreground">este mês</p>
+        </div>
+      </div>
+
+      {/* Upload */}
+      {usedThisMonth < quota && (
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+          <h2 className="font-semibold text-sm">Nova separação</h2>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all",
+              dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/20",
+              file && "border-emerald-500/40 bg-emerald-500/5"
+            )}
+          >
+            {file ? (
+              <div className="flex items-center justify-center gap-2">
+                <Music2 className="h-5 w-5 text-emerald-500" />
+                <p className="text-sm font-medium text-emerald-500">{file.name}</p>
+                <p className="text-xs text-muted-foreground">({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+              </div>
+            ) : (
+              <>
+                <Upload className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Arraste o arquivo ou clique para selecionar</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">MP3, WAV, M4A, FLAC ou OGG • Máx. 50MB</p>
+              </>
+            )}
+            <input ref={fileInputRef} type="file" accept=".mp3,.wav,.m4a,.flac,.ogg,audio/*" onChange={handleFileChange} className="hidden" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Nome da música *</label>
+              <Input value={songName} onChange={e => setSongName(e.target.value)} placeholder="Ex: Oceanos" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Artista</label>
+              <Input value={artistName} onChange={e => setArtistName(e.target.value)} placeholder="Ex: Hillsong" />
+            </div>
+          </div>
+
+          {/* Seleção de stems */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">Stems a separar</label>
+            <div className="flex flex-wrap gap-2">
+              {STEM_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setSelectedStems(prev =>
+                    prev.includes(opt.value) ? prev.filter(s => s !== opt.value) : [...prev, opt.value]
+                  )}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                    selectedStems.includes(opt.value)
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/20"
+                  )}>
+                  <opt.icon className="h-3 w-3" />{opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              Metrônomo e guia de seções são sempre gerados automaticamente.
+              {selectedStems.length > 0 && ` Custo: ${selectedStems.length}× duração da música.`}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">O processamento leva ~5 minutos. Você pode fechar esta página.</p>
+            <Button onClick={handleSubmit} disabled={!file || !songName.trim() || uploading || selectedStems.length === 0}>
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Scissors className="h-4 w-4 mr-1.5" />}
+              Separar stems
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* O que é gerado */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: Mic2, label: "Vocais isolados", desc: "Voz principal e backing vocals" },
+          { icon: Drumstick, label: "Instrumentos", desc: "Bateria, baixo, guitarra, piano..." },
+          { icon: Timer, label: "Metrônomo", desc: "Clique gerado no BPM da música" },
+          { icon: MapPin, label: "Guia de seções", desc: "Voz indicando intro, verso, refrão..." },
+        ].map((f, i) => (
+          <div key={i} className="rounded-xl border border-border bg-card/50 p-3 flex items-start gap-2.5">
+            <f.icon className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold">{f.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{f.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Lista de jobs */}
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : jobs.length === 0 ? (
+        <div className="rounded-xl border border-dashed p-10 text-center">
+          <Scissors className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-muted-foreground text-sm">Nenhuma separação ainda. Envie sua primeira música!</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-sm">Histórico</h2>
+            <Button variant="ghost" size="sm" onClick={fetchJobs}><RefreshCw className="h-3.5 w-3.5 mr-1" />Atualizar</Button>
+          </div>
+          {jobs.map(job => <JobCard key={job.id} job={job} onRefresh={fetchJobs} onOpen={id => router.push(`/splits/${id}`)} onDelete={handleDelete} />)}
         </div>
       )}
     </div>

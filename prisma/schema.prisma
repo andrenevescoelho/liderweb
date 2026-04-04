@@ -239,6 +239,7 @@ model Group {
   paymentTransactions PaymentTransaction[]
   carts               Cart[]
   supportTickets      SupportTicket[]
+  splitJobs           SplitJob[]
   orders              Order[]
 }
 
@@ -357,6 +358,7 @@ model User {
   customMixes          CustomMix[]
   supportTickets       SupportTicket[]
   supportReplies       SupportTicketReply[]
+  splitJobs            SplitJob[]
 }
 
 model CoachContentCache {
@@ -1314,6 +1316,76 @@ model FaqItem {
   @@index([isPublished])
 }
 
+// ─── Módulo Split ──────────────────────────────────────────────────────────────
+
+model SplitJob {
+  id            String        @id @default(cuid())
+  groupId       String
+  userId        String
+  songId        String?       // vínculo opcional com música do repertório
+  songName      String        // nome da música
+  artistName    String?
+  status        SplitJobStatus @default(PENDING)
+  errorMessage  String?
+
+  // Dados do arquivo original
+  sourceFileKey String        // chave R2 do arquivo original
+  fileName      String
+  fileSizeBytes Int?
+  durationSec   Float?
+
+  // Dados do lalal.ai
+  lalalSourceId String?       // source_id retornado pelo upload
+  lalalTaskId   String?       // task_id da separação
+
+  // Dados musicais detectados pelo Gemini
+  bpm           Float?
+  musicalKey    String?       // ex: "C Major", "A minor"
+  sections      Json?         // [{label: "Intro", startSec: 0, endSec: 8}, ...]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stems         SplitStem[]
+
+  @@index([groupId, status])
+  @@index([userId])
+}
+
+model SplitStem {
+  id          String    @id @default(cuid())
+  jobId       String
+  label       String    // "vocals", "drums", "bass", "metronome", "guide", etc.
+  displayName String    // "Vocais", "Bateria", "Baixo", "Metrônomo", "Guia"
+  fileKey     String    // chave R2
+  type        StemType  @default(INSTRUMENT)
+  durationSec Float?
+  createdAt   DateTime  @default(now())
+
+  job         SplitJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+enum SplitJobStatus {
+  PENDING       // aguardando processamento
+  UPLOADING     // enviando para lalal.ai
+  PROCESSING    // lalal.ai separando stems
+  ANALYZING     // Gemini analisando BPM/tom/seções
+  GENERATING    // gerando metrônomo e guia
+  DONE          // concluído
+  FAILED        // erro
+}
+
+enum StemType {
+  INSTRUMENT    // stem normal (vocal, baixo, etc.)
+  METRONOME     // faixa de clique gerada
+  GUIDE         // faixa de guia TTS gerada
+  BACKING       // instrumental sem um stem
+}
+
 model SupportTicket {
   id          String              @id @default(cuid())
   groupId     String
@@ -1353,13 +1425,12 @@ model SupportChatLog {
   userId      String?
   question    String   @db.Text
   answer      String   @db.Text
-  source      String   // "faq" | "llm" | "fallback"
+  source      String
   faqItemId   String?
   helpful     Boolean?
   createdAt   DateTime @default(now())
 
   @@index([groupId])
-  @@index([faqItemId])
 }
 
 enum SupportTicketStatus {

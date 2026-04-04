@@ -48,6 +48,7 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       MAIL_FROM: ${MAIL_FROM}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+      LALAL_API_KEY: ${LALAL_API_KEY}
     volumes:
       - ./:/app
       - liderweb_node_modules:/app/node_modules
