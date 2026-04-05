@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/app-header";
 import { X } from "lucide-react";
 import pkg from "../package.json";
 import { PendingAnnouncementModal } from "@/components/pending-announcement-modal";
+import { FloatingChat } from "@/components/floating-chat";
 
 const APP_VERSION = `Versão ${pkg.version}`;
 
@@ -89,6 +90,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </main>
         {!isFullscreen && <footer className="px-4 pb-4 text-center text-xs text-muted-foreground md:px-6">{APP_VERSION}</footer>}
         <PendingAnnouncementModal />
+        <FloatingChat />
       </div>
     </div>
   );

@@ -223,6 +223,7 @@ model Group {
   inviteTokens        InviteToken[]
   rehearsals          Rehearsal[]
   messages            GroupMessage[]
+  directMessages      DirectMessage[]
   broadcasts          GroupBroadcast[]
   roleFunctions       RoleFunction[]
   auditLogs           AuditLog[]
@@ -339,8 +340,10 @@ model User {
   rehearsalAttendances RehearsalAttendance[]
   rehearsalTasks       RehearsalTask[]
   sentGroupMessages    GroupMessage[]        @relation("GroupMessageSender")
+  sentDirectMessages   DirectMessage[]       @relation("DirectMessageSender")
+  receivedDirectMessages DirectMessage[]     @relation("DirectMessageReceiver")
   sentGroupBroadcasts  GroupBroadcast[]      @relation("GroupBroadcastSender")
-  memberFunctions         MemberFunction[]      @relation("UserMemberFunctions")
+  memberFunctions      MemberFunction[]      @relation("UserMemberFunctions")
   approvedMemberFunctions MemberFunction[]      @relation("MemberFunctionApprovals")
   scheduleMemberRoles  ScaleMemberRole[]     @relation("ScaleMemberRolesByMember")
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
@@ -552,6 +555,22 @@ model GroupMessage {
   @@index([groupId, createdAt])
 }
 
+model DirectMessage {
+  id           String   @id @default(cuid())
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderUserId String
+  sender       User     @relation("DirectMessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+  receiverUserId String
+  receiver     User     @relation("DirectMessageReceiver", fields: [receiverUserId], references: [id], onDelete: Cascade)
+  content      String   @db.Text
+  readAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([groupId, senderUserId, receiverUserId, createdAt])
+  @@index([groupId, receiverUserId, readAt])
+}
+
 model GroupBroadcast {
   id           String   @id @default(cuid())
   groupId      String
@@ -702,7 +721,6 @@ model SetlistItem {
 model Schedule {
   id          String            @id @default(cuid())
   date        DateTime
-  time        String?           // ex: "09:00", "17:00", "19:00"
   name        String?           // ex: "Culto da Manhã", "Escola Dominical"
   setlistId   String?
   setlist     Setlist?          @relation(fields: [setlistId], references: [id], onDelete: SetNull)
