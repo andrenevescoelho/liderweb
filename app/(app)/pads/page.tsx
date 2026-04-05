@@ -412,7 +412,16 @@ export default function PadsPage() {
             const active=currentPad?.id===pad.id&&isPlaying;
             return (
               <button key={pad.id}
-                onClick={()=>{setCurrentPad(pad); if(isPlaying&&currentPad?.id!==pad.id) playPad(pad);}}
+                onClick={()=>{
+                  if(isPlaying && currentPad?.id===pad.id){
+                    // Mesmo pad tocando — parar
+                    stopPad();
+                  } else {
+                    // Pad diferente ou parado — tocar
+                    setCurrentPad(pad);
+                    playPad(pad);
+                  }
+                }}
                 className="relative rounded-3xl flex flex-col items-center justify-center gap-4 transition-all border-2"
                 style={{
                   background:active?`radial-gradient(circle, ${pad.color}30, ${pad.color}08)`:`radial-gradient(circle, ${pad.color}10, transparent)`,
