@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
