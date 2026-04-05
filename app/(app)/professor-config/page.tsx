@@ -19,7 +19,7 @@ import toast from "react-hot-toast";
 
 interface MemberCoachInfo {
   id: string; name: string; email: string; role: string;
-  memberFunction: string | null; instruments: string[]; voiceType: string | null;
+  memberFunction: string | null; memberFunctions: string[]; voiceType: string | null;
   coachEnabled: boolean; coachLevel: number; coachProfileId: string | null;
 }
 
@@ -29,7 +29,7 @@ interface SubmissionProgress {
 }
 
 interface MemberProgress {
-  member: { id: string; name: string; email: string; memberFunction: string | null; instruments: string[]; voiceType: string | null; coachEnabled: boolean; level: number };
+  member: { id: string; name: string; email: string; memberFunction: string | null; memberFunctions: string[]; voiceType: string | null; coachEnabled: boolean; level: number };
   submissions: SubmissionProgress[];
 }
 
@@ -303,7 +303,7 @@ export default function ProfessorConfigPage() {
                     <p className="text-sm text-muted-foreground truncate">{member.email}</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {member.memberFunction && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{member.memberFunction}</span>}
-                      {member.instruments.map((inst) => <span key={inst} className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-400">{inst}</span>)}
+                      {(member.memberFunctions ?? []).map((fn) => <span key={fn} className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-400">{fn}</span>)}
                       {member.voiceType && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">{member.voiceType}</span>}
                     </div>
                   </div>
