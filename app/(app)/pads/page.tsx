@@ -261,6 +261,23 @@ export default function PadsPage() {
     }).catch(()=>{});
   },[]);
 
+  // Cleanup ao sair da página — para áudio e fecha o contexto
+  useEffect(()=>{
+    return ()=>{
+      // Parar source imediatamente
+      if(sourceRef.current){
+        try{ sourceRef.current.stop(); }catch{}
+        sourceRef.current=null;
+      }
+      gainRef.current=null;
+      // Fechar AudioContext — libera recursos e para qualquer áudio residual
+      if(audioCtxRef.current){
+        audioCtxRef.current.close().catch(()=>{});
+        audioCtxRef.current=null;
+      }
+    };
+  },[]);
+
   const playPad=useCallback((pad:Pad)=>{
     const ctx=audioCtxRef.current;
     if(!ctx){
