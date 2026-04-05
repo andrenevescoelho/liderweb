@@ -45,6 +45,7 @@ import { toast } from "@/hooks/use-toast";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { can, canAny } from "@/lib/rbac";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import { MinistryInsightsCard } from "@/components/ministry-insights-card";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -742,6 +743,10 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {(userRole === "ADMIN" || userRole === "LEADER") && (
+            <MinistryInsightsCard />
           )}
 
           {canAccessAdminDashboard && (
