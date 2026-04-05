@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   LayoutDashboard,
@@ -44,6 +44,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { can, canAny } from "@/lib/rbac";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -370,27 +371,55 @@ export default function DashboardPage() {
     canConfirmPresence;
   const isNextCommitmentPending = nextCommitment?.myStatus === "PENDING";
 
+  // Contexto para saudação inteligente
+  const nextSched = upcomingSchedules?.[0];
+  const daysToNext = nextSched?.date
+    ? differenceInDays(new Date(nextSched.date), new Date())
+    : null;
+  const pendingCount = pendingConfirmations?.length ?? 0;
+  const firstName = userName?.split(' ')?.[0] ?? 'Líder';
+  const greetingHeadline = (() => {
+    if (daysToNext === 0) return `${firstName}, hoje tem culto! 🎶`;
+    if (daysToNext === 1) return `${firstName}, amanhã tem culto!`;
+    if (daysToNext !== null && daysToNext <= 3) return `${firstName}, culto em ${daysToNext} dias.`;
+    return `Olá, ${firstName}!`;
+  })();
+  const greetingSubline = (() => {
+    if (daysToNext !== null && daysToNext <= 3) return "Certifique-se que todos estão confirmados.";
+    if (pendingCount > 0) return `${pendingCount} membro${pendingCount > 1 ? "s" : ""} ainda não confirmou${pendingCount > 1 ? "ram" : ""} presença.`;
+    return data?.groupName ? `Ministério ${data.groupName} — tudo sob controle.` : "Seu ministério organizado em um só lugar.";
+  })();
+
   return (
     <div className="space-y-6">
       {userRole !== "SUPERADMIN" && (
-        <div className="flex items-center gap-3">
-          <LayoutDashboard className="w-8 h-8 text-purple-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Olá, {userName?.split?.(' ')?.[0] ?? 'Usuário'}!
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Bem-vindo ao Líder Web
-            </p>
-            {data?.groupName && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Ministério: {data.groupName}
+        <div className="flex items-start gap-4 rounded-xl border border-border/60 bg-gradient-to-r from-purple-500/5 to-transparent p-5">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
+            <LayoutDashboard className="w-5 h-5 text-purple-600" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{greetingHeadline}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{greetingSubline}</p>
+            {nextSched && daysToNext !== null && daysToNext > 3 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Próximo culto: <span className="font-medium text-foreground">
+                  {format(new Date(nextSched.date), "dd 'de' MMMM", { locale: ptBR })}
+                  {nextSched.name ? ` — ${nextSched.name}` : ""}
+                </span>
               </p>
             )}
           </div>
         </div>
       )}
 
+      {userRole === "ADMIN" && (
+        <OnboardingChecklist
+          totalMembers={stats?.totalMembers ?? 0}
+          totalSongs={stats?.totalSongs ?? 0}
+          totalSetlists={stats?.totalSetlists ?? 0}
+          groupName={data?.groupName ?? null}
+        />
+      )}
 
       {userRole !== "SUPERADMIN" && (birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
         <Card className="rounded-xl border border-border/80">
@@ -698,8 +727,8 @@ export default function DashboardPage() {
               <CardContent className="p-4 sm:p-5">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Ações rápidas</p>
-                    <p className="text-base font-semibold">Acelere a rotina do ministério</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">O que fazer agora</p>
+                    <p className="text-base font-semibold">Seu ministério não para.</p>
                   </div>
                   <div className="grid w-full gap-2 sm:grid-cols-3 md:w-auto">
                     {quickActions.map((action) => (
