@@ -1,11 +1,13 @@
 "use client";
 
+import { AiScheduleWizard } from "@/components/ai-schedule-wizard";
+
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,9 +44,44 @@ export default function SchedulesPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [modalOpen, setModalOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<any>(null);
+  const [aiWizardOpen, setAiWizardOpen] = useState(false);
+  const [aiCreating, setAiCreating] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
+
+  const handleAcceptAiDraft = async (schedules: any[]) => {
+    setAiCreating(true);
+    let created = 0;
+    for (const s of schedules) {
+      try {
+        await fetch("/api/schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: s.date,
+            time: s.time ?? null,
+            name: s.name ?? null,
+            roles: (s.roles ?? [])
+              .filter((r: any) => r.memberId)
+              .map((r: any) => ({ role: r.role, memberId: r.memberId, status: "PENDING" })),
+            setlistItems: (s.songs ?? []).map((song: any) => ({
+              songId: song.songId,
+              selectedKey: song.key ?? "C",
+            })),
+          }),
+        });
+        created++;
+      } catch (e) {
+        console.error("Erro ao criar escala:", e);
+      }
+    }
+    await fetchSchedules();
+    setAiCreating(false);
+    if (created > 0) {
+      alert(`${created} escala${created > 1 ? "s" : ""} criada${created > 1 ? "s" : ""} com sucesso!`);
+    }
+  };
 
   const fetchSchedules = async () => {
     try {
@@ -109,9 +146,22 @@ export default function SchedulesPage() {
           </div>
         </div>
         {canEdit && (
-          <Button onClick={() => { setEditSchedule(null); setModalOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> Nova Escala
-          </Button>
+          <div className="flex gap-2">
+            {canEdit && (
+              <Button
+                variant="outline"
+                onClick={() => setAiWizardOpen(true)}
+                disabled={aiCreating}
+                className="gap-2 border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+              >
+                <Sparkles className="w-4 h-4" />
+                {aiCreating ? "Criando..." : "Gerar com IA"}
+              </Button>
+            )}
+            <Button onClick={() => { setEditSchedule(null); setModalOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> Nova Escala
+            </Button>
+          </div>
         )}
       </div>
 
@@ -191,7 +241,7 @@ export default function SchedulesPage() {
           <CardContent>
             {selectedSchedule?.setlist && (
               <div className="mb-4">
-                <p className="text-sm text-gray-500 mb-2">Músicas da escala</p>
+<p className="text-sm text-gray-500 mb-2">Músicas da escala</p>
                 {(() => {
                   const items = selectedSchedule?.setlist?.items ?? [];
                   if (!items.length) return <p className="font-medium text-gray-900 dark:text-white">Sem músicas definidas</p>;
@@ -313,6 +363,12 @@ export default function SchedulesPage() {
           </CardContent>
         </Card>
       )}
+
+      <AiScheduleWizard
+        isOpen={aiWizardOpen}
+        onClose={() => setAiWizardOpen(false)}
+        onAccept={handleAcceptAiDraft}
+      />
 
       <ScheduleModal
         isOpen={modalOpen}
