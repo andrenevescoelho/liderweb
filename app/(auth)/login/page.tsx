@@ -93,20 +93,66 @@ export default function LoginPage() {
     }
   };
 
+  const features = [
+    { icon: "🎵", text: "Escalas organizadas, sem confusão de última hora" },
+    { icon: "🎓", text: "Professor IA que treina cada músico individualmente" },
+    { icon: "💬", text: "Comunicação centralizada com toda a equipe" },
+    { icon: "🎚️", text: "Multitracks e ensaios ao alcance de um clique" },
+  ];
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.2),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.16),_transparent_42%)]" />
-      <Card className="relative w-full max-w-md p-8">
-        <div className="mb-8 text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="rounded-xl border border-primary/25 bg-primary/15 p-3">
-              <Image src="/favicon.svg" alt="LiderWeb" width={32} height={32} className="h-8 w-8" />
-            </div>
+    <div className="relative flex min-h-screen overflow-hidden bg-background">
+      {/* Lado esquerdo — proposta de valor */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 text-white" style={{ background: "linear-gradient(135deg, #0f1728 0%, #0d1f35 60%, #0a1a2e 100%)" }}>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+            <Image src="/favicon.svg" alt="LiderWeb" width={28} height={28} className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-semibold">LiderWeb</h1>
-          <p className="mt-1 text-xs text-muted-foreground">by multitrackgospel.com</p>
-          <p className="mt-2 text-sm text-muted-foreground">Entre na sua conta</p>
+          <div>
+            <span className="text-lg font-bold">LiderWeb</span>
+            <span className="ml-2 text-xs text-white/50">by multitrackgospel.com</span>
+          </div>
         </div>
+
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-4xl font-bold leading-tight">
+              Organize, treine e{" "}
+              <span style={{ color: "#1cc9a8" }}>eleve o nível</span>{" "}
+              do seu ministério.
+            </h1>
+            <p className="mt-4 text-base text-white/60">
+              Chega de ensaios desorganizados, músicos despreparados e escalas confusas.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {features.map((f, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/5 px-4 py-3">
+                <span className="text-xl">{f.icon}</span>
+                <span className="text-sm text-white/90">{f.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-white/25">
+          Mais de 100 ministérios confiam no LiderWeb.
+        </p>
+      </div>
+
+      {/* Lado direito — formulário */}
+      <div className="flex w-full lg:w-1/2 items-center justify-center p-6">
+        <Card className="relative w-full max-w-md p-8">
+          <div className="mb-8 text-center">
+            <div className="mb-4 flex justify-center lg:hidden">
+              <div className="rounded-xl border border-primary/25 bg-primary/15 p-3">
+                <Image src="/favicon.svg" alt="LiderWeb" width={32} height={32} className="h-8 w-8" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-semibold">Entrar na sua conta</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Bem-vindo de volta ao seu ministério</p>
+          </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {(error || oauthErrorMessage) && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error || oauthErrorMessage}</div>}
@@ -152,6 +198,7 @@ export default function LoginPage() {
           </Link>
         </p>
       </Card>
+      </div>
     </div>
   );
 }
