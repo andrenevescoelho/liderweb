@@ -141,7 +141,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     if (item.href === "/aniversariantes" && userRole === "SUPERADMIN") return false;
     if (["/ensaios", "/comunicados", "/chat-grupo"].includes(item.href) && !user?.groupId) return false;
 
-    // SUPERADMIN vê tudo (exceto exceções acima)
+    // Verificar se o role tem acesso ao item
+    if (!item.roles.includes(userRole)) return false;
+
+    // SUPERADMIN: só o que está explicitamente no seu roles[] — sem herdar permissões granulares
     if (userRole === "SUPERADMIN") return true;
 
     // Se o item tem permissões granulares:
