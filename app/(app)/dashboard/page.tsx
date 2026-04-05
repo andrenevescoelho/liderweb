@@ -322,10 +322,7 @@ export default function DashboardPage() {
   const birthdaysToday = data?.birthdaysToday ?? [];
   const birthdaysMonth = data?.birthdaysMonth ?? [];
   const nextCommitment = myUpcomingSchedules?.[0] ?? null;
-  const canConfirmPresence = can(sessionUser, "schedule.presence.confirm.self");
-  const canViewMembersCard = canAny(sessionUser, ["member.view", "member.manage"]);
   const canManageSchedules = canAny(sessionUser, ["schedule.create", "schedule.edit"]);
-  const canViewSongsCard = userRole === "ADMIN" || canAny(sessionUser, ["music.view", "music.manage"]);
   const canSendReminder = canAny(sessionUser, ["communication.schedule.announce", "schedule.edit", "report.group.access"]);
   const quickActions = [
     canManageSchedules
@@ -344,14 +341,12 @@ export default function DashboardPage() {
           icon: Sparkles,
         }
       : null,
-    canViewSongsCard
-      ? {
+    {
           key: "song",
           href: "/songs",
           label: "Adicionar música",
           icon: Music,
-        }
-      : null,
+        },
     canSendReminder
       ? {
           key: "reminder",
@@ -365,12 +360,6 @@ export default function DashboardPage() {
   const showQuickActions = quickActions.length > 0;
   const shouldShowRehearsalReminder =
     userRole !== "SUPERADMIN" && !!nextRehearsal?.id && nextRehearsal?.attendanceStatus === "PENDING";
-  const shouldShowNextCommitmentCard =
-    userRole === "MEMBER" &&
-    !!nextCommitment?.id &&
-    !!nextCommitment?.roleId &&
-    canConfirmPresence;
-  const isNextCommitmentPending = nextCommitment?.myStatus === "PENDING";
 
   // Contexto para saudação inteligente
   const nextSched = upcomingSchedules?.[0];
@@ -683,44 +672,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-
-      {shouldShowNextCommitmentCard && (
-        <Card>
-          <CardContent className="p-4 flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Próximo compromisso</p>
-              <p className="font-semibold">{nextCommitment?.setlist?.name ?? "Compromisso sem repertório"}</p>
-              {nextCommitment?.date && (
-                <p className="text-sm text-gray-500 mt-1">
-                  {format(new Date(nextCommitment.date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2 items-center">
-              {isNextCommitmentPending ? (
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={handleConfirmNextCommitment}
-                  disabled={confirmingNextCommitment}
-                >
-                  {confirmingNextCommitment ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    "Confirmar presença"
-                  )}
-                </Button>
-              ) : (
-                <Button size="sm" variant="outline" disabled>
-                  Confirmado
-                </Button>
-              )}
-              <Link href="/songs"><Button size="sm" variant="outline">Baixar material</Button></Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {userRole !== "SUPERADMIN" && (
         <>
           {showQuickActions && (
@@ -934,128 +885,11 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Escalas do Grupo (apenas para Admin/Leader) */}
-          {canAccessReports && (upcomingSchedules?.length ?? 0) > 0 && (
-            <Card className="rounded-xl border border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-blue-600" />
-                  Todas as Escalas do Grupo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {upcomingSchedules?.slice?.(0, 4)?.map?.((schedule: any) => (
-                    <Link
-                      key={schedule?.id ?? ''}
-                      href={`/schedules?scheduleId=${schedule?.id ?? ""}`}
-                      className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                          <Clock className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {schedule?.setlist?.name ?? "Sem repertório"}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {schedule?.date
-                              ? format(new Date(schedule?.date), "dd 'de' MMMM", { locale: ptBR })
-                              : ""}
-                          </p>
-                          <p
-                            className="text-xs text-gray-500 dark:text-gray-400 truncate"
-                            title={getScheduleSongsPreview(schedule).fullPreview}
-                          >
-                            {getScheduleSongsPreview(schedule).preview} · {getScheduleSongsPreview(schedule).countLabel}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="info">
-                        {schedule?.roles?.length ?? 0} escalados
-                      </Badge>
-                    </Link>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {canViewMembersCard && (
-              <Card className="rounded-xl border border-border/80">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-purple-600" />
-                    Membros
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-3xl font-bold">{stats?.totalMembers ?? 0}</p>
-                  <Link href="/members">
-                    <Button size="sm" variant="outline">Gerenciar membros</Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
 
-            {canViewSongsCard && (
-              <Card className="rounded-xl border border-border/80">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Music className="w-5 h-5 text-blue-600" />
-                    Músicas
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {loading ? (
-                    <Skeleton className="h-9 w-16" />
-                  ) : (
-                    <p className="text-3xl font-bold">{stats?.totalSongs ?? 0}</p>
-                  )}
-                  <Link href="/songs">
-                    <Button size="sm" variant="outline">Gerenciar repertório</Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
-          </div>
 
-          {/* Pendências (mantidas só para membros sem gestão) */}
-          {!canAccessAdminDashboard && (pendingConfirmations?.length ?? 0) > 0 && (
-            <Card className="rounded-xl border border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-yellow-600" />
-                  Confirmações Pendentes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {pendingConfirmations?.slice?.(0, 5)?.map?.((item: any) => (
-                    <div
-                      key={item?.id ?? ''}
-                      className="flex items-center justify-between p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {item?.member?.name ?? "Membro"}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {item?.schedule?.date
-                            ? format(new Date(item?.schedule?.date), "dd/MM/yyyy")
-                            : ""}
-                          {item?.role ? ` - ${item?.role}` : ""}
-                        </p>
-                      </div>
-                      <Badge variant="warning">Pendente</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+
+
         </>
       )}
     </div>
