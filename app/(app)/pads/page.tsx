@@ -190,9 +190,15 @@ export default function PadsPage() {
   };
 
   const initAudio=useCallback(()=>{
-    if(audioCtxRef.current) return;
+    if(audioCtxRef.current){
+      // Garantir que o contexto está rodando (pode estar suspended após inatividade)
+      if(audioCtxRef.current.state==="suspended") audioCtxRef.current.resume();
+      return;
+    }
     const ctx=new AudioContext();
     audioCtxRef.current=ctx;
+    // Resumir imediatamente — browser pode criar já em suspended
+    ctx.resume().catch(()=>{});
     const master=ctx.createGain(); master.gain.value=masterVolRef.current; master.connect(ctx.destination); masterGainRef.current=master;
     const filter=ctx.createBiquadFilter(); filter.type="lowpass"; filter.frequency.value=20000; filter.Q.value=1; filter.connect(master); filterRef.current=filter;
     const rev=ctx.createConvolver(); rev.buffer=createReverbBuf(ctx); reverbRef.current=rev;
@@ -236,6 +242,7 @@ export default function PadsPage() {
 
   useEffect(()=>{
     if(!activeBoard) return;
+    // Inicializar contexto antecipadamente para reduzir latência no primeiro clique
     initAudio();
     const ctx=audioCtxRef.current!;
     activeBoard.pads.forEach(pad=>{
@@ -256,10 +263,40 @@ export default function PadsPage() {
 
   const playPad=useCallback((pad:Pad)=>{
     const ctx=audioCtxRef.current;
-    if(!ctx){initAudio();setTimeout(()=>playPad(pad),80);return;}
-    if(ctx.state==="suspended") ctx.resume();
+    if(!ctx){
+      initAudio();
+      // Aguardar contexto + buffers com retry progressivo
+      let attempts=0;
+      const retry=()=>{
+        attempts++;
+        const c=audioCtxRef.current;
+        if(c && buffersRef.current[pad.id]){
+          if(c.state==="suspended") c.resume().then(()=>playPad(pad));
+          else playPad(pad);
+        } else if(attempts<10){
+          setTimeout(retry, 150);
+        } else {
+          toast.error("Não foi possível iniciar o áudio. Tente novamente.");
+        }
+      };
+      setTimeout(retry,100);
+      return;
+    }
+    if(ctx.state==="suspended"){ ctx.resume().then(()=>playPad(pad)); return; }
     const buf=buffersRef.current[pad.id];
-    if(!buf){toast.error("Carregando áudio..."); return;}
+    if(!buf){
+      // Buffer ainda carregando — retry com feedback visual
+      toast.error("Carregando áudio, aguarde...");
+      let attempts=0;
+      const waitBuf=()=>{
+        attempts++;
+        if(buffersRef.current[pad.id]) playPad(pad);
+        else if(attempts<15) setTimeout(waitBuf,200);
+        else toast.error("Não foi possível carregar o áudio.");
+      };
+      setTimeout(waitBuf,200);
+      return;
+    }
 
     if(gainRef.current&&sourceRef.current){
       const og=gainRef.current, os=sourceRef.current;
