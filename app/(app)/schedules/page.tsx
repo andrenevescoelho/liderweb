@@ -1,13 +1,11 @@
 "use client";
 
-import { AiScheduleWizard } from "@/components/ai-schedule-wizard";
-
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,43 +42,9 @@ export default function SchedulesPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [modalOpen, setModalOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<any>(null);
-  const [aiWizardOpen, setAiWizardOpen] = useState(false);
-  const [aiCreating, setAiCreating] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
+  const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
-
-  const handleAcceptAiDraft = async (schedules: any[]) => {
-    setAiCreating(true);
-    let created = 0;
-    for (const s of schedules) {
-      try {
-        await fetch("/api/schedules", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            date: s.date,
-            time: s.time ?? null,
-            name: s.name ?? null,
-            roles: (s.roles ?? [])
-              .filter((r: any) => r.memberId)
-              .map((r: any) => ({ role: r.role, memberId: r.memberId, status: "PENDING" })),
-            setlistItems: (s.songs ?? []).map((song: any) => ({
-              songId: song.songId,
-              selectedKey: song.key ?? "C",
-            })),
-          }),
-        });
-        created++;
-      } catch (e) {
-        console.error("Erro ao criar escala:", e);
-      }
-    }
-    await fetchSchedules();
-    setAiCreating(false);
-    if (created > 0) {
-      alert(`${created} escala${created > 1 ? "s" : ""} criada${created > 1 ? "s" : ""} com sucesso!`);
-    }
-  };
 
   const fetchSchedules = async () => {
     try {
@@ -93,6 +57,7 @@ export default function SchedulesPage() {
   };
 
   useEffect(() => { fetchSchedules(); }, [currentMonth]);
+  useEffect(() => { setExpandedSongIdx(null); }, [selectedSchedule?.id]);
 
   useEffect(() => {
     if (!scheduleIdFromQuery || loading) return;
@@ -144,22 +109,9 @@ export default function SchedulesPage() {
           </div>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
-            {canEdit && (
-              <Button
-                variant="outline"
-                onClick={() => setAiWizardOpen(true)}
-                disabled={aiCreating}
-                className="gap-2 border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
-              >
-                <Sparkles className="w-4 h-4" />
-                {aiCreating ? "Criando..." : "Gerar com IA"}
-              </Button>
-            )}
-            <Button onClick={() => { setEditSchedule(null); setModalOpen(true); }}>
-              <Plus className="w-4 h-4 mr-2" /> Nova Escala
-            </Button>
-          </div>
+          <Button onClick={() => { setEditSchedule(null); setModalOpen(true); }}>
+            <Plus className="w-4 h-4 mr-2" /> Nova Escala
+          </Button>
         )}
       </div>
 
@@ -239,19 +191,90 @@ export default function SchedulesPage() {
           <CardContent>
             {selectedSchedule?.setlist && (
               <div className="mb-4">
-                <p className="text-sm text-gray-500">Músicas da escala</p>
+                <p className="text-sm text-gray-500 mb-2">Músicas da escala</p>
                 {(() => {
-                  const d = formatScheduleSongs(selectedSchedule);
-                  if (!d.previewSongs.length) return <p className="font-medium text-gray-900 dark:text-white">Sem músicas definidas</p>;
+                  const items = selectedSchedule?.setlist?.items ?? [];
+                  if (!items.length) return <p className="font-medium text-gray-900 dark:text-white">Sem músicas definidas</p>;
                   return (
-                    <ul className="mt-1 space-y-1.5">
-                      {d.previewSongs.map((t, i) => (
-                        <li key={`${t}-${i}`} className="flex items-center gap-2 text-sm" title={t}>
-                          <span className="h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
-                          <span className="truncate">{t}</span>
-                        </li>
-                      ))}
-                      {d.remainingSongs > 0 && <li className="text-sm text-gray-500 pl-3.5">+{d.remainingSongs} música{d.remainingSongs > 1 ? "s" : ""}</li>}
+                    <ul className="space-y-1.5">
+                      {items.map((item: any, i: number) => {
+                        const song = item?.song;
+                        const isExpanded = expandedSongIdx === i;
+                        const key = item?.selectedKey ?? song?.originalKey ?? null;
+                        return (
+                          <li key={`${item?.songId}-${i}`}>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSongIdx(isExpanded ? null : i)}
+                              className="w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+                            >
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-bold flex-shrink-0">{i + 1}</span>
+                              <span className="flex-1 truncate font-medium">{song?.title ?? "Música sem nome"}</span>
+                              {key && <span className="text-xs rounded bg-purple-500/10 px-1.5 py-0.5 text-purple-600 dark:text-purple-400 flex-shrink-0">{key}</span>}
+                              {song?.bpm && <span className="text-xs text-gray-400 flex-shrink-0">{song.bpm} BPM</span>}
+                              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                            </button>
+                            {isExpanded && (
+                              <div className="mx-2 mb-1 rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                                <div className="flex flex-wrap gap-3 text-sm">
+                                  {song?.artist && <span className="text-muted-foreground">{song.artist}</span>}
+                                  {key && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="text-muted-foreground">Tom:</span>
+                                      <span className="font-semibold text-purple-600 dark:text-purple-400">{key}</span>
+                                      {song?.originalKey && key !== song.originalKey && (
+                                        <span className="text-xs text-muted-foreground">(original: {song.originalKey})</span>
+                                      )}
+                                    </span>
+                                  )}
+                                  {song?.bpm && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="text-muted-foreground">BPM:</span>
+                                      <span className="font-semibold">{song.bpm}</span>
+                                    </span>
+                                  )}
+                                  {song?.timeSignature && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="text-muted-foreground">Compasso:</span>
+                                      <span className="font-semibold">{song.timeSignature}</span>
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {song?.youtubeUrl && (
+                                    <a
+                                      href={song.youtubeUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
+                                    >
+                                      <Youtube className="w-3.5 h-3.5" /> YouTube
+                                    </a>
+                                  )}
+                                  {song?.chordUrl && (
+                                    <a
+                                      href={song.chordUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 rounded-md bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors"
+                                    >
+                                      <Music className="w-3.5 h-3.5" /> Cifra
+                                    </a>
+                                  )}
+                                  {song?.id && (
+                                    <a
+                                      href={`/songs?songId=${song.id}`}
+                                      className="inline-flex items-center gap-1.5 rounded-md bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition-colors"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" /> Ver música
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   );
                 })()}
@@ -290,12 +313,6 @@ export default function SchedulesPage() {
           </CardContent>
         </Card>
       )}
-
-      <AiScheduleWizard
-        isOpen={aiWizardOpen}
-        onClose={() => setAiWizardOpen(false)}
-        onAccept={handleAcceptAiDraft}
-      />
 
       <ScheduleModal
         isOpen={modalOpen}
