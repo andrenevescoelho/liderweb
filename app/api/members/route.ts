@@ -9,6 +9,7 @@ import { SessionUser } from "@/lib/types";
 import { hasPermission } from "@/lib/authorization";
 import { getEffectivePlanFromCoupon } from "@/lib/coupons";
 import { ensureDefaultRoleFunctions } from "@/lib/role-functions";
+import { MEMBER_FUNCTION_OPTIONS } from "@/lib/member-profile";
 
 const parseBirthDate = (birthDate?: string | null) => {
   if (!birthDate) return null;
@@ -92,16 +93,22 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: { name: "asc" },
-    });
+    }).catch(() =>
+      // Fallback: se memberFunctions ainda não existe no Prisma Client, busca sem ele
+      prisma.user.findMany({
+        where,
+        include: { profile: true },
+        orderBy: { name: "asc" },
+      })
+    );
 
     // Serializa approvedRoles como values (ex: "VOCAL") a partir dos labels (ex: "Vocal")
-    const { MEMBER_FUNCTION_OPTIONS } = await import("@/lib/member-profile");
-    const result = members.map((m) => ({
+    const result = members.map((m: any) => ({
       ...m,
-      approvedRoles: m.memberFunctions.map((mf) => {
-        const option = MEMBER_FUNCTION_OPTIONS.find((o) => o.label === mf.roleFunction.name);
-        return option?.value ?? mf.roleFunction.name;
-      }),
+      approvedRoles: (m.memberFunctions ?? []).map((mf: any) => {
+        const option = MEMBER_FUNCTION_OPTIONS.find((o) => o.label === mf.roleFunction?.name);
+        return option?.value ?? mf.roleFunction?.name ?? "";
+      }).filter(Boolean),
     }));
 
     return NextResponse.json(result ?? []);
