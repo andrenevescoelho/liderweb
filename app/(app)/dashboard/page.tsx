@@ -23,6 +23,7 @@ import {
   Plus,
   Bell,
   Gift,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -331,6 +332,14 @@ export default function DashboardPage() {
           href: "/schedules",
           label: "Criar escala",
           icon: Plus,
+        }
+      : null,
+    canManageSchedules
+      ? {
+          key: "ai-schedule",
+          href: "/schedules?ai=1",
+          label: "Gerar escala com IA",
+          icon: Sparkles,
         }
       : null,
     canViewSongsCard
