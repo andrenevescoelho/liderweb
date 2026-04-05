@@ -8,6 +8,15 @@ import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
 
+function buildScheduleDate(date: string, time?: string | null): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  if (time && /^\d{2}:\d{2}$/.test(time)) {
+    const [hour, minute] = time.split(":").map(Number);
+    return new Date(year, month - 1, day, hour, minute, 0);
+  }
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -31,9 +40,7 @@ export async function GET(
         },
         roles: {
           include: {
-            member: {
-              include: { profile: true },
-            },
+            member: { include: { profile: true } },
           },
         },
       },
@@ -75,16 +82,13 @@ export async function PUT(
       return NextResponse.json({ error: "Escala não encontrada" }, { status: 404 });
     }
 
-    const { date, roles, setlistItems } = body ?? {};
+    const { date, time, name, roles, setlistItems } = body ?? {};
 
-    await prisma.scheduleRole.deleteMany({
-      where: { scheduleId: params?.id },
-    });
+    await prisma.scheduleRole.deleteMany({ where: { scheduleId: params?.id } });
 
     let scheduleDate: Date | undefined;
     if (date) {
-      const [year, month, day] = date.split("-").map(Number);
-      scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
+      scheduleDate = buildScheduleDate(date, time);
     }
 
     const assignedRoles = (roles ?? []).filter((role: any) => role?.memberId);
@@ -96,9 +100,7 @@ export async function PUT(
         select: {
           id: true,
           name: true,
-          profile: {
-            select: { availability: true },
-          },
+          profile: { select: { availability: true } },
         },
       });
 
@@ -110,10 +112,7 @@ export async function PUT(
 
       if (conflicts.length > 0) {
         return NextResponse.json(
-          {
-            error: "Há membros escalados em dias sem disponibilidade.",
-            conflicts,
-          },
+          { error: "Há membros escalados em dias sem disponibilidade.", conflicts },
           { status: 400 }
         );
       }
@@ -126,12 +125,20 @@ export async function PUT(
 
     let setlistId = existingSchedule?.setlistId ?? null;
 
+    const scheduleLabel = name?.trim()
+      ? name.trim()
+      : time && date
+        ? `Escala ${date} ${time}`
+        : date
+          ? `Escala ${date}`
+          : undefined;
+
     if (setlistId) {
       await prisma.setlistItem.deleteMany({ where: { setlistId } });
       await prisma.setlist.update({
         where: { id: setlistId },
         data: {
-          name: date ? `Escala ${date}` : undefined,
+          name: scheduleLabel,
           date: scheduleDate,
           items: {
             create: (setlistItems ?? []).map((item: any, index: number) => ({
@@ -145,7 +152,7 @@ export async function PUT(
     } else {
       const newSetlist = await prisma.setlist.create({
         data: {
-          name: date ? `Escala ${date}` : "Escala",
+          name: scheduleLabel ?? "Escala",
           date: scheduleDate ?? new Date(),
           groupId: user?.groupId ?? null,
           items: {
@@ -164,6 +171,8 @@ export async function PUT(
       where: { id: params?.id },
       data: {
         date: scheduleDate,
+        time: time ?? null,
+        name: name?.trim() ?? null,
         setlistId,
         roles: {
           create: (roles ?? [])?.map?.((r: any) => ({
@@ -184,13 +193,14 @@ export async function PUT(
         },
         roles: {
           include: {
-            member: {
-              include: { profile: true },
-            },
+            member: { include: { profile: true } },
           },
         },
       },
     });
+
+    const displayName = schedule.name
+      ?? (schedule.time ? `Escala ${schedule.date.toISOString().slice(0, 10)} ${schedule.time}` : `Escala ${schedule.date.toISOString().slice(0, 10)}`);
 
     await logUserAction({
       userId: user?.id,
@@ -198,7 +208,7 @@ export async function PUT(
       action: AUDIT_ACTIONS.SCALE_UPDATED,
       entityType: AuditEntityType.SCALE,
       entityId: schedule.id,
-      entityName: `Escala ${schedule.date.toISOString().slice(0, 10)}`,
+      entityName: displayName,
       description: "Escala atualizada",
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
@@ -230,9 +240,10 @@ export async function DELETE(
     const before = await prisma.schedule.findUnique({ where: { id: params?.id } });
     if (!before) return NextResponse.json({ error: "Escala não encontrada" }, { status: 404 });
 
-    await prisma.schedule.delete({
-      where: { id: params?.id },
-    });
+    await prisma.schedule.delete({ where: { id: params?.id } });
+
+    const displayName = before.name
+      ?? (before.time ? `Escala ${before.date.toISOString().slice(0, 10)} ${before.time}` : `Escala ${before.date.toISOString().slice(0, 10)}`);
 
     await logUserAction({
       userId: user?.id,
@@ -240,7 +251,7 @@ export async function DELETE(
       action: AUDIT_ACTIONS.SCALE_DELETED,
       entityType: AuditEntityType.SCALE,
       entityId: before.id,
-      entityName: `Escala ${before.date.toISOString().slice(0, 10)}`,
+      entityName: displayName,
       description: "Escala removida",
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,

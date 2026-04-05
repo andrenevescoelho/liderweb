@@ -9,6 +9,19 @@ import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
 
+/**
+ * Monta DateTime a partir de date ("2025-04-06") e time opcional ("17:00").
+ * Se time não vier, usa 12:00 como fallback (compatibilidade com dados antigos).
+ */
+function buildScheduleDate(date: string, time?: string | null): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  if (time && /^\d{2}:\d{2}$/.test(time)) {
+    const [hours, minutes] = time.split(":").map(Number);
+    return new Date(year, month - 1, day, hours, minutes, 0);
+  }
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -28,29 +41,19 @@ export async function GET(req: NextRequest) {
       user.role === "LEADER" ||
       hasPermission(user.role, "schedule.view.all", user.permissions);
 
-    // SuperAdmin vê todos, outros veem apenas do seu grupo
     if (user.role !== "SUPERADMIN") {
-      if (!user.groupId) {
-        return NextResponse.json([]);
-      }
+      if (!user.groupId) return NextResponse.json([]);
       where.groupId = user.groupId;
 
       if (!canViewAllSchedules && user.id) {
-        where.roles = {
-          some: {
-            memberId: user.id,
-          },
-        };
+        where.roles = { some: { memberId: user.id } };
       }
     }
 
     if (month && year) {
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0);
-      where.date = {
-        gte: startDate,
-        lte: endDate,
-      };
+      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
+      where.date = { gte: startDate, lte: endDate };
     }
 
     const schedules = await prisma.schedule.findMany({
@@ -58,18 +61,11 @@ export async function GET(req: NextRequest) {
       include: {
         setlist: {
           include: {
-            items: {
-              include: { song: true },
-              orderBy: { order: "asc" },
-            },
+            items: { include: { song: true }, orderBy: { order: "asc" } },
           },
         },
         roles: {
-          include: {
-            member: {
-              include: { profile: true },
-            },
-          },
+          include: { member: { include: { profile: true } } },
         },
       },
       orderBy: { date: "asc" },
@@ -108,16 +104,18 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const context = extractRequestContext(req);
-    const { date, roles, setlistItems } = body ?? {};
+
+    // name: nome do culto ex: "Culto da Manhã", "Escola Dominical"
+    // time: horário "HH:MM" ex: "09:00", "17:00", "19:00"
+    const { date, time, name, roles, setlistItems } = body ?? {};
 
     if (!date) {
       return NextResponse.json({ error: "Data é obrigatória" }, { status: 400 });
     }
 
-    // Criar data ao meio-dia para evitar problemas de timezone
-    const [year, month, day] = date.split("-").map(Number);
-    const scheduleDate = new Date(year, month - 1, day, 12, 0, 0);
+    const scheduleDate = buildScheduleDate(date, time);
 
+    // Verificar conflitos de disponibilidade
     const assignedRoles = (roles ?? []).filter((role: any) => role?.memberId);
     const assignedMemberIds = [...new Set(assignedRoles.map((role: any) => String(role.memberId)))];
 
@@ -127,9 +125,7 @@ export async function POST(req: NextRequest) {
         select: {
           id: true,
           name: true,
-          profile: {
-            select: { availability: true },
-          },
+          profile: { select: { availability: true } },
         },
       });
 
@@ -141,18 +137,18 @@ export async function POST(req: NextRequest) {
 
       if (conflicts.length > 0) {
         return NextResponse.json(
-          {
-            error: "Há membros escalados em dias sem disponibilidade.",
-            conflicts,
-          },
+          { error: "Há membros escalados em dias sem disponibilidade.", conflicts },
           { status: 400 }
         );
       }
     }
 
+    const scheduleName = name?.trim() || null;
+    const setlistName = scheduleName ?? (time ? `Escala ${date} ${time}` : `Escala ${date}`);
+
     const createdSetlist = await prisma.setlist.create({
       data: {
-        name: `Escala ${date}`,
+        name: setlistName,
         date: scheduleDate,
         groupId: user.groupId ?? null,
         items: {
@@ -168,6 +164,7 @@ export async function POST(req: NextRequest) {
     const schedule = await prisma.schedule.create({
       data: {
         date: scheduleDate,
+        name: scheduleName,
         setlistId: createdSetlist.id,
         groupId: user.groupId ?? null,
         roles: {
@@ -181,21 +178,16 @@ export async function POST(req: NextRequest) {
       include: {
         setlist: {
           include: {
-            items: {
-              include: { song: true },
-              orderBy: { order: "asc" },
-            },
+            items: { include: { song: true }, orderBy: { order: "asc" } },
           },
         },
         roles: {
-          include: {
-            member: {
-              include: { profile: true },
-            },
-          },
+          include: { member: { include: { profile: true } } },
         },
       },
     });
+
+    const displayName = scheduleName ?? setlistName;
 
     await logUserAction({
       userId: user.id,
@@ -203,11 +195,15 @@ export async function POST(req: NextRequest) {
       action: AUDIT_ACTIONS.SCALE_CREATED,
       entityType: AuditEntityType.SCALE,
       entityId: schedule.id,
-      entityName: `Escala ${date}`,
+      entityName: displayName,
       description: `Usuário ${user.name} criou uma nova escala`,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
-      metadata: { date, rolesCount: (roles ?? []).length, setlistItemsCount: (setlistItems ?? []).length },
+      metadata: {
+        date, time, name: scheduleName,
+        rolesCount: (roles ?? []).length,
+        setlistItemsCount: (setlistItems ?? []).length,
+      },
     });
 
     return NextResponse.json(schedule);

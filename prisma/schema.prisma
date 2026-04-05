@@ -340,8 +340,7 @@ model User {
   rehearsalTasks       RehearsalTask[]
   sentGroupMessages    GroupMessage[]        @relation("GroupMessageSender")
   sentGroupBroadcasts  GroupBroadcast[]      @relation("GroupBroadcastSender")
-  memberFunctions         MemberFunction[]      @relation("UserMemberFunctions")
-  approvedMemberFunctions MemberFunction[]      @relation("MemberFunctionApprovals")
+  memberFunctions      MemberFunction[]      @relation("UserMemberFunctions")
   scheduleMemberRoles  ScaleMemberRole[]     @relation("ScaleMemberRolesByMember")
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
   createdCoupons       Coupon[]              @relation("CouponCreator")
@@ -620,16 +619,10 @@ model MemberFunction {
   member         User         @relation("UserMemberFunctions", fields: [memberId], references: [id], onDelete: Cascade)
   roleFunctionId String
   roleFunction   RoleFunction @relation("RoleFunctionMembers", fields: [roleFunctionId], references: [id], onDelete: Cascade)
-  isPending      Boolean      @default(false)
-  suggestedAt    DateTime?
-  approvedAt     DateTime?
-  approvedById   String?
-  approvedBy     User?        @relation("MemberFunctionApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
   createdAt      DateTime     @default(now())
 
   @@unique([memberId, roleFunctionId])
   @@index([roleFunctionId])
-  @@index([isPending])
 }
 
 model Song {
@@ -702,6 +695,7 @@ model SetlistItem {
 model Schedule {
   id          String            @id @default(cuid())
   date        DateTime
+  name        String?           // ex: "Culto da Manhã", "Escola Dominical"
   setlistId   String?
   setlist     Setlist?          @relation(fields: [setlistId], references: [id], onDelete: SetNull)
   groupId     String?
