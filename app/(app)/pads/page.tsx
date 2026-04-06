@@ -148,6 +148,14 @@ export default function PadsPage() {
   const [fadeDuration, setFadeDuration] = useState(2);
   const [modeCulto, setModeCulto] = useState(false);
   const [midiDevice, setMidiDevice] = useState<string|null>(null);
+  const [midiDevices, setMidiDevices] = useState<string[]>([]);
+  const [midiMapping, setMidiMapping] = useState<Record<string,number>>({}); // padId -> noteNumber
+  const [midiLearnMode, setMidiLearnMode] = useState(false);
+  const [midiLearnPad, setMidiLearnPad] = useState<string|null>(null); // padId aguardando nota
+  const [lastMidiNote, setLastMidiNote] = useState<number|null>(null);
+  const midiMappingRef = useRef<Record<string,number>>({});
+  const midiLearnPadRef = useRef<string|null>(null);
+  const padsRef = useRef<Pad[]>([]);
 
   const [fx, setFx] = useState({
     reverb: 0.4, delay: 0.0, filter: 1.0, shimmer: 0.0,
@@ -180,6 +188,8 @@ export default function PadsPage() {
   useEffect(()=>{fadeDurRef.current=fadeDuration;},[fadeDuration]);
   useEffect(()=>{fxRef.current=fx; applyFx(fx);},[fx]);
   useEffect(()=>{masterVolRef.current=masterVolume; if(masterGainRef.current) masterGainRef.current.gain.value=masterVolume;},[masterVolume]);
+  useEffect(()=>{midiMappingRef.current=midiMapping;},[midiMapping]);
+  useEffect(()=>{midiLearnPadRef.current=midiLearnPad;},[midiLearnPad]);
   useEffect(()=>{
     if(eqBassRef.current) eqBassRef.current.gain.value=eq.bass;
     if(eqMidRef.current) eqMidRef.current.gain.value=eq.mid;
@@ -259,6 +269,14 @@ export default function PadsPage() {
 
   useEffect(()=>{
     if(!activeBoard) return;
+    // Carregar mapeamento MIDI salvo para este board
+    try{
+      const saved=localStorage.getItem(`midi_map_${activeBoard.id}`);
+      if(saved){ const m=JSON.parse(saved); setMidiMapping(m); midiMappingRef.current=m; }
+      else{ setMidiMapping({}); midiMappingRef.current={}; }
+    }catch{}
+    // Atualizar padsRef
+    padsRef.current=activeBoard.pads??[];
     // Inicializar contexto antecipadamente para reduzir latência no primeiro clique
     initAudio();
     const ctx=audioCtxRef.current!;
@@ -270,13 +288,6 @@ export default function PadsPage() {
     });
   },[activeBoard?.id,initAudio]);
 
-  useEffect(()=>{
-    if(!navigator.requestMIDIAccess) return;
-    (navigator as any).requestMIDIAccess().then((midi:any)=>{
-      const inputs=Array.from(midi.inputs.values()) as any[];
-      if(inputs.length) setMidiDevice(inputs[0].name);
-    }).catch(()=>{});
-  },[]);
 
   // Cleanup ao sair da página — para áudio e fecha o contexto
   useEffect(()=>{
@@ -374,6 +385,68 @@ export default function PadsPage() {
     setIsPlaying(false);
   },[]);
 
+  useEffect(()=>{
+    if(!navigator.requestMIDIAccess) return;
+    let midiAccess:any=null;
+
+    const handleMidiMessage=(event:any)=>{
+      const [status, note, velocity]=event.data;
+      const isNoteOn=(status&0xF0)===0x90 && velocity>0;
+      const isNoteOff=(status&0xF0)===0x80 || ((status&0xF0)===0x90 && velocity===0);
+
+      if(isNoteOn){
+        setLastMidiNote(note);
+        // Modo learn: mapear nota ao pad selecionado
+        if(midiLearnPadRef.current){
+          const padId=midiLearnPadRef.current;
+          setMidiMapping(prev=>{
+            const next={...prev,[padId]:note};
+            // Remover mapeamentos duplicados para essa nota
+            Object.keys(next).forEach(k=>{ if(k!==padId&&next[k]===note) delete next[k]; });
+            try{ if(activeBoard) localStorage.setItem(`midi_map_${activeBoard.id}`,JSON.stringify(next)); }catch{}
+            midiMappingRef.current=next;
+            return next;
+          });
+          midiLearnPadRef.current=null;
+          setMidiLearnPad(null);
+          return;
+        }
+        // Modo normal: tocar pad mapeado
+        const mapping=midiMappingRef.current;
+        const padId=Object.keys(mapping).find(k=>mapping[k]===note);
+        if(padId){
+          const pad=padsRef.current.find(p=>p.id===padId);
+          if(pad) playPad(pad);
+        }
+      }
+      if(isNoteOff){ setLastMidiNote(null); }
+    };
+
+    (navigator as any).requestMIDIAccess().then((midi:any)=>{
+      midiAccess=midi;
+      const inputs=Array.from(midi.inputs.values()) as any[];
+      const names=inputs.map((i:any)=>i.name);
+      setMidiDevices(names);
+      if(inputs.length) setMidiDevice(inputs[0].name);
+      inputs.forEach((input:any)=>{ input.onmidimessage=handleMidiMessage; });
+
+      midi.onstatechange=(e:any)=>{
+        const updatedInputs=Array.from(midi.inputs.values()) as any[];
+        setMidiDevices(updatedInputs.map((i:any)=>i.name));
+        if(updatedInputs.length){ setMidiDevice(updatedInputs[0].name); }
+        else{ setMidiDevice(null); }
+        updatedInputs.forEach((input:any)=>{ input.onmidimessage=handleMidiMessage; });
+      };
+    }).catch(()=>{});
+
+    return ()=>{
+      if(midiAccess){
+        const inputs=Array.from(midiAccess.inputs.values()) as any[];
+        inputs.forEach((input:any)=>{ input.onmidimessage=null; });
+      }
+    };
+  },[playPad, activeBoard]);
+
   const pitchToNote=(p:number)=>{
     const idx=((Math.round(p))%12+12)%12;
     return NOTE_NAMES[idx];
@@ -425,6 +498,7 @@ export default function PadsPage() {
   if(loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
 
   const pads=activeBoard?.pads.filter(p=>p.audioUrl)||[];
+  padsRef.current=pads; // manter ref atualizada para o listener MIDI
 
   // MODO CULTO — UI minimalista
   if(modeCulto) return (
@@ -515,6 +589,30 @@ export default function PadsPage() {
           </div>
           {midiDevice&&<div className="flex items-center gap-1 text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-2 py-1 ml-1"><Usb className="h-3 w-3"/>{midiDevice}</div>}
           <div className="ml-auto flex items-center gap-2">
+            {midiDevice && (
+              <button
+                onClick={()=>{setMidiLearnMode(v=>!v); setMidiLearnPad(null);}}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all",
+                  midiLearnMode
+                    ?"border-emerald-500/50 bg-emerald-500/20 text-emerald-400 animate-pulse"
+                    :"border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                )}>
+                <Usb className="h-3.5 w-3.5"/>
+                {midiLearnMode ? "Clique num pad..." : "Mapear MIDI"}
+              </button>
+            )}
+            {midiLearnMode && Object.keys(midiMapping).length > 0 && (
+              <button
+                onClick={()=>{
+                  setMidiMapping({});
+                  midiMappingRef.current={};
+                  if(activeBoard) localStorage.removeItem(`midi_map_${activeBoard.id}`);
+                }}
+                className="text-[10px] text-red-400/60 hover:text-red-400 border border-red-500/20 rounded-lg px-2 py-1.5 transition-all">
+                Limpar mapa
+              </button>
+            )}
             <button onClick={()=>setModeCulto(true)}
               className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary px-3 py-1.5 text-xs font-bold hover:bg-primary/20 transition-all">
               <Zap className="h-3.5 w-3.5"/>Modo Culto
@@ -545,6 +643,24 @@ export default function PadsPage() {
           </div>
         )}
 
+        {/* Banner modo MIDI learn */}
+        {midiLearnMode && (
+          <div className="flex-shrink-0 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Usb className="h-3.5 w-3.5 text-emerald-400 animate-pulse flex-shrink-0"/>
+              <span className="text-[11px] text-emerald-300">
+                {midiLearnPad
+                  ? "Pressione uma tecla no seu teclado MIDI..."
+                  : "Clique num pad para mapear uma nota MIDI"}
+              </span>
+            </div>
+            <button onClick={()=>{setMidiLearnMode(false);setMidiLearnPad(null);}}
+              className="text-[10px] text-emerald-400/60 hover:text-emerald-400 flex-shrink-0">
+              Concluir
+            </button>
+          </div>
+        )}
+
         {/* BPM + Volume master */}
         <div className="flex items-center gap-3 flex-shrink-0 bg-white/3 rounded-xl px-3 py-2 border border-white/5">
           <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">BPM</span>
@@ -569,7 +685,15 @@ export default function PadsPage() {
             const selected=currentPad?.id===pad.id;
             return (
               <button key={pad.id}
-                onClick={()=>{setCurrentPad(pad); if(isPlaying) playPad(pad);}}
+                onClick={()=>{
+                  if(midiLearnMode){
+                    // Modo learn — selecionar este pad para receber a próxima nota
+                    setMidiLearnPad(pad.id);
+                    midiLearnPadRef.current=pad.id;
+                    return;
+                  }
+                  setCurrentPad(pad); if(isPlaying) playPad(pad);
+                }}
                 className={cn("relative rounded-2xl flex flex-col items-center justify-center gap-2 border-2 transition-all hover:scale-[1.02]",active&&"scale-[0.97] hover:scale-[0.97]")}
                 style={{
                   background:active
@@ -593,6 +717,22 @@ export default function PadsPage() {
                   </div>
                 )}
                 {selected&&!active&&<span className="text-[8px] text-white/20">● selecionado</span>}
+                {/* Badge MIDI */}
+                {midiMapping[pad.id]!=null && (
+                  <div className={cn(
+                    "absolute top-1.5 right-1.5 rounded px-1 py-0.5 text-[8px] font-bold leading-none transition-all",
+                    midiLearnPad===pad.id
+                      ?"bg-emerald-500 text-black animate-pulse"
+                      :"bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                  )}>
+                    {NOTE_NAMES[midiMapping[pad.id]%12]}{Math.floor(midiMapping[pad.id]/12)-1}
+                  </div>
+                )}
+                {midiLearnMode && midiLearnPad===pad.id && midiMapping[pad.id]==null && (
+                  <div className="absolute top-1.5 right-1.5 rounded px-1 py-0.5 text-[8px] font-bold bg-emerald-500 text-black animate-pulse leading-none">
+                    ?
+                  </div>
+                )}
               </button>
             );
           })}
