@@ -128,6 +128,43 @@ function PadIcon({ name, color, size=40 }: { name:string; color:string; size?:nu
   );
 }
 
+// Wrapper de Knob com botão de mapeamento MIDI
+function MidiKnob({ paramKey, value, min, max, label, color, size=50, onChange, ccMapping, ccLearnParam, gmCC, onLearn, onClearCC }: {
+  paramKey: string; value: number; min: number; max: number; label: string;
+  color: string; size?: number; onChange: (v:number)=>void;
+  ccMapping: Record<string,number>; ccLearnParam: string|null; gmCC: number;
+  onLearn: (key:string)=>void; onClearCC: (key:string)=>void;
+}) {
+  const custom = (ccMapping??{})[paramKey];
+  const isLearning = ccLearnParam === paramKey;
+  const hasMidi = custom != null || gmCC >= 0;
+  return (
+    <div className="relative flex flex-col items-center">
+      <Knob value={value} min={min} max={max} label={label} color={color} size={size} onChange={onChange}/>
+      {/* Badge CC */}
+      <button
+        type="button"
+        onClick={()=> isLearning ? onLearn("") : onLearn(paramKey)}
+        title={isLearning ? "Mova um knob no controlador..." : `CC${custom??gmCC}${custom!=null?" (custom)":""} — clique para remapear`}
+        className={cn(
+          "absolute -top-1 -right-1 rounded-full text-[7px] font-bold leading-none flex items-center justify-center transition-all",
+          isLearning
+            ? "w-4 h-4 bg-violet-500 text-white animate-pulse"
+            : custom!=null
+            ? "w-4 h-4 bg-violet-500/80 text-white hover:bg-violet-500"
+            : "w-3.5 h-3.5 bg-white/10 text-white/30 hover:bg-violet-500/50 hover:text-white/80"
+        )}>
+        {isLearning ? "?" : custom!=null ? `${custom}` : "·"}
+      </button>
+      {custom!=null && !isLearning && (
+        <button onClick={()=>onClearCC(paramKey)}
+          className="absolute -top-1 -left-1 w-3 h-3 rounded-full bg-red-500/60 text-white text-[6px] flex items-center justify-center hover:bg-red-500 transition-all"
+          title="Remover mapeamento customizado">✕</button>
+      )}
+    </div>
+  );
+}
+
 export default function PadsPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
@@ -170,9 +207,7 @@ export default function PadsPage() {
     pitch:   1,   // CC1  = Modulation (Pitch)
   };
   // Mapeamento customizado CC: paramKey -> ccNumber (sobrepõe GM)
-  const [ccMapping, setCcMapping] = useState<Record<string,number>>(()=>{
-    try{ const s=localStorage.getItem("midi_cc_map"); return s?JSON.parse(s):{}; }catch{ return {}; }
-  });
+  const [ccMapping, setCcMapping] = useState<Record<string,number>>({});
   const ccMappingRef = useRef<Record<string,number>>({});
   const [ccLearnParam, setCcLearnParam] = useState<string|null>(null); // param aguardando CC
   const ccLearnParamRef = useRef<string|null>(null);
@@ -210,7 +245,27 @@ export default function PadsPage() {
   useEffect(()=>{masterVolRef.current=masterVolume; if(masterGainRef.current) masterGainRef.current.gain.value=masterVolume;},[masterVolume]);
   useEffect(()=>{midiMappingRef.current=midiMapping;},[midiMapping]);
   useEffect(()=>{midiLearnPadRef.current=midiLearnPad;},[midiLearnPad]);
+  useEffect(()=>{
+    try{
+      const s=localStorage.getItem("midi_cc_map");
+      if(s){ const m=JSON.parse(s); setCcMapping(m); ccMappingRef.current=m; }
+    }catch{}
+  },[]);
   useEffect(()=>{ccMappingRef.current=ccMapping;},[ccMapping]);
+
+  const handleCCLearn = (key: string) => {
+    setCcLearnParam(key || null);
+    ccLearnParamRef.current = key || null;
+  };
+  const handleCCClear = (key: string) => {
+    setCcMapping(prev => {
+      const next = {...prev};
+      delete next[key];
+      try{ localStorage.setItem("midi_cc_map", JSON.stringify(next)); }catch{}
+      ccMappingRef.current = next;
+      return next;
+    });
+  };
   useEffect(()=>{ccLearnParamRef.current=ccLearnParam;},[ccLearnParam]);
   useEffect(()=>{
     if(eqBassRef.current) eqBassRef.current.gain.value=eq.bass;
@@ -953,14 +1008,14 @@ export default function PadsPage() {
         <div className="flex flex-col gap-3 p-3 flex-1 overflow-hidden">
           <span className="text-[9px] text-white/30 uppercase tracking-widest flex-shrink-0">Atmosfera</span>
           <div className="grid grid-cols-2 gap-1 place-items-center flex-shrink-0">
-            <Knob value={fx.reverb} min={0} max={1} label="Reverb" color="#8B5CF6" size={50}
-              onChange={v=>setFx(p=>({...p,reverb:v}))}/>
-            <Knob value={fx.delay} min={0} max={1} label="Delay" color="#06B6D4" size={50}
-              onChange={v=>setFx(p=>({...p,delay:v}))}/>
-            <Knob value={fx.filter} min={0} max={1} label="Cutoff" color="#10B981" size={50}
-              onChange={v=>setFx(p=>({...p,filter:v}))}/>
-            <Knob value={fx.shimmer} min={0} max={1} label="Shimmer" color="#F59E0B" size={50}
-              onChange={v=>setFx(p=>({...p,shimmer:v}))}/>
+            <MidiKnob paramKey="reverb" value={fx.reverb} min={0} max={1} label="Reverb" color="#8B5CF6" size={50}
+              onChange={v=>setFx(p=>({...p,reverb:v}))} ccMapping={ccMapping} ccLearnParam={ccLearnParam} gmCC={91} onLearn={handleCCLearn} onClearCC={handleCCClear}/>
+            <MidiKnob paramKey="delay" value={fx.delay} min={0} max={1} label="Delay" color="#06B6D4" size={50}
+              onChange={v=>setFx(p=>({...p,delay:v}))} ccMapping={ccMapping} ccLearnParam={ccLearnParam} gmCC={94} onLearn={handleCCLearn} onClearCC={handleCCClear}/>
+            <MidiKnob paramKey="filter" value={fx.filter} min={0} max={1} label="Cutoff" color="#10B981" size={50}
+              onChange={v=>setFx(p=>({...p,filter:v}))} ccMapping={ccMapping} ccLearnParam={ccLearnParam} gmCC={74} onLearn={handleCCLearn} onClearCC={handleCCClear}/>
+            <MidiKnob paramKey="shimmer" value={fx.shimmer} min={0} max={1} label="Shimmer" color="#F59E0B" size={50}
+              onChange={v=>setFx(p=>({...p,shimmer:v}))} ccMapping={ccMapping} ccLearnParam={ccLearnParam} gmCC={93} onLearn={handleCCLearn} onClearCC={handleCCClear}/>
           </div>
           <div className="flex-shrink-0 space-y-1.5">
             <div className="flex justify-between">
@@ -985,19 +1040,19 @@ export default function PadsPage() {
             </div>
             <div className="grid grid-cols-3 gap-1 place-items-center">
               <div className="flex flex-col items-center gap-0.5">
-                <Knob value={eq.bass} min={-12} max={12} label="" color="#F97316" size={42}
-                  onChange={v=>setEq(p=>({...p,bass:Math.round(v)}))}/>
+                <MidiKnob paramKey="bass" value={eq.bass} min={-12} max={12} label="" color="#F97316" size={42}
+                  onChange={v=>setEq(p=>({...p,bass:Math.round(v)}))} ccMapping={ccMapping} ccLearnParam={ccLearnParam} gmCC={70} onLearn={handleCCLearn} onClearCC={handleCCClear}/>
                 <span className="text-[8px] font-semibold text-orange-400">Grave</span>
                 <span className="text-[8px] text-white/25 tabular-nums">{eq.bass>0?`+${eq.bass}`:eq.bass}dB</span>
               </div>
               <div className="flex flex-col items-center gap-0.5">
-                <Knob value={eq.mid} min={-12} max={12} label="" color="#A3E635" size={42}
-                  onChange={v=>setEq(p=>({...p,mid:Math.round(v)}))}/>
+                <MidiKnob paramKey="mid" value={eq.mid} min={-12} max={12} label="" color="#A3E635" size={42}
+                  onChange={v=>setEq(p=>({...p,mid:Math.round(v)}))} ccMapping={ccMapping} ccLearnParam={ccLearnParam} gmCC={71} onLearn={handleCCLearn} onClearCC={handleCCClear}/>
                 <span className="text-[8px] font-semibold text-lime-400">Médio</span>
                 <span className="text-[8px] text-white/25 tabular-nums">{eq.mid>0?`+${eq.mid}`:eq.mid}dB</span>
               </div>
               <div className="flex flex-col items-center gap-0.5">
-                <Knob value={eq.treble} min={-12} max={12} label="" color="#38BDF8" size={42}
+                <MidiKnob paramKey="treble" value={eq.treble} min={-12} max={12} label="" color="#38BDF8" size={42}
                   onChange={v=>setEq(p=>({...p,treble:Math.round(v)}))}/>
                 <span className="text-[8px] font-semibold text-sky-400">Agudo</span>
                 <span className="text-[8px] text-white/25 tabular-nums">{eq.treble>0?`+${eq.treble}`:eq.treble}dB</span>
