@@ -152,6 +152,7 @@ export default function PadsPage() {
   const [fx, setFx] = useState({
     reverb: 0.4, delay: 0.0, filter: 1.0, shimmer: 0.0,
   });
+  const [eq, setEq] = useState({ bass: 0, mid: 0, treble: 0 }); // dB: -12 a +12
 
   const audioCtxRef = useRef<AudioContext|null>(null);
   const buffersRef = useRef<Record<string,AudioBuffer>>({});
@@ -159,6 +160,9 @@ export default function PadsPage() {
   const gainRef = useRef<GainNode|null>(null);
   const masterGainRef = useRef<GainNode|null>(null);
   const filterRef = useRef<BiquadFilterNode|null>(null);
+  const eqBassRef = useRef<BiquadFilterNode|null>(null);
+  const eqMidRef = useRef<BiquadFilterNode|null>(null);
+  const eqTrebleRef = useRef<BiquadFilterNode|null>(null);
   const reverbGainRef = useRef<GainNode|null>(null);
   const delayGainRef = useRef<GainNode|null>(null);
   const reverbRef = useRef<ConvolverNode|null>(null);
@@ -176,6 +180,11 @@ export default function PadsPage() {
   useEffect(()=>{fadeDurRef.current=fadeDuration;},[fadeDuration]);
   useEffect(()=>{fxRef.current=fx; applyFx(fx);},[fx]);
   useEffect(()=>{masterVolRef.current=masterVolume; if(masterGainRef.current) masterGainRef.current.gain.value=masterVolume;},[masterVolume]);
+  useEffect(()=>{
+    if(eqBassRef.current) eqBassRef.current.gain.value=eq.bass;
+    if(eqMidRef.current) eqMidRef.current.gain.value=eq.mid;
+    if(eqTrebleRef.current) eqTrebleRef.current.gain.value=eq.treble;
+  },[eq]);
 
   const applyFx=(f:typeof fx)=>{
     if(reverbGainRef.current) reverbGainRef.current.gain.value=f.reverb;
@@ -200,7 +209,15 @@ export default function PadsPage() {
     // Resumir imediatamente — browser pode criar já em suspended
     ctx.resume().catch(()=>{});
     const master=ctx.createGain(); master.gain.value=masterVolRef.current; master.connect(ctx.destination); masterGainRef.current=master;
-    const filter=ctx.createBiquadFilter(); filter.type="lowpass"; filter.frequency.value=20000; filter.Q.value=1; filter.connect(master); filterRef.current=filter;
+    const filter=ctx.createBiquadFilter(); filter.type="lowpass"; filter.frequency.value=20000; filter.Q.value=1; filterRef.current=filter;
+
+    // EQ de 3 bandas
+    const eqBass=ctx.createBiquadFilter(); eqBass.type="lowshelf"; eqBass.frequency.value=200; eqBass.gain.value=0; eqBassRef.current=eqBass;
+    const eqMid=ctx.createBiquadFilter(); eqMid.type="peaking"; eqMid.frequency.value=1200; eqMid.Q.value=1; eqMid.gain.value=0; eqMidRef.current=eqMid;
+    const eqTreble=ctx.createBiquadFilter(); eqTreble.type="highshelf"; eqTreble.frequency.value=4000; eqTreble.gain.value=0; eqTrebleRef.current=eqTreble;
+
+    // Cadeia: filter → eqBass → eqMid → eqTreble → master
+    filter.connect(eqBass); eqBass.connect(eqMid); eqMid.connect(eqTreble); eqTreble.connect(master);
     const rev=ctx.createConvolver(); rev.buffer=createReverbBuf(ctx); reverbRef.current=rev;
     const rg=ctx.createGain(); rg.gain.value=fxRef.current.reverb; rg.connect(master); reverbGainRef.current=rg; rev.connect(rg);
     const del=ctx.createDelay(2); del.delayTime.value=0.35; delayRef.current=del;
@@ -271,6 +288,9 @@ export default function PadsPage() {
       }
       gainRef.current=null;
       // Fechar AudioContext — libera recursos e para qualquer áudio residual
+      eqBassRef.current=null;
+      eqMidRef.current=null;
+      eqTrebleRef.current=null;
       if(audioCtxRef.current){
         audioCtxRef.current.close().catch(()=>{});
         audioCtxRef.current=null;
@@ -652,7 +672,7 @@ export default function PadsPage() {
         {/* KNOBS DE EFEITO */}
         <div className="flex flex-col gap-3 p-3 flex-1 overflow-hidden">
           <span className="text-[9px] text-white/30 uppercase tracking-widest flex-shrink-0">Atmosfera</span>
-          <div className="grid grid-cols-2 gap-2 place-items-center flex-shrink-0">
+          <div className="grid grid-cols-2 gap-1 place-items-center flex-shrink-0">
             <Knob value={fx.reverb} min={0} max={1} label="Reverb" color="#8B5CF6" size={50}
               onChange={v=>setFx(p=>({...p,reverb:v}))}/>
             <Knob value={fx.delay} min={0} max={1} label="Delay" color="#06B6D4" size={50}
@@ -670,6 +690,39 @@ export default function PadsPage() {
             <input type="range" min={0} max={1} step={0.01} value={intensity}
               onChange={e=>setIntensity(Number(e.target.value))}
               className="w-full accent-primary h-1"/>
+          </div>
+
+          {/* EQ 3 bandas — knobs */}
+          <div className="flex-shrink-0 border-t border-white/5 pt-2">
+            <div className="flex justify-between items-center mb-1.5">
+              <span className="text-[9px] text-white/30 uppercase tracking-widest">Equalização</span>
+              {(eq.bass!==0||eq.mid!==0||eq.treble!==0) && (
+                <button onClick={()=>setEq({bass:0,mid:0,treble:0})}
+                  className="text-[8px] text-white/20 hover:text-white/50 border border-white/10 rounded px-1.5 py-0.5 transition-all">
+                  Reset
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-1 place-items-center">
+              <div className="flex flex-col items-center gap-0.5">
+                <Knob value={eq.bass} min={-12} max={12} label="" color="#F97316" size={42}
+                  onChange={v=>setEq(p=>({...p,bass:Math.round(v)}))}/>
+                <span className="text-[8px] font-semibold text-orange-400">Grave</span>
+                <span className="text-[8px] text-white/25 tabular-nums">{eq.bass>0?`+${eq.bass}`:eq.bass}dB</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5">
+                <Knob value={eq.mid} min={-12} max={12} label="" color="#A3E635" size={42}
+                  onChange={v=>setEq(p=>({...p,mid:Math.round(v)}))}/>
+                <span className="text-[8px] font-semibold text-lime-400">Médio</span>
+                <span className="text-[8px] text-white/25 tabular-nums">{eq.mid>0?`+${eq.mid}`:eq.mid}dB</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5">
+                <Knob value={eq.treble} min={-12} max={12} label="" color="#38BDF8" size={42}
+                  onChange={v=>setEq(p=>({...p,treble:Math.round(v)}))}/>
+                <span className="text-[8px] font-semibold text-sky-400">Agudo</span>
+                <span className="text-[8px] text-white/25 tabular-nums">{eq.treble>0?`+${eq.treble}`:eq.treble}dB</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
