@@ -157,6 +157,26 @@ export default function PadsPage() {
   const midiLearnPadRef = useRef<string|null>(null);
   const padsRef = useRef<Pad[]>([]);
 
+  // Padrões GM para CC de controles
+  const GM_CC: Record<string,number> = {
+    volume:  7,   // CC7  = Volume
+    reverb:  91,  // CC91 = Reverb
+    delay:   94,  // CC94 = Chorus/Delay
+    filter:  74,  // CC74 = Cutoff
+    shimmer: 93,  // CC93 = Shimmer
+    bass:    70,  // CC70 = Sound Variation (Grave)
+    mid:     71,  // CC71 = Resonance (Médio)
+    treble:  72,  // CC72 = Release (Agudo)
+    pitch:   1,   // CC1  = Modulation (Pitch)
+  };
+  // Mapeamento customizado CC: paramKey -> ccNumber (sobrepõe GM)
+  const [ccMapping, setCcMapping] = useState<Record<string,number>>(()=>{
+    try{ const s=localStorage.getItem("midi_cc_map"); return s?JSON.parse(s):{}; }catch{ return {}; }
+  });
+  const ccMappingRef = useRef<Record<string,number>>({});
+  const [ccLearnParam, setCcLearnParam] = useState<string|null>(null); // param aguardando CC
+  const ccLearnParamRef = useRef<string|null>(null);
+
   const [fx, setFx] = useState({
     reverb: 0.4, delay: 0.0, filter: 1.0, shimmer: 0.0,
   });
@@ -164,9 +184,8 @@ export default function PadsPage() {
 
   const audioCtxRef = useRef<AudioContext|null>(null);
   const buffersRef = useRef<Record<string,AudioBuffer>>({});
-  const sourceRef = useRef<AudioBufferSourceNode|null>(null); // LOOP/HOLD — único
-  const gainRef = useRef<GainNode|null>(null);                  // LOOP/HOLD — único
-  const oneShotSources = useRef<AudioBufferSourceNode[]>([]);   // ONE_SHOT — polifônico
+  const sourceRef = useRef<AudioBufferSourceNode|null>(null);
+  const gainRef = useRef<GainNode|null>(null);
   const masterGainRef = useRef<GainNode|null>(null);
   const filterRef = useRef<BiquadFilterNode|null>(null);
   const eqBassRef = useRef<BiquadFilterNode|null>(null);
@@ -191,6 +210,8 @@ export default function PadsPage() {
   useEffect(()=>{masterVolRef.current=masterVolume; if(masterGainRef.current) masterGainRef.current.gain.value=masterVolume;},[masterVolume]);
   useEffect(()=>{midiMappingRef.current=midiMapping;},[midiMapping]);
   useEffect(()=>{midiLearnPadRef.current=midiLearnPad;},[midiLearnPad]);
+  useEffect(()=>{ccMappingRef.current=ccMapping;},[ccMapping]);
+  useEffect(()=>{ccLearnParamRef.current=ccLearnParam;},[ccLearnParam]);
   useEffect(()=>{
     if(eqBassRef.current) eqBassRef.current.gain.value=eq.bass;
     if(eqMidRef.current) eqMidRef.current.gain.value=eq.mid;
@@ -300,9 +321,6 @@ export default function PadsPage() {
       }
       gainRef.current=null;
       // Fechar AudioContext — libera recursos e para qualquer áudio residual
-      // Parar todos os ONE_SHOT ativos
-      oneShotSources.current.forEach(s=>{ try{s.stop();}catch{} });
-      oneShotSources.current=[];
       eqBassRef.current=null;
       eqMidRef.current=null;
       eqTrebleRef.current=null;
@@ -358,30 +376,9 @@ export default function PadsPage() {
       setTimeout(()=>{try{os.stop();}catch{}},dur*1000+100);
     }
 
-    if(pad.type==="ONE_SHOT"){
-      // ONE_SHOT polifônico — toca sem parar outros sons simultâneos
-      const src=ctx.createBufferSource();
-      src.buffer=buf; src.loop=false;
-      src.playbackRate.value=Math.pow(2,pitchRef.current/12);
-      const g=ctx.createGain();
-      g.gain.setValueAtTime(pad.volume, ctx.currentTime);
-      src.connect(g); g.connect(filterRef.current!);
-      const f=fxRef.current;
-      if(f.reverb>0&&reverbRef.current) g.connect(reverbRef.current);
-      if(f.delay>0&&delayRef.current) g.connect(delayRef.current);
-      oneShotSources.current.push(src);
-      src.onended=()=>{
-        oneShotSources.current=oneShotSources.current.filter(s=>s!==src);
-        try{g.disconnect();}catch{}
-      };
-      src.start();
-      setCurrentPad(pad);
-      return; // não altera sourceRef/gainRef do LOOP
-    }
-
-    // LOOP / HOLD — único (para o anterior)
     const source=ctx.createBufferSource();
-    source.buffer=buf; source.loop=true;
+    // LOOP = loop contínuo | HOLD = loop enquanto segura | ONE_SHOT = toca uma vez sem loop
+    source.buffer=buf; source.loop=(pad.type==="LOOP"||pad.type==="HOLD");
     source.playbackRate.value=Math.pow(2,pitchRef.current/12);
 
     const gain=ctx.createGain();
@@ -398,6 +395,17 @@ export default function PadsPage() {
     source.start();
     sourceRef.current=source; gainRef.current=gain;
     setCurrentPad(pad); setIsPlaying(true);
+
+    // ONE_SHOT: parar automaticamente quando terminar
+    if(pad.type==="ONE_SHOT"){
+      source.onended=()=>{
+        // Só resetar se ainda for o mesmo source (não foi trocado)
+        if(sourceRef.current===source){
+          sourceRef.current=null; gainRef.current=null;
+          setIsPlaying(false);
+        }
+      };
+    }
   },[initAudio]);
 
   const stopPad=useCallback(()=>{
@@ -419,6 +427,43 @@ export default function PadsPage() {
       const [status, note, velocity]=event.data;
       const isNoteOn=(status&0xF0)===0x90 && velocity>0;
       const isNoteOff=(status&0xF0)===0x80 || ((status&0xF0)===0x90 && velocity===0);
+
+      // CC (Control Change) — knobs e sliders
+      const isCC=(status&0xF0)===0xB0;
+      if(isCC){
+        const cc=note; // note = CC number, velocity = value
+        const val01=velocity/127; // normalizar 0-1
+
+        // Modo learn CC: mapear CC ao parâmetro selecionado
+        if(ccLearnParamRef.current){
+          const param=ccLearnParamRef.current;
+          setCcMapping(prev=>{
+            const next={...prev,[param]:cc};
+            try{localStorage.setItem("midi_cc_map",JSON.stringify(next));}catch{}
+            ccMappingRef.current=next;
+            return next;
+          });
+          ccLearnParamRef.current=null;
+          setCcLearnParam(null);
+        }
+
+        // Resolver CC efetivo (custom sobrepõe GM)
+        const resolveCC=(param:string)=>{
+          const custom=ccMappingRef.current[param];
+          return custom!=null?custom:(GM_CC[param]??-1);
+        };
+
+        if(cc===resolveCC("volume"))  { setMasterVolume(val01); }
+        if(cc===resolveCC("reverb"))  { setFx(p=>({...p,reverb:val01})); }
+        if(cc===resolveCC("delay"))   { setFx(p=>({...p,delay:val01})); }
+        if(cc===resolveCC("filter"))  { setFx(p=>({...p,filter:val01})); }
+        if(cc===resolveCC("shimmer")) { setFx(p=>({...p,shimmer:val01})); }
+        if(cc===resolveCC("bass"))    { setEq(p=>({...p,bass:Math.round((val01*2-1)*12)})); }
+        if(cc===resolveCC("mid"))     { setEq(p=>({...p,mid:Math.round((val01*2-1)*12)})); }
+        if(cc===resolveCC("treble"))  { setEq(p=>({...p,treble:Math.round((val01*2-1)*12)})); }
+        if(cc===resolveCC("pitch"))   { setPitch(Math.round((val01*2-1)*12)); }
+        return;
+      }
 
       if(isNoteOn){
         setLastMidiNote(note);
@@ -592,6 +637,59 @@ export default function PadsPage() {
               !currentPad&&"opacity-20")}>
             {isPlaying?"■":"▶"}
           </button>
+          {/* Mapeamento CC MIDI */}
+          {ccLearnParam!=null && (
+            <div className="flex-shrink-0 border-t border-white/5 pt-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-white/30 uppercase tracking-widest">Controles MIDI</span>
+                <button onClick={()=>setCcLearnParam(null)}
+                  className="text-[8px] text-white/30 hover:text-white/60 border border-white/10 rounded px-1.5 py-0.5">
+                  Fechar
+                </button>
+              </div>
+              {([
+                {key:"volume",  label:"Volume",  gm:7  },
+                {key:"reverb",  label:"Reverb",  gm:91 },
+                {key:"delay",   label:"Delay",   gm:94 },
+                {key:"filter",  label:"Cutoff",  gm:74 },
+                {key:"shimmer", label:"Shimmer", gm:93 },
+                {key:"bass",    label:"Grave",   gm:70 },
+                {key:"mid",     label:"Médio",   gm:71 },
+                {key:"treble",  label:"Agudo",   gm:72 },
+                {key:"pitch",   label:"Pitch",   gm:1  },
+              ] as const).map(({key,label,gm})=>{
+                const custom=ccMapping[key];
+                const active=ccLearnParam===key;
+                return (
+                  <button key={key}
+                    onClick={()=>setCcLearnParam(active?null:key)}
+                    className={cn(
+                      "w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-[10px] border transition-all",
+                      active
+                        ?"border-violet-500/60 bg-violet-500/20 text-violet-300 animate-pulse"
+                        :"border-white/5 bg-white/3 text-white/50 hover:border-white/15"
+                    )}>
+                    <span className="font-medium">{label}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn("text-[9px]", custom!=null?"text-violet-400":"text-white/20")}>
+                        CC{custom!=null?custom:gm}{custom!=null?"*":""}
+                      </span>
+                      {custom!=null && (
+                        <button onClick={e=>{e.stopPropagation();
+                          setCcMapping(p=>{const n={...p};delete n[key];
+                            try{localStorage.setItem("midi_cc_map",JSON.stringify(n));}catch{}
+                            ccMappingRef.current=n; return n;});
+                        }} className="text-[8px] text-white/20 hover:text-red-400">✕</button>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+              <p className="text-[8px] text-white/20 text-center pt-1">
+                * = customizado · clique para remapear
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -616,17 +714,30 @@ export default function PadsPage() {
           {midiDevice&&<div className="flex items-center gap-1 text-[10px] text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-2 py-1 ml-1"><Usb className="h-3 w-3"/>{midiDevice}</div>}
           <div className="ml-auto flex items-center gap-2">
             {midiDevice && (
-              <button
-                onClick={()=>{setMidiLearnMode(v=>!v); setMidiLearnPad(null);}}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all",
-                  midiLearnMode
-                    ?"border-emerald-500/50 bg-emerald-500/20 text-emerald-400 animate-pulse"
-                    :"border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                )}>
-                <Usb className="h-3.5 w-3.5"/>
-                {midiLearnMode ? "Clique num pad..." : "Mapear MIDI"}
-              </button>
+              <>
+                <button
+                  onClick={()=>{setMidiLearnMode(v=>!v); setMidiLearnPad(null); setCcLearnParam(null);}}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all",
+                    midiLearnMode
+                      ?"border-emerald-500/50 bg-emerald-500/20 text-emerald-400 animate-pulse"
+                      :"border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                  )}>
+                  <Usb className="h-3.5 w-3.5"/>
+                  {midiLearnMode ? "Clique num pad..." : "Pads MIDI"}
+                </button>
+                <button
+                  onClick={()=>{setMidiLearnMode(false); setMidiLearnPad(null); setCcLearnParam(v=>v?null:"__open__");}}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all",
+                    ccLearnParam!=null
+                      ?"border-violet-500/50 bg-violet-500/20 text-violet-400 animate-pulse"
+                      :"border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                  )}>
+                  <Usb className="h-3.5 w-3.5"/>
+                  {ccLearnParam!=null ? "Mova um knob..." : "Controles MIDI"}
+                </button>
+              </>
             )}
             {midiLearnMode && Object.keys(midiMapping).length > 0 && (
               <button
