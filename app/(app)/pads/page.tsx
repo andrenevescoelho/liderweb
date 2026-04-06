@@ -355,7 +355,8 @@ export default function PadsPage() {
     }
 
     const source=ctx.createBufferSource();
-    source.buffer=buf; source.loop=true;
+    // LOOP = loop contínuo | HOLD = loop enquanto segura | ONE_SHOT = toca uma vez sem loop
+    source.buffer=buf; source.loop=(pad.type==="LOOP"||pad.type==="HOLD");
     source.playbackRate.value=Math.pow(2,pitchRef.current/12);
 
     const gain=ctx.createGain();
@@ -372,6 +373,17 @@ export default function PadsPage() {
     source.start();
     sourceRef.current=source; gainRef.current=gain;
     setCurrentPad(pad); setIsPlaying(true);
+
+    // ONE_SHOT: parar automaticamente quando terminar
+    if(pad.type==="ONE_SHOT"){
+      source.onended=()=>{
+        // Só resetar se ainda for o mesmo source (não foi trocado)
+        if(sourceRef.current===source){
+          sourceRef.current=null; gainRef.current=null;
+          setIsPlaying(false);
+        }
+      };
+    }
   },[initAudio]);
 
   const stopPad=useCallback(()=>{
@@ -709,6 +721,9 @@ export default function PadsPage() {
                 {active&&<div className="absolute inset-[-2px] rounded-2xl animate-pulse" style={{border:`1px solid ${pad.color}60`,opacity:0.5}}/>}
                 <PadIcon name={pad.name} color={pad.color} size={44}/>
                 <p className="text-sm font-bold text-center px-2 leading-tight" style={{color:active?pad.color:selected?"rgba(255,255,255,0.75)":"rgba(255,255,255,0.4)"}}>{pad.name}</p>
+                <span className="text-[8px] uppercase tracking-widest opacity-30" style={{color:pad.color}}>
+                  {pad.type==="ONE_SHOT"?"one shot":pad.type==="HOLD"?"hold":"loop"}
+                </span>
                 {active&&(
                   <div className="flex gap-0.5 items-end h-3 px-2">
                     {[0.4,0.9,0.6,1,0.5,0.8,0.3].map((h,i)=>(
