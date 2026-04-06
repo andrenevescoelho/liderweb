@@ -164,8 +164,9 @@ export default function PadsPage() {
 
   const audioCtxRef = useRef<AudioContext|null>(null);
   const buffersRef = useRef<Record<string,AudioBuffer>>({});
-  const sourceRef = useRef<AudioBufferSourceNode|null>(null);
-  const gainRef = useRef<GainNode|null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode|null>(null); // LOOP/HOLD — único
+  const gainRef = useRef<GainNode|null>(null);                  // LOOP/HOLD — único
+  const oneShotSources = useRef<AudioBufferSourceNode[]>([]);   // ONE_SHOT — polifônico
   const masterGainRef = useRef<GainNode|null>(null);
   const filterRef = useRef<BiquadFilterNode|null>(null);
   const eqBassRef = useRef<BiquadFilterNode|null>(null);
@@ -299,6 +300,9 @@ export default function PadsPage() {
       }
       gainRef.current=null;
       // Fechar AudioContext — libera recursos e para qualquer áudio residual
+      // Parar todos os ONE_SHOT ativos
+      oneShotSources.current.forEach(s=>{ try{s.stop();}catch{} });
+      oneShotSources.current=[];
       eqBassRef.current=null;
       eqMidRef.current=null;
       eqTrebleRef.current=null;
@@ -354,9 +358,30 @@ export default function PadsPage() {
       setTimeout(()=>{try{os.stop();}catch{}},dur*1000+100);
     }
 
+    if(pad.type==="ONE_SHOT"){
+      // ONE_SHOT polifônico — toca sem parar outros sons simultâneos
+      const src=ctx.createBufferSource();
+      src.buffer=buf; src.loop=false;
+      src.playbackRate.value=Math.pow(2,pitchRef.current/12);
+      const g=ctx.createGain();
+      g.gain.setValueAtTime(pad.volume, ctx.currentTime);
+      src.connect(g); g.connect(filterRef.current!);
+      const f=fxRef.current;
+      if(f.reverb>0&&reverbRef.current) g.connect(reverbRef.current);
+      if(f.delay>0&&delayRef.current) g.connect(delayRef.current);
+      oneShotSources.current.push(src);
+      src.onended=()=>{
+        oneShotSources.current=oneShotSources.current.filter(s=>s!==src);
+        try{g.disconnect();}catch{}
+      };
+      src.start();
+      setCurrentPad(pad);
+      return; // não altera sourceRef/gainRef do LOOP
+    }
+
+    // LOOP / HOLD — único (para o anterior)
     const source=ctx.createBufferSource();
-    // LOOP = loop contínuo | HOLD = loop enquanto segura | ONE_SHOT = toca uma vez sem loop
-    source.buffer=buf; source.loop=(pad.type==="LOOP"||pad.type==="HOLD");
+    source.buffer=buf; source.loop=true;
     source.playbackRate.value=Math.pow(2,pitchRef.current/12);
 
     const gain=ctx.createGain();
@@ -373,17 +398,6 @@ export default function PadsPage() {
     source.start();
     sourceRef.current=source; gainRef.current=gain;
     setCurrentPad(pad); setIsPlaying(true);
-
-    // ONE_SHOT: parar automaticamente quando terminar
-    if(pad.type==="ONE_SHOT"){
-      source.onended=()=>{
-        // Só resetar se ainda for o mesmo source (não foi trocado)
-        if(sourceRef.current===source){
-          sourceRef.current=null; gainRef.current=null;
-          setIsPlaying(false);
-        }
-      };
-    }
   },[initAudio]);
 
   const stopPad=useCallback(()=>{
