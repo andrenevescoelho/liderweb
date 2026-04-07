@@ -190,7 +190,34 @@ export async function DELETE(req: NextRequest) {
     const action = searchParams.get("action") ?? "cancel";
 
     if (action === "delete") {
-      // Hard delete — remove job e stems do banco
+      // Hard delete — apagar arquivos do R2 e remover do banco
+      const stems = await (prisma as any).splitStem.findMany({
+        where: { jobId },
+        select: { fileKey: true },
+      });
+
+      if (stems.length > 0) {
+        const { S3Client, DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+        const s3 = new S3Client({
+          region: process.env.AWS_REGION ?? "auto",
+          endpoint: process.env.S3_ENDPOINT,
+          credentials: {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
+          },
+        });
+        await Promise.allSettled(
+          stems
+            .filter((s: any) => s.fileKey)
+            .map((s: any) =>
+              s3.send(new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME!,
+                Key: s.fileKey,
+              }))
+            )
+        );
+      }
+
       await (prisma as any).splitStem.deleteMany({ where: { jobId } });
       await (prisma as any).splitJob.delete({ where: { id: jobId } });
       return NextResponse.json({ success: true });

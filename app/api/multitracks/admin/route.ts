@@ -6,8 +6,37 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { createS3Client, getBucketConfig } from "@/lib/aws-config";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import AdmZip from "adm-zip";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { writeFile, readFile, unlink } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+
+const execAsync = promisify(exec);
+
+// Converte buffer WAV/AIFF/FLAC para MP3 320kbps via ffmpeg
+async function convertToMp3(inputBuffer: Buffer, inputExt: string): Promise<Buffer | null> {
+  const id = `stem_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const inputPath = join(tmpdir(), `${id}${inputExt}`);
+  const outputPath = join(tmpdir(), `${id}.mp3`);
+  try {
+    await writeFile(inputPath, inputBuffer);
+    await execAsync(
+      `ffmpeg -i "${inputPath}" -codec:a libmp3lame -b:a 320k -y "${outputPath}"`,
+      { timeout: 120000 }
+    );
+    const mp3Buffer = await readFile(outputPath);
+    return mp3Buffer;
+  } catch (err) {
+    console.warn("[multitracks] ffmpeg conversão falhou:", err);
+    return null;
+  } finally {
+    await unlink(inputPath).catch(() => {});
+    await unlink(outputPath).catch(() => {});
+  }
+}
 
 // Mapa de prefixos para nomes legíveis
 const STEM_NAME_MAP: Record<string, string> = {
@@ -156,18 +185,40 @@ async function downloadAndProcessZip(
       detectedBpm = extractBpmFromFilename(entry.name);
     }
 
-    const fileData = entry.getData();
+    const rawData = entry.getData();
+    const ext = entry.name.match(/\.\w+$/)?.[0].toLowerCase() ?? ".wav";
+    const isAlreadyMp3 = ext === ".mp3";
 
-    const mimeType = entry.name.toLowerCase().endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
+    let fileData: Buffer;
+    let finalKey: string;
+    let mimeType: string;
+
+    if (isAlreadyMp3) {
+      fileData = rawData;
+      finalKey = r2Key;
+      mimeType = "audio/mpeg";
+    } else {
+      const mp3Data = await convertToMp3(rawData, ext);
+      if (mp3Data) {
+        fileData = mp3Data;
+        finalKey = r2Key.replace(/\.(wav|aiff|flac)$/i, ".mp3");
+        mimeType = "audio/mpeg";
+        console.log(`[multitracks] ${entry.name} convertido para MP3 (${Math.round(rawData.length/1024)}KB -> ${Math.round(mp3Data.length/1024)}KB)`);
+      } else {
+        fileData = rawData;
+        finalKey = r2Key;
+        mimeType = "audio/wav";
+      }
+    }
 
     await s3Client.send(new PutObjectCommand({
       Bucket: bucketName,
-      Key: r2Key,
+      Key: finalKey,
       Body: fileData,
       ContentType: mimeType,
     }));
 
-    stems.push({ name: stemName, r2Key });
+    stems.push({ name: stemName, r2Key: finalKey });
   }
 
   return { stems, detectedBpm };
@@ -360,6 +411,22 @@ export async function DELETE(req: NextRequest) {
     // Verificar se existe
     const album = await prisma.multitracksAlbum.findUnique({ where: { id } });
     if (!album) return NextResponse.json({ error: "Multitrack não encontrada" }, { status: 404 });
+
+    // Apagar arquivos do R2 (stems)
+    const stems = (album.stems as any[]) ?? [];
+    if (stems.length > 0) {
+      const s3Client = createS3Client();
+      const { bucketName } = getBucketConfig();
+      await Promise.allSettled(
+        stems
+          .filter((s) => s.r2Key)
+          .map((s) =>
+            s3Client.send(
+              new DeleteObjectCommand({ Bucket: bucketName, Key: s.r2Key })
+            )
+          )
+      );
+    }
 
     // Deletar rentals e usage primeiro (cascade deveria cuidar, mas por segurança)
     await prisma.multitracksRental.deleteMany({ where: { albumId: id } });

@@ -37,6 +37,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 nextjs
 
+# ffmpeg para conversão de áudio (WAV → MP3)
+RUN apk add --no-cache ffmpeg
+
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./app/.next/static
 COPY --from=builder /app/public ./app/public
