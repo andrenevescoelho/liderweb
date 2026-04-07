@@ -7,7 +7,7 @@ import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createS3Client, getBucketConfig } from "@/lib/aws-config";
 import {
   lalalUpload, lalalSplit, lalalWaitForCompletion, downloadAndUploadToR2,
-  generateMetronomeWav, analyzeWithGemini, generateGuideTTS,
+  analyzeWithGemini,
   STEM_DISPLAY_NAMES, type LalalStem,
 } from "@/lib/split-service";
 
@@ -98,21 +98,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Metrônomo
-    const metronomeWav = generateMetronomeWav(analysis.bpm, estimatedDuration);
-    const metronomeKey = `${stemPrefix}/metronome.wav`;
-    await s3Client.send(new PutObjectCommand({ Bucket: bucketName, Key: metronomeKey, Body: metronomeWav, ContentType: "audio/wav" }));
-    stemRecords.push({ jobId, label: "metronome", displayName: `Metrônomo (${analysis.bpm} BPM)`, fileKey: metronomeKey, type: "METRONOME" });
-
-    // Guia TTS
-    if (analysis.sections.length > 0) {
-      try {
-        const guideWav = await generateGuideTTS(analysis.sections, analysis.bpm, job.songName);
-        const guideKey = `${stemPrefix}/guide.wav`;
-        await s3Client.send(new PutObjectCommand({ Bucket: bucketName, Key: guideKey, Body: guideWav, ContentType: "audio/wav" }));
-        stemRecords.push({ jobId, label: "guide", displayName: "Guia de Seções", fileKey: guideKey, type: "GUIDE" });
-      } catch (err) { console.error("[splits] guia TTS falhou:", err); }
-    }
 
     await (prisma as any).splitStem.createMany({ data: stemRecords });
     await updateJob(jobId, "DONE", { durationSec: estimatedDuration, sections: analysis.sections });

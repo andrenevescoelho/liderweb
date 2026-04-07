@@ -22,7 +22,6 @@ interface Track {
 }
 
 const STEM_COLORS: Record<string, string> = {
-  guide: "#8B5CF6", metronome: "#F59E0B",
   "vocals@0": "#EF4444", "vocals@1": "#F87171", vocals: "#EF4444",
   drum: "#F59E0B", bass: "#84CC16", piano: "#06B6D4",
   electric_guitar: "#10B981", acoustic_guitar: "#34D399",
@@ -120,9 +119,9 @@ export default function SplitPlayerPage() {
       const data = await res.json();
       if (!res.ok || !data.job) { toast.error("Split não encontrado"); router.back(); return; }
       setJob(data.job);
-      // Inicializar tracks na ordem: guide, metronome, vocals, drums, bass, etc.
+      // Inicializar tracks na ordem: vocals, drums, bass, etc.
       const ordered = [...data.job.stems].sort((a: SplitStem, b: SplitStem) => {
-        const order: Record<string, number> = { guide: 0, metronome: 1, "vocals@0": 2, "vocals@1": 3, vocals: 4, drum: 5, bass: 6, piano: 7, electric_guitar: 8, acoustic_guitar: 9, synthesizer: 10, strings: 11, wind: 12, no_vocals: 13 };
+        const order: Record<string, number> = { "vocals@0": 0, "vocals@1": 1, vocals: 2, drum: 3, bass: 4, piano: 5, electric_guitar: 6, acoustic_guitar: 7, synthesizer: 8, strings: 9, wind: 10, no_vocals: 11 };
         return (order[a.label] ?? 99) - (order[b.label] ?? 99);
       });
       setTracks(ordered.map((s: SplitStem, i: number) => ({
