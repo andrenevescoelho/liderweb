@@ -308,6 +308,19 @@ export async function PATCH(req: NextRequest) {
     const { id, driveZipUrl, ...data } = body;
     if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
 
+    // Sanitizar campos opcionais — string vazia vira null para não violar FK
+    const NULLABLE_FIELDS = ["songId", "genre", "coverUrl", "musicalKey", "description"];
+    for (const field of NULLABLE_FIELDS) {
+      if (field in data && (data[field] === "" || data[field] === undefined)) {
+        data[field] = null;
+      }
+    }
+    if ("bpm" in data && (data.bpm === "" || data.bpm === null)) {
+      data.bpm = null;
+    } else if ("bpm" in data && data.bpm !== undefined) {
+      data.bpm = Number(data.bpm) || null;
+    }
+
     // Se enviou novo ZIP, reprocessar
     if (driveZipUrl) {
       const s3Client = createS3Client();
