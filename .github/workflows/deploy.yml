@@ -32,6 +32,8 @@ jobs:
             --exclude='docker-compose.prod.yml' \
             --exclude='nginx/' \
             --exclude='.git/' \
+            --exclude='node_modules/' \
+            --exclude='.next/' \
             $GITHUB_WORKSPACE/ /opt/liderweb/
 
       - name: Build e deploy
