@@ -312,6 +312,30 @@ export default function MultitracksPlayerPage() {
   const transposeRef = useRef(0);
   const [isMobile, setIsMobile] = useState(false);
   const [deviceType, setDeviceType] = useState<"desktop"|"tablet"|"mobile">("desktop");
+  const isMobileOrTablet = deviceType !== "desktop";
+  const showDesktopOnlyMessage = useCallback(() => {
+    toast("Esse recurso só está disponível acessando por um computador.", {
+      icon: "💻",
+      duration: 2600,
+    });
+  }, []);
+
+  const handleTransposeChange = useCallback((delta: number) => {
+    if (isMobileOrTablet) {
+      showDesktopOnlyMessage();
+      return;
+    }
+    setTranspose((v) => Math.max(-6, Math.min(6, v + delta)));
+  }, [isMobileOrTablet, showDesktopOnlyMessage]);
+
+  const handleToggleMixer = useCallback(() => {
+    if (isMobileOrTablet) {
+      showDesktopOnlyMessage();
+      return;
+    }
+    setShowMixer((v) => !v);
+  }, [isMobileOrTablet, showDesktopOnlyMessage]);
+
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
     const isPhone = /iphone|android.*mobile|mobile.*android/.test(ua);
@@ -854,13 +878,13 @@ export default function MultitracksPlayerPage() {
           break;
         case "KeyX":
           e.preventDefault();
-          setShowMixer(v => !v);
+          handleToggleMixer();
           break;
         case "Comma": // Shift+< diminui tom
-          if (e.shiftKey) { e.preventDefault(); setTranspose(v => Math.max(-6, v - 1)); }
+          if (e.shiftKey) { e.preventDefault(); handleTransposeChange(-1); }
           break;
         case "Period": // Shift+> aumenta tom
-          if (e.shiftKey) { e.preventDefault(); setTranspose(v => Math.min(6, v + 1)); }
+          if (e.shiftKey) { e.preventDefault(); handleTransposeChange(1); }
           break;
         case "Escape":
           if (scheduledJumpRef.current) {
@@ -888,7 +912,7 @@ export default function MultitracksPlayerPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker, recordingShortcut, saveShortcuts]);
+  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker, recordingShortcut, saveShortcuts, handleToggleMixer, handleTransposeChange]);
 
   const togglePlay = () => {
     if (isPlaying) { stopAll(); offsetRef.current = currentTime; setIsPlaying(false); }
@@ -1031,16 +1055,22 @@ export default function MultitracksPlayerPage() {
           {/* Controle de Tom */}
           <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-1.5 py-0.5">
             <span className="text-[10px] text-muted-foreground font-medium mr-0.5">Tom</span>
-            <button onClick={() => setTranspose(v => Math.max(-6, v - 1))}
+            <button onClick={() => handleTransposeChange(-1)}
               className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">−</button>
             <span className={cn("text-xs font-bold tabular-nums w-6 text-center",
               transpose > 0 ? "text-emerald-400" : transpose < 0 ? "text-amber-400" : "text-muted-foreground")}>
               {transpose > 0 ? `+${transpose}` : transpose}
             </span>
-            <button onClick={() => setTranspose(v => Math.min(6, v + 1))}
+            <button onClick={() => handleTransposeChange(1)}
               className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">+</button>
             {transpose !== 0 && (
-              <button onClick={() => setTranspose(0)}
+              <button onClick={() => {
+                if (isMobileOrTablet) {
+                  showDesktopOnlyMessage();
+                  return;
+                }
+                setTranspose(0);
+              }}
                 className="h-4 w-4 rounded flex items-center justify-center text-[9px] text-muted-foreground/50 hover:text-muted-foreground ml-0.5" title="Resetar tom">↺</button>
             )}
           </div>
@@ -1065,7 +1095,7 @@ export default function MultitracksPlayerPage() {
               showPerfPanel ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-white/30 hover:text-white/60"
             )}>⚡</button>
           <button
-            onClick={() => setShowMixer(v => !v)}
+            onClick={handleToggleMixer}
             className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
               showMixer ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
             )}
