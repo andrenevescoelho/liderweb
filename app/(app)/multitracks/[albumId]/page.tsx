@@ -251,7 +251,6 @@ function PanKnob({ value, onChange }: { value: number; onChange: (v: number) => 
   const label = value === 0 ? "C" : value < 0 ? `L${Math.round(Math.abs(value) * 100)}` : `R${Math.round(value * 100)}`;
 
   return (
-    <>
     <div className="flex flex-col items-center gap-0.5 select-none" title="Pan — arraste para ajustar, duplo clique para centralizar">
       <svg ref={ref} width={32} height={32} viewBox="0 0 32 32"
         onMouseDown={onMouseDown} onDoubleClick={onDblClick}
