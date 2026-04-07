@@ -959,6 +959,34 @@ export default function MultitracksPlayerPage() {
     ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000))
     : 0;
 
+  // Coletar métricas de performance — deve ficar antes de qualquer return condicional
+  useEffect(() => {
+    if (!showPerfPanel) return;
+    let frames = 0, lastT = performance.now(), raf: number;
+    const tick = () => {
+      frames++;
+      const now = performance.now();
+      if (now - lastT >= 1000) {
+        const fps = Math.round(frames * 1000 / (now - lastT));
+        frames = 0; lastT = now;
+        const mem = (performance as any).memory;
+        const ctx = audioCtxRef.current;
+        setPerfMetrics({
+          fps,
+          memory:        mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+          memoryLimit:   mem ? Math.round(mem.jsHeapSizeLimit / 1048576) : null,
+          audioCtxState: ctx?.state ?? "—",
+          latency:       ctx?.baseLatency != null ? Math.round(ctx.baseLatency * 1000) : null,
+          bufferCount:   buffersRef.current.filter(Boolean).length,
+          analyserCount: analyserNodesRef.current.filter(Boolean).length,
+        });
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [showPerfPanel]);
+
   if (loading || status === "loading") {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
