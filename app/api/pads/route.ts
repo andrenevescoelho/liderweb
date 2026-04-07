@@ -135,6 +135,34 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
 
+  // Apagar áudios dos pads do board no R2
+  const padsToDelete = await prisma.pad.findMany({
+    where: { boardId: id, r2Key: { not: null } },
+    select: { r2Key: true },
+  });
+  if (padsToDelete.length > 0) {
+    const { S3Client } = await import("@aws-sdk/client-s3");
+    const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION ?? "auto",
+      endpoint: process.env.S3_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
+      },
+    });
+    await Promise.allSettled(
+      padsToDelete
+        .filter((p) => p.r2Key)
+        .map((p) =>
+          s3.send(new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME!,
+            Key: p.r2Key!,
+          }))
+        )
+    );
+  }
+
   await prisma.padBoard.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
