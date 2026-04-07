@@ -311,12 +311,42 @@ export default function MultitracksPlayerPage() {
   const [transpose, setTranspose] = useState(0);
   const transposeRef = useRef(0);
   const [isMobile, setIsMobile] = useState(false);
+  const [deviceType, setDeviceType] = useState<"desktop"|"tablet"|"mobile">("desktop");
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 640);
+    const ua = navigator.userAgent.toLowerCase();
+    const isPhone = /iphone|android.*mobile|mobile.*android/.test(ua);
+    const isIpad  = /ipad/.test(ua) || (/macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const isAndroidTablet = /android/.test(ua) && !/mobile/.test(ua);
+    const check = () => {
+      const w = window.innerWidth;
+      const mobile = isPhone || w < 640;
+      const tablet = isIpad || isAndroidTablet || (w >= 640 && w < 1024);
+      setIsMobile(mobile);
+      setDeviceType(mobile ? "mobile" : tablet ? "tablet" : "desktop");
+    };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  // Waveform e VU — desabilitados por padrão em mobile/tablet
+  const [showWaveform, setShowWaveform] = useState(true);
+  const [showVU, setShowVU] = useState(true);
+  useEffect(() => {
+    if (deviceType === "mobile" || deviceType === "tablet") {
+      setShowWaveform(false);
+      setShowVU(false);
+    }
+  }, [deviceType]);
+
+  // Painel de performance
+  const [showPerfPanel, setShowPerfPanel] = useState(false);
+  const [perfMetrics, setPerfMetrics] = useState<{
+    fps: number;
+    memory: number | null; memoryLimit: number | null;
+    audioCtxState: string; latency: number | null;
+    bufferCount: number; analyserCount: number;
+  } | null>(null);
   const [mixerPos, setMixerPos] = useState({ x: 0, y: 0 });
   const [mixerSize, setMixerSize] = useState({ w: 0, h: 340 });
   const [mixerInitialized, setMixerInitialized] = useState(false);
@@ -985,6 +1015,26 @@ export default function MultitracksPlayerPage() {
                 className="h-4 w-4 rounded flex items-center justify-center text-[9px] text-muted-foreground/50 hover:text-muted-foreground ml-0.5" title="Resetar tom">↺</button>
             )}
           </div>
+          <button onClick={() => setShowWaveform(v => !v)}
+            title={showWaveform ? "Ocultar waveform" : "Mostrar waveform"}
+            className={cn("rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all",
+              showWaveform ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-white/30 hover:text-white/60"
+            )}>~W</button>
+          <button onClick={() => setShowVU(v => !v)}
+            title={showVU ? "Ocultar VU" : "Mostrar VU"}
+            className={cn("rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all",
+              showVU ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-white/30 hover:text-white/60"
+            )}>VU</button>
+          {deviceType !== "desktop" && (
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold text-amber-400">
+              {deviceType === "tablet" ? "TABLET" : "MOBILE"}
+            </span>
+          )}
+          <button onClick={() => setShowPerfPanel(v => !v)}
+            title="Métricas de performance"
+            className={cn("rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all",
+              showPerfPanel ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-white/30 hover:text-white/60"
+            )}>⚡</button>
           <button
             onClick={() => setShowMixer(v => !v)}
             className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
@@ -1357,16 +1407,18 @@ export default function MultitracksPlayerPage() {
                     className="w-14 accent-primary h-1" disabled={stem.muted} />
                 </div>
                 {/* VU meter horizontal — atualizado via DOM ref, zero re-renders */}
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] text-muted-foreground w-4">VU</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div
-                      ref={(el) => { vuBarRefsMain.current[i] = el; }}
-                      className="h-full rounded-full"
-                      style={{ width: "0%", backgroundColor: stem.color, opacity: stem.muted ? 0.2 : 0.9, transition: "width 60ms linear" }}
-                    />
+                {showVU && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] text-muted-foreground w-4">VU</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        ref={(el) => { vuBarRefsMain.current[i] = el; }}
+                        className="h-full rounded-full"
+                        style={{ width: "0%", backgroundColor: stem.color, opacity: stem.muted ? 0.2 : 0.9, transition: "width 60ms linear" }}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               <PanKnob value={stem.pan} onChange={(v) => updateStem(i, { pan: v })} />
             </div>
@@ -1385,7 +1437,7 @@ export default function MultitracksPlayerPage() {
                   <div className="h-full flex items-center px-2">
                     <div className="h-1 w-full rounded bg-muted animate-pulse" />
                   </div>
-                ) : stem.waveformData ? (
+                ) : stem.waveformData && showWaveform ? (
                   <WaveformBar
                     data={stem.waveformData}
                     progress={zoom > 1
@@ -1677,5 +1729,91 @@ export default function MultitracksPlayerPage() {
         );
       })()}
     </div>
+
+    {/* Painel de Performance */}
+    {showPerfPanel && (
+      <div className="fixed bottom-20 right-4 z-[60] w-52 rounded-xl border border-emerald-500/30 bg-[#0b0d12]/95 backdrop-blur-md p-3 shadow-2xl font-mono text-[11px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-emerald-400 font-bold text-[10px] uppercase tracking-wider">⚡ Performance</span>
+          <button onClick={() => setShowPerfPanel(false)} className="text-white/30 hover:text-white/70 text-xs">✕</button>
+        </div>
+        {perfMetrics ? (
+          <div className="space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-white/40">FPS</span>
+              <span className={cn("font-bold", perfMetrics.fps >= 50 ? "text-emerald-400" : perfMetrics.fps >= 30 ? "text-amber-400" : "text-red-400")}>
+                {perfMetrics.fps}
+              </span>
+            </div>
+            {perfMetrics.memory !== null && (<>
+              <div className="flex justify-between">
+                <span className="text-white/40">Memória JS</span>
+                <span className={cn("font-bold", perfMetrics.memory < 200 ? "text-emerald-400" : perfMetrics.memory < 400 ? "text-amber-400" : "text-red-400")}>
+                  {perfMetrics.memory} MB
+                </span>
+              </div>
+              {perfMetrics.memoryLimit && (
+                <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                  <div className={cn("h-full rounded-full transition-all",
+                    perfMetrics.memory / perfMetrics.memoryLimit < 0.5 ? "bg-emerald-500" :
+                    perfMetrics.memory / perfMetrics.memoryLimit < 0.75 ? "bg-amber-500" : "bg-red-500"
+                  )} style={{ width: `${Math.min(100, perfMetrics.memory / perfMetrics.memoryLimit * 100)}%` }} />
+                </div>
+              )}
+              {perfMetrics.memoryLimit && (
+                <div className="flex justify-between">
+                  <span className="text-white/40">Limite heap</span>
+                  <span className="text-white/50">{perfMetrics.memoryLimit} MB</span>
+                </div>
+              )}
+            </>)}
+            <div className="flex justify-between">
+              <span className="text-white/40">AudioCtx</span>
+              <span className={cn("font-bold", perfMetrics.audioCtxState === "running" ? "text-emerald-400" : "text-amber-400")}>
+                {perfMetrics.audioCtxState}
+              </span>
+            </div>
+            {perfMetrics.latency !== null && (
+              <div className="flex justify-between">
+                <span className="text-white/40">Latência</span>
+                <span className={cn("font-bold", perfMetrics.latency < 10 ? "text-emerald-400" : perfMetrics.latency < 30 ? "text-amber-400" : "text-red-400")}>
+                  {perfMetrics.latency} ms
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-white/40">Buffers</span>
+              <span className="text-white/70">{perfMetrics.bufferCount}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/40">Analisadores</span>
+              <span className="text-white/70">{perfMetrics.analyserCount}</span>
+            </div>
+            <div className="border-t border-white/5 pt-1.5 mt-0.5 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-white/40">Dispositivo</span>
+                <span className="text-white/70 capitalize">{deviceType}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">Waveform</span>
+                <button onClick={() => setShowWaveform(v => !v)}
+                  className={cn("font-bold", showWaveform ? "text-emerald-400" : "text-white/30")}>
+                  {showWaveform ? "on" : "off"}
+                </button>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">VU meter</span>
+                <button onClick={() => setShowVU(v => !v)}
+                  className={cn("font-bold", showVU ? "text-emerald-400" : "text-white/30")}>
+                  {showVU ? "on" : "off"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-white/30 text-center py-2">Coletando dados...</p>
+        )}
+      </div>
+    )}
   );
 }
