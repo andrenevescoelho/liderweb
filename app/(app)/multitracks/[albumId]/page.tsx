@@ -1056,13 +1056,29 @@ export default function MultitracksPlayerPage() {
           <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-1.5 py-0.5">
             <span className="text-[10px] text-muted-foreground font-medium mr-0.5">Tom</span>
             <button onClick={() => handleTransposeChange(-1)}
-              className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">−</button>
+              className={cn(
+                "h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground transition-colors",
+                isMobileOrTablet
+                  ? "opacity-45 cursor-not-allowed"
+                  : "hover:text-foreground hover:bg-muted"
+              )}
+              aria-disabled={isMobileOrTablet}
+              title={isMobileOrTablet ? "Disponível apenas no computador" : "Diminuir tom"}
+            >−</button>
             <span className={cn("text-xs font-bold tabular-nums w-6 text-center",
               transpose > 0 ? "text-emerald-400" : transpose < 0 ? "text-amber-400" : "text-muted-foreground")}>
               {transpose > 0 ? `+${transpose}` : transpose}
             </span>
             <button onClick={() => handleTransposeChange(1)}
-              className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">+</button>
+              className={cn(
+                "h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground transition-colors",
+                isMobileOrTablet
+                  ? "opacity-45 cursor-not-allowed"
+                  : "hover:text-foreground hover:bg-muted"
+              )}
+              aria-disabled={isMobileOrTablet}
+              title={isMobileOrTablet ? "Disponível apenas no computador" : "Aumentar tom"}
+            >+</button>
             {transpose !== 0 && (
               <button onClick={() => {
                 if (isMobileOrTablet) {
@@ -1071,7 +1087,15 @@ export default function MultitracksPlayerPage() {
                 }
                 setTranspose(0);
               }}
-                className="h-4 w-4 rounded flex items-center justify-center text-[9px] text-muted-foreground/50 hover:text-muted-foreground ml-0.5" title="Resetar tom">↺</button>
+                className={cn(
+                  "h-4 w-4 rounded flex items-center justify-center text-[9px] ml-0.5",
+                  isMobileOrTablet
+                    ? "text-muted-foreground/35 cursor-not-allowed"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                )}
+                aria-disabled={isMobileOrTablet}
+                title={isMobileOrTablet ? "Disponível apenas no computador" : "Resetar tom"}
+              >↺</button>
             )}
           </div>
           <button onClick={() => setShowWaveform(v => !v)}
@@ -1097,9 +1121,13 @@ export default function MultitracksPlayerPage() {
           <button
             onClick={handleToggleMixer}
             className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
-              showMixer ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+              showMixer
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30",
+              isMobileOrTablet && "opacity-50 cursor-not-allowed"
             )}
-            title="Mixer (X)">
+            aria-disabled={isMobileOrTablet}
+            title={isMobileOrTablet ? "Mixer disponível apenas no computador" : "Mixer (X)"}>
             🎛 Mixer
           </button>
         </div>
