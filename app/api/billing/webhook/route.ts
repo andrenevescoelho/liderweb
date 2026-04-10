@@ -284,8 +284,9 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     return;
   }
 
-  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
-  console.log(`[webhook] subscription.updated details: status=${sub.status} cancel_at_period_end=${sub.cancel_at_period_end} trial_end=${sub.trial_end}`);
+  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end) || Boolean(sub.cancel_at);
+  const cancelAt = sub.cancel_at ? new Date(sub.cancel_at * 1000) : null;
+  console.log(`[webhook] sub.updated: status=${sub.status} cancel_at_period_end=${sub.cancel_at_period_end} cancel_at=${sub.cancel_at}`);
 
   await (prisma as any).subscription.update({
     where: { id: existing.id },
@@ -294,11 +295,12 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       currentPeriodStart: safeDate(sub.current_period_start) ?? new Date(),
       currentPeriodEnd: safeDate(sub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       cancelAtPeriodEnd,
+      cancelAt,
       trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
     },
   });
 
-  console.log(`[webhook] Subscription updated: ${subscription.id} → ${status} cancelAtPeriodEnd=${cancelAtPeriodEnd}`);
+  console.log(`[webhook] Subscription updated: ${subscription.id} → ${status} cancelAtPeriodEnd=${cancelAtPeriodEnd} cancelAt=${cancelAt}`);
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {

@@ -272,6 +272,7 @@ model Subscription {
   currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean            @default(false)
+  cancelAt             DateTime?          // data exata de cancelamento agendado pelo Stripe
   trialEndsAt          DateTime?
   couponRedemptions    CouponRedemption[]
   createdAt            DateTime           @default(now())

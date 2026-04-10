@@ -40,6 +40,7 @@ interface SubscriptionData {
   currentPeriodEnd: string | null;
   trialEndsAt: string | null;
   cancelAtPeriodEnd: boolean;
+  cancelAt: string | null;
   hasStripeCustomer: boolean;
   hasStripeSubscription: boolean;
   gateway: string;
@@ -200,7 +201,11 @@ export default function MeuPlanoPage() {
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" />Próxima cobrança</p>
-                  <p className="font-semibold text-sm">{sub.cancelAtPeriodEnd ? "Não renova" : formatDate(sub.currentPeriodEnd)}</p>
+                  <p className="font-semibold text-sm">
+                    {sub.cancelAtPeriodEnd
+                      ? <span className="text-amber-500">Cancela em {formatDate(sub.cancelAt ?? sub.currentPeriodEnd)}</span>
+                      : formatDate(sub.currentPeriodEnd)}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground mb-1">Gateway</p>
@@ -235,9 +240,19 @@ export default function MeuPlanoPage() {
 
               {/* Cancelamento agendado */}
               {sub.cancelAtPeriodEnd && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-                  Sua assinatura será cancelada em <strong>{formatDate(sub.currentPeriodEnd)}</strong>.
-                  Você pode reativar antes dessa data.
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold mb-0.5">Cancelamento agendado</p>
+                    <p>
+                      Seu acesso continuará ativo até{" "}
+                      <strong>{formatDate(sub.cancelAt ?? sub.currentPeriodEnd)}</strong>.
+                      {sub.status === "TRIALING"
+                        ? " O trial não será renovado após essa data."
+                        : " Após essa data você perderá acesso aos recursos do plano."}
+                    </p>
+                    <p className="mt-1 text-xs opacity-75">Você pode reativar a assinatura antes dessa data.</p>
+                  </div>
                 </div>
               )}
 
