@@ -197,8 +197,11 @@ export async function reactivateSubscription(
   externalSubscriptionId: string
 ): Promise<void> {
   if (gateway === "STRIPE") {
+    // cancel_at_period_end cobre cancelamentos normais
+    // cancel_at: "" remove cancelamentos agendados por data (ex: durante trial)
     await stripe.subscriptions.update(externalSubscriptionId, {
       cancel_at_period_end: false,
+      cancel_at: "" as any, // remove data absoluta de cancelamento
     });
     return;
   }
