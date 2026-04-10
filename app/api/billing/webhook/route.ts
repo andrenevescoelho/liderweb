@@ -8,6 +8,14 @@ import { SubscriptionStatus } from "@prisma/client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Helper seguro para converter timestamp Unix em Date
+// Retorna null se o valor for inválido, 0, undefined ou null
+function safeDate(timestamp: number | null | undefined): Date | null {
+  if (!timestamp || timestamp <= 0) return null;
+  const d = new Date(timestamp * 1000);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
   switch (status) {
     case "trialing":   return "TRIALING";
@@ -245,8 +253,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
       status,
-      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+      currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
+      currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
     },
     update: {
@@ -255,8 +263,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
       status,
-      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+      currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
+      currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
     },
   });
@@ -281,8 +289,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     where: { id: existing.id },
     data: {
       status,
-      currentPeriodStart: new Date(sub.current_period_start * 1000),
-      currentPeriodEnd: new Date(sub.current_period_end * 1000),
+      currentPeriodStart: safeDate(sub.current_period_start) ?? new Date(),
+      currentPeriodEnd: safeDate(sub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       cancelAtPeriodEnd: sub.cancel_at_period_end,
       trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
     },
