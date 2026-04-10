@@ -19,6 +19,13 @@ function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus
   }
 }
 
+// Converte timestamp Unix para Date de forma segura
+function safeDate(ts: number | null | undefined): Date | null {
+  if (!ts || ts <= 0) return null;
+  const d = new Date(ts * 1000);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 async function markWebhookProcessed(id: string, error?: string) {
   await (prisma as any).webhookEvent.update({
     where: { id },
@@ -245,8 +252,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
       status,
-      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+      currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
+      currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
     },
     update: {
@@ -255,8 +262,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
       status,
-      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+      currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
+      currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
     },
   });
