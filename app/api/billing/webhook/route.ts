@@ -8,14 +8,6 @@ import { SubscriptionStatus } from "@prisma/client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Helper seguro para converter timestamp Unix em Date
-// Retorna null se o valor for inválido, 0, undefined ou null
-function safeDate(timestamp: number | null | undefined): Date | null {
-  if (!timestamp || timestamp <= 0) return null;
-  const d = new Date(timestamp * 1000);
-  return isNaN(d.getTime()) ? null : d;
-}
-
 function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
   switch (status) {
     case "trialing":   return "TRIALING";
@@ -253,8 +245,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
       status,
-      currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
-      currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
     },
     update: {
@@ -263,8 +255,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeCustomerId: session.customer as string,
       stripeSubscriptionId: subscriptionId,
       status,
-      currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
-      currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
     },
   });
@@ -285,18 +277,21 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     return;
   }
 
+  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+  console.log(`[webhook] subscription.updated details: status=${sub.status} cancel_at_period_end=${sub.cancel_at_period_end} trial_end=${sub.trial_end}`);
+
   await (prisma as any).subscription.update({
     where: { id: existing.id },
     data: {
       status,
       currentPeriodStart: safeDate(sub.current_period_start) ?? new Date(),
       currentPeriodEnd: safeDate(sub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      cancelAtPeriodEnd: sub.cancel_at_period_end,
+      cancelAtPeriodEnd,
       trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
     },
   });
 
-  console.log(`[webhook] Subscription updated: ${subscription.id} → ${status}`);
+  console.log(`[webhook] Subscription updated: ${subscription.id} → ${status} cancelAtPeriodEnd=${cancelAtPeriodEnd}`);
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
