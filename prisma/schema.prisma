@@ -274,6 +274,7 @@ model Subscription {
   cancelAtPeriodEnd    Boolean            @default(false)
   cancelAt             DateTime?          // data exata de cancelamento agendado pelo Stripe
   trialEndsAt          DateTime?
+  trialEndingNotified  Boolean            @default(false) // true quando Stripe dispara trial_will_end (3 dias antes)
   couponRedemptions    CouponRedemption[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt

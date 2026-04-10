@@ -111,9 +111,68 @@ export async function POST(req: NextRequest) {
 
     const stripePriceId = stripeMapping.externalId;
 
-    // Criar checkout session no Stripe sem reutilizar customer antigo
+    // ── Reutilizar ou criar Customer no Stripe ────────────────────────────
+    // Regra: 1 customer por grupo. Nunca passar customer_email direto,
+    // pois isso cria um novo customer a cada checkout.
+    let stripeCustomerId: string | undefined;
+
+    // 1) Verificar se o grupo já tem um stripeCustomerId salvo na Subscription
+    const existingSubscription = await (prisma as any).subscription.findUnique({
+      where: { groupId: user.groupId },
+      select: { stripeCustomerId: true },
+    });
+
+    if (existingSubscription?.stripeCustomerId) {
+      // Confirmar que o customer ainda existe no Stripe
+      try {
+        const existing = await stripe.customers.retrieve(existingSubscription.stripeCustomerId);
+        if (!("deleted" in existing) || !existing.deleted) {
+          stripeCustomerId = existingSubscription.stripeCustomerId;
+        }
+      } catch {
+        // Customer não existe mais no Stripe — vai criar um novo abaixo
+      }
+    }
+
+    // 2) Se não temos customer, buscar por e-mail no Stripe antes de criar
+    if (!stripeCustomerId) {
+      const existingCustomers = await stripe.customers.list({
+        email: user.email,
+        limit: 5,
+      });
+
+      // Preferir customer que tenha metadata.groupId correto
+      const matchByGroup = existingCustomers.data.find(
+        (c) => c.metadata?.groupId === user.groupId
+      );
+      // Fallback: qualquer customer com esse e-mail
+      const matchByEmail = existingCustomers.data[0];
+
+      const matched = matchByGroup ?? matchByEmail;
+
+      if (matched) {
+        stripeCustomerId = matched.id;
+        // Garantir que a metadata groupId está correta
+        if (matched.metadata?.groupId !== user.groupId) {
+          await stripe.customers.update(matched.id, {
+            metadata: { groupId: user.groupId },
+          });
+        }
+      }
+    }
+
+    // 3) Criar novo customer com metadata de grupo se ainda não existe
+    if (!stripeCustomerId) {
+      const newCustomer = await stripe.customers.create({
+        email: user.email,
+        metadata: { groupId: user.groupId },
+      });
+      stripeCustomerId = newCustomer.id;
+    }
+
+    // Criar checkout session reutilizando o customer existente
     const checkoutSession = await stripe.checkout.sessions.create({
-      customer_email: user.email,
+      customer: stripeCustomerId,
       payment_method_types: ["card"],
       mode: "subscription",
       line_items: [{ price: stripePriceId, quantity: 1 }],

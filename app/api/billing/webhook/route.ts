@@ -103,6 +103,10 @@ export async function POST(req: NextRequest) {
         await handlePaymentFailed(event.data.object as Stripe.Invoice);
         break;
 
+      case "customer.subscription.trial_will_end":
+        await handleTrialWillEnd(event.data.object as Stripe.Subscription);
+        break;
+
       default:
         await (prisma as any).webhookEvent.update({
           where: { id: webhookLog.id },
@@ -411,4 +415,35 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   }
 
   console.log(`[webhook] Payment failed: ${inv.id}`);
+}
+
+// ─── Trial expirando em breve (3 dias antes) ─────────────────────────────────
+
+async function handleTrialWillEnd(subscription: Stripe.Subscription) {
+  const sub = subscription as any;
+
+  const existing = await (prisma as any).subscription.findUnique({
+    where: { stripeSubscriptionId: subscription.id },
+  });
+
+  if (!existing) {
+    console.warn(`[webhook] trial_will_end: subscription not found for ${subscription.id}`);
+    return;
+  }
+
+  // Salvar a data de fim do trial no banco para exibir aviso na UI
+  const trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+
+  await (prisma as any).subscription.update({
+    where: { id: existing.id },
+    data: {
+      trialEndsAt,
+      // Flag para a UI saber que o aviso de trial expirando deve ser exibido
+      trialEndingNotified: true,
+    },
+  });
+
+  console.log(
+    `[webhook] trial_will_end: group ${existing.groupId} trial ends at ${trialEndsAt?.toISOString()}`
+  );
 }

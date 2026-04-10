@@ -41,6 +41,7 @@ interface SubscriptionData {
   trialEndsAt: string | null;
   cancelAtPeriodEnd: boolean;
   cancelAt: string | null;
+  trialEndingNotified: boolean;
   hasStripeCustomer: boolean;
   hasStripeSubscription: boolean;
   gateway: string;
@@ -252,6 +253,24 @@ export default function MeuPlanoPage() {
                         : " Após essa data você perderá acesso aos recursos do plano."}
                     </p>
                     <p className="mt-1 text-xs opacity-75">Você pode reativar a assinatura antes dessa data.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Trial expirando em breve */}
+              {sub.status === "TRIALING" && sub.trialEndingNotified && !sub.cancelAtPeriodEnd && sub.trialEndsAt && (
+                <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-700 dark:text-blue-400 flex items-start gap-2">
+                  <Clock className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold mb-0.5">Seu trial termina em breve</p>
+                    <p>
+                      Seu período de teste encerra em{" "}
+                      <strong>{formatDate(sub.trialEndsAt)}</strong>.
+                      Após essa data, sua assinatura será cobrada automaticamente.
+                    </p>
+                    <p className="mt-1 text-xs opacity-75">
+                      Nenhuma ação é necessária — a cobrança ocorre automaticamente se você não cancelar.
+                    </p>
                   </div>
                 </div>
               )}

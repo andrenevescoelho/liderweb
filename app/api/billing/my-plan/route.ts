@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
         trialEndsAt: subscription.trialEndsAt,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         cancelAt: (subscription as any).cancelAt ?? null,
+        trialEndingNotified: (subscription as any).trialEndingNotified ?? false,
         hasStripeCustomer: Boolean(subscription.stripeCustomerId),
         hasStripeSubscription: Boolean(subscription.stripeSubscriptionId),
         gateway: subscription.stripeSubscriptionId ? "STRIPE" : "MANUAL",
