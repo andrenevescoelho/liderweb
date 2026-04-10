@@ -255,6 +255,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
       currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
+      cancelAtPeriodEnd: false,
+      cancelAt: null,
     },
     update: {
       planId: legacyPlanId,
@@ -265,6 +267,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       currentPeriodStart: safeDate(stripeSub.current_period_start) ?? new Date(),
       currentPeriodEnd: safeDate(stripeSub.current_period_end) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEndsAt: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
+      cancelAtPeriodEnd: false,  // limpar cancelamento anterior ao trocar de plano
+      cancelAt: null,
     },
   });
 
