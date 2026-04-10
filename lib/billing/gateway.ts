@@ -197,12 +197,20 @@ export async function reactivateSubscription(
   externalSubscriptionId: string
 ): Promise<void> {
   if (gateway === "STRIPE") {
-    // cancel_at_period_end cobre cancelamentos normais
-    // cancel_at: "" remove cancelamentos agendados por data (ex: durante trial)
-    await stripe.subscriptions.update(externalSubscriptionId, {
-      cancel_at_period_end: false,
-      cancel_at: "" as any, // remove data absoluta de cancelamento
-    });
+    // Buscar subscription para saber qual tipo de cancelamento está ativo
+    const sub = await stripe.subscriptions.retrieve(externalSubscriptionId) as any;
+
+    if (sub.cancel_at) {
+      // Cancelamento por data absoluta (ex: durante trial) — remover cancel_at
+      await stripe.subscriptions.update(externalSubscriptionId, {
+        cancel_at: "" as any,
+      });
+    } else {
+      // Cancelamento normal ao fim do período
+      await stripe.subscriptions.update(externalSubscriptionId, {
+        cancel_at_period_end: false,
+      });
+    }
     return;
   }
   throw new Error(`Reativação via "${gateway}" não suportada ainda.`);
