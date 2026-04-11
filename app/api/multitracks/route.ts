@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const albums = await prisma.multitracksAlbum.findMany({
       where: {
         isActive: true,
-        status: "READY",
+        status: { in: ["READY", "CATALOGED", "DOWNLOADING"] as any[] },
         ...(search ? {
           OR: [
             { title: { contains: search, mode: "insensitive" } },
@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         coverUrl: true,
         description: true,
         stems: true,
+        status: true,
         createdAt: true,
       },
     });
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
         stems: undefined,
         rented: !!rental,
         expiresAt: rental?.expiresAt ?? null,
+        albumStatus: (album as any).status, // READY | CATALOGED | DOWNLOADING
       };
     });
 

@@ -6,223 +6,10 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { createS3Client, getBucketConfig } from "@/lib/aws-config";
-import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import AdmZip from "adm-zip";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { writeFile, readFile, unlink } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { downloadAndProcessZip } from "@/lib/multitracks-download";
 
-const execAsync = promisify(exec);
-
-// Converte buffer WAV/AIFF/FLAC para MP3 320kbps via ffmpeg
-async function convertToMp3(inputBuffer: Buffer, inputExt: string): Promise<Buffer | null> {
-  const id = `stem_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const inputPath = join(tmpdir(), `${id}${inputExt}`);
-  const outputPath = join(tmpdir(), `${id}.mp3`);
-  try {
-    await writeFile(inputPath, inputBuffer);
-    await execAsync(
-      `ffmpeg -i "${inputPath}" -codec:a libmp3lame -b:a 320k -y "${outputPath}"`,
-      { timeout: 120000 }
-    );
-    const mp3Buffer = await readFile(outputPath);
-    return mp3Buffer;
-  } catch (err) {
-    console.warn("[multitracks] ffmpeg conversão falhou:", err);
-    return null;
-  } finally {
-    await unlink(inputPath).catch(() => {});
-    await unlink(outputPath).catch(() => {});
-  }
-}
-
-// Mapa de prefixos para nomes legíveis
-const STEM_NAME_MAP: Record<string, string> = {
-  "AG": "Acoustic Guitar",
-  "BASS_SYNTH": "Bass Synth",
-  "BASS": "Bass",
-  "CLICK": "Click",
-  "DRUMS": "Drums",
-  "GUIA": "Guia",
-  "KEYBOARD": "Keyboard",
-  "KEYS_PAD": "Keys Pad",
-  "KEYS_SYNTH_1": "Keys Synth 1",
-  "KEYS_SYNTH": "Keys Synth",
-  "KEYS": "Keys",
-  "KEY_PIANO": "Key Piano",
-  "LOOP": "Loop",
-  "VOCALS": "Vocals",
-  "PAD": "Pad",
-  "STRINGS": "Strings",
-  "PIANO": "Piano",
-  "GUITAR": "Guitar",
-};
-
-function cleanStemName(filename: string): string {
-  // Remove extensão e sufixo padrão
-  const base = filename
-    .replace(/\.(wav|mp3|aiff|flac)$/i, "")
-    .replace(/_multitrackgospel\.com(_\d+)?$/i, "")
-    .replace(/multitrackgospel\.com/i, "")
-    .trim()
-    .replace(/_+$/, "");
-
-  // Tenta mapear pelo prefixo normalizado
-  const normalized = base.toUpperCase().replace(/[\s-]+/g, "_");
-  for (const [key, label] of Object.entries(STEM_NAME_MAP)) {
-    if (normalized === key || normalized.startsWith(key + "_")) {
-      return label;
-    }
-  }
-
-  // Fallback: capitaliza o nome limpo
-  return base.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function extractBpmFromFilename(filename: string): number | null {
-  const match = filename.match(/CLICK[_\s]+(\d+)/i);
-  return match ? parseInt(match[1]) : null;
-}
-
-function buildGoogleDriveDirectUrl(url: string): string {
-  // Converte link de compartilhamento para link de download direto
-  const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (fileIdMatch) {
-    return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
-  }
-  const idParamMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (idParamMatch) {
-    return `https://drive.google.com/uc?export=download&id=${idParamMatch[1]}`;
-  }
-  return url;
-}
-
-async function downloadAndProcessZip(
-  driveUrl: string,
-  albumId: string,
-  bucketName: string,
-  s3Client: ReturnType<typeof createS3Client>
-): Promise<{ stems: { name: string; r2Key: string }[]; detectedBpm: number | null }> {
-  const directUrl = buildGoogleDriveDirectUrl(driveUrl);
-
-  // Para arquivos grandes o Google Drive exige confirmação via cookie
-  // Fazemos a primeira request para pegar o cookie de confirmação
-  const firstResponse = await fetch(directUrl, {
-    redirect: "follow",
-    headers: { "User-Agent": "Mozilla/5.0" },
-  });
-
-  const contentType = firstResponse.headers.get("content-type") || "";
-  let finalBuffer: Buffer;
-
-  if (contentType.includes("text/html")) {
-    // Pegar cookies da resposta
-    const cookies = firstResponse.headers.get("set-cookie") || "";
-    const html = await firstResponse.text();
-
-    // Tentar extrair token de confirmação do HTML
-    const confirmMatch =
-      html.match(/confirm=([a-zA-Z0-9_-]+)/) ||
-      html.match(/&amp;confirm=([a-zA-Z0-9_-]+)/) ||
-      html.match(/"confirm","([a-zA-Z0-9_-]+)"/);
-
-    // Extrair uuid se houver
-    const uuidMatch = html.match(/uuid=([a-zA-Z0-9_-]+)/);
-
-    const fileId = directUrl.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
-    if (!fileId) throw new Error("Não foi possível extrair o ID do arquivo do Google Drive");
-
-    let downloadUrl: string;
-    if (confirmMatch) {
-      downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=${confirmMatch[1]}`;
-      if (uuidMatch) downloadUrl += `&uuid=${uuidMatch[1]}`;
-    } else {
-      // Fallback: usar endpoint alternativo do Drive
-      downloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0&confirm=t`;
-    }
-
-    const secondResponse = await fetch(downloadUrl, {
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Cookie": cookies,
-      },
-    });
-
-    if (!secondResponse.ok) {
-      throw new Error(`Falha ao baixar arquivo: ${secondResponse.status}`);
-    }
-
-    finalBuffer = Buffer.from(await secondResponse.arrayBuffer());
-  } else if (!firstResponse.ok) {
-    throw new Error(`Falha ao baixar do Google Drive: ${firstResponse.status}`);
-  } else {
-    finalBuffer = Buffer.from(await firstResponse.arrayBuffer());
-  }
-
-  const zip = new AdmZip(finalBuffer);
-  const entries = zip.getEntries();
-
-  const audioEntries = entries.filter((e) =>
-    !e.isDirectory && /\.(wav|mp3|aiff|flac)$/i.test(e.name) && !e.name.startsWith("__MACOSX")
-  );
-
-  if (audioEntries.length === 0) {
-    throw new Error("Nenhum arquivo de áudio encontrado no ZIP");
-  }
-
-  let detectedBpm: number | null = null;
-  const stems: { name: string; r2Key: string }[] = [];
-
-  for (const entry of audioEntries) {
-    const stemName = cleanStemName(entry.name);
-    const r2Key = `multitracks-catalog/${albumId}/${entry.name}`;
-
-    // Detectar BPM pelo CLICK
-    if (!detectedBpm) {
-      detectedBpm = extractBpmFromFilename(entry.name);
-    }
-
-    const rawData = entry.getData();
-    const ext = entry.name.match(/\.\w+$/)?.[0].toLowerCase() ?? ".wav";
-    const isAlreadyMp3 = ext === ".mp3";
-
-    let fileData: Buffer;
-    let finalKey: string;
-    let mimeType: string;
-
-    if (isAlreadyMp3) {
-      fileData = rawData;
-      finalKey = r2Key;
-      mimeType = "audio/mpeg";
-    } else {
-      const mp3Data = await convertToMp3(rawData, ext);
-      if (mp3Data) {
-        fileData = mp3Data;
-        finalKey = r2Key.replace(/\.(wav|aiff|flac)$/i, ".mp3");
-        mimeType = "audio/mpeg";
-        console.log(`[multitracks] ${entry.name} convertido para MP3 (${Math.round(rawData.length/1024)}KB -> ${Math.round(mp3Data.length/1024)}KB)`);
-      } else {
-        fileData = rawData;
-        finalKey = r2Key;
-        mimeType = "audio/wav";
-      }
-    }
-
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucketName,
-      Key: finalKey,
-      Body: fileData,
-      ContentType: mimeType,
-    }));
-
-    stems.push({ name: stemName, r2Key: finalKey });
-  }
-
-  return { stems, detectedBpm };
-}
+// REMOVIDO — logica de download extraida para lib/multitracks-download.ts
 
 // GET — listar acervo
 export async function GET(req: NextRequest) {
@@ -270,28 +57,28 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST — cadastrar nova multitrack (processa ZIP do Google Drive)
+// POST — cadastrar nova multitrack (salva metadados + driveZipUrl, SEM baixar agora)
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    if (!session?.user) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
     const user = session.user as SessionUser;
     if (!["SUPERADMIN"].includes(user.role)) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+      return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
     }
 
     const body = await req.json();
     const { title, artist, genre, bpm, musicalKey, coverUrl, description, driveZipUrl } = body;
 
     if (!title || !artist) {
-      return NextResponse.json({ error: "Título e artista são obrigatórios" }, { status: 400 });
+      return NextResponse.json({ error: "Titulo e artista sao obrigatorios" }, { status: 400 });
     }
     if (!driveZipUrl) {
-      return NextResponse.json({ error: "URL do ZIP no Google Drive é obrigatória" }, { status: 400 });
+      return NextResponse.json({ error: "URL do ZIP no Google Drive e obrigatoria" }, { status: 400 });
     }
 
-    // Criar album como PENDING primeiro
-    const album = await prisma.multitracksAlbum.create({
+    // Salvar apenas metadados + driveZipUrl — download acontece no primeiro aluguel
+    const album = await (prisma as any).multitracksAlbum.create({
       data: {
         title,
         artist,
@@ -300,47 +87,75 @@ export async function POST(req: NextRequest) {
         musicalKey: musicalKey || null,
         coverUrl: coverUrl || null,
         description: description || null,
+        driveZipUrl,
         stems: [],
-        status: "PENDING",
+        status: "CATALOGED",
       },
     });
 
-    try {
-      const s3Client = createS3Client();
-      const { bucketName } = getBucketConfig();
+    console.log(`[multitracks/admin] Album catalogado (lazy): ${title} — download ocorrera no primeiro aluguel`);
+    return NextResponse.json({ album, stemsCount: 0, lazy: true }, { status: 201 });
 
-      const { stems, detectedBpm } = await downloadAndProcessZip(
-        driveZipUrl,
-        album.id,
-        bucketName,
-        s3Client
-      );
-
-      // Atualizar album com stems e BPM detectado
-      const updatedAlbum = await prisma.multitracksAlbum.update({
-        where: { id: album.id },
-        data: {
-          stems,
-          status: "READY",
-          bpm: bpm ? Number(bpm) : (detectedBpm ?? null),
-        },
-      });
-
-      return NextResponse.json({ album: updatedAlbum, stemsCount: stems.length }, { status: 201 });
-    } catch (processErr) {
-      // Marcar como ERROR mas não deletar
-      await prisma.multitracksAlbum.update({
-        where: { id: album.id },
-        data: { status: "ERROR" },
-      });
-      console.error("[multitracks/admin] ZIP processing error:", processErr);
-      return NextResponse.json({
-        error: `Erro ao processar ZIP: ${processErr instanceof Error ? processErr.message : "erro desconhecido"}`,
-        albumId: album.id,
-      }, { status: 422 });
-    }
   } catch (err) {
     console.error("[multitracks/admin] POST error:", err);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  }
+}
+
+// POST /admin/download-now — forccar download imediato (opcional, para SUPERADMIN)
+// Util para pre-popular tracks populares sem esperar aluguel
+export async function PUT(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+    const user = session.user as SessionUser;
+    if (!["SUPERADMIN"].includes(user.role)) {
+      return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
+    }
+
+    const { albumId } = await req.json();
+    if (!albumId) return NextResponse.json({ error: "albumId obrigatorio" }, { status: 400 });
+
+    const album = await (prisma as any).multitracksAlbum.findUnique({
+      where: { id: albumId },
+      select: { driveZipUrl: true, status: true, title: true },
+    });
+
+    if (!album) return NextResponse.json({ error: "Album nao encontrado" }, { status: 404 });
+    if (album.status === "READY") return NextResponse.json({ message: "Album ja esta pronto" });
+    if (!album.driveZipUrl) return NextResponse.json({ error: "Album sem driveZipUrl" }, { status: 422 });
+
+    // Marcar como DOWNLOADING e processar
+    await (prisma as any).multitracksAlbum.update({
+      where: { id: albumId },
+      data: { status: "DOWNLOADING" },
+    });
+
+    // Processar em background
+    (async () => {
+      try {
+        const { createS3Client, getBucketConfig } = await import("@/lib/aws-config");
+        const { downloadAndProcessZip } = await import("@/lib/multitracks-download");
+        const s3Client = createS3Client();
+        const { bucketName } = getBucketConfig();
+        const { stems, detectedBpm } = await downloadAndProcessZip(album.driveZipUrl, albumId, bucketName, s3Client);
+        await (prisma as any).multitracksAlbum.update({
+          where: { id: albumId },
+          data: { stems, status: "READY", bpm: album.bpm ?? detectedBpm ?? null },
+        });
+        console.log(`[admin/download-now] Concluido: ${album.title}`);
+      } catch (err) {
+        console.error(`[admin/download-now] Falhou: ${album.title}`, err);
+        await (prisma as any).multitracksAlbum.update({
+          where: { id: albumId },
+          data: { status: "ERROR" },
+        });
+      }
+    })();
+
+    return NextResponse.json({ message: "Download iniciado em background", albumId }, { status: 202 });
+  } catch (err) {
+    console.error("[multitracks/admin] PUT error:", err);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }
@@ -372,14 +187,19 @@ export async function PATCH(req: NextRequest) {
       data.bpm = Number(data.bpm) || null;
     }
 
-    // Se enviou novo ZIP, reprocessar
+    // Se enviou novo ZIP, apenas salvar a URL — nao baixar agora
+    // Para forcar download imediato, usar PUT /api/multitracks/admin
     if (driveZipUrl) {
-      const s3Client = createS3Client();
-      const { bucketName } = getBucketConfig();
-      const { stems, detectedBpm } = await downloadAndProcessZip(driveZipUrl, id, bucketName, s3Client);
-      data.stems = stems;
-      data.status = "READY";
-      if (!data.bpm && detectedBpm) data.bpm = detectedBpm;
+      data.driveZipUrl = driveZipUrl;
+      // Resetar stems e status para CATALOGED se nao estiver READY
+      const current = await (prisma as any).multitracksAlbum.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+      if (current?.status !== "READY") {
+        data.stems = [];
+        data.status = "CATALOGED";
+      }
     }
 
     const album = await prisma.multitracksAlbum.update({

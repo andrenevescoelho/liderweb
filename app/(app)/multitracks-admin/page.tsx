@@ -25,7 +25,7 @@ interface Album {
   musicalKey: string | null;
   coverUrl: string | null;
   description: string | null;
-  status: "PENDING" | "READY" | "ERROR";
+  status: "PENDING" | "CATALOGED" | "DOWNLOADING" | "READY" | "ERROR";
   stems: Stem[];
   isActive: boolean;
   createdAt: string;
@@ -286,8 +286,10 @@ export default function MultitracksAdminPage() {
   };
 
   const statusBadge = (s: Album["status"]) => {
-    if (s === "READY") return <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400"><CheckCircle2 className="h-3 w-3" />Pronta</span>;
-    if (s === "PENDING") return <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400"><Clock className="h-3 w-3" />Processando</span>;
+    if (s === "READY")       return <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400"><CheckCircle2 className="h-3 w-3" />Pronta</span>;
+    if (s === "CATALOGED")   return <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-400"><Clock className="h-3 w-3" />Catalogada</span>;
+    if (s === "DOWNLOADING") return <span className="flex items-center gap-1 text-[10px] font-semibold text-violet-400"><Loader2 className="h-3 w-3 animate-spin" />Baixando...</span>;
+    if (s === "PENDING")     return <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400"><Clock className="h-3 w-3" />Processando</span>;
     return <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400"><AlertCircle className="h-3 w-3" />Erro</span>;
   };
 
