@@ -79,6 +79,8 @@ interface HistoryResponse {
 }
 
 /* ─── Constants ─── */
+const MAX_RECORDING_SECONDS = 180; // 3 minutos — limite para análise do Gemini
+
 const CONTENT_TABS: { key: ContentTab; label: string; icon: React.ReactNode }[] = [
   { key: "general", label: "Hoje", icon: <Lightbulb className="h-4 w-4" /> },
   { key: "exercises", label: "Exercícios", icon: <Dumbbell className="h-4 w-4" /> },
@@ -313,7 +315,16 @@ export default function ProfessorPage() {
       setAudioBlob(null);
       setAudioPreviewUrl(null);
       setUploadStatus("idle");
-      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+      timerRef.current = setInterval(() => setRecordingTime((t) => {
+        if (t + 1 >= MAX_RECORDING_SECONDS) {
+          // Parar automaticamente ao atingir o limite
+          recorder.stop();
+          setIsRecording(false);
+          if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+          return MAX_RECORDING_SECONDS;
+        }
+        return t + 1;
+      }), 1000);
     } catch (err) {
       console.error("Microphone error:", err);
       setUploadStatus("error");
@@ -654,6 +665,15 @@ export default function ProfessorPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+
+              {/* Aviso de limite */}
+              <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-700 dark:text-blue-400 flex items-start gap-2">
+                <Clock className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Limite de 3 minutos por prática.</span>{" "}
+                  A gravação para automaticamente ao atingir esse tempo. Para análises mais longas, divida em múltiplas práticas.
+                </div>
+              </div>
               {/* Practice type selection */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -695,10 +715,43 @@ export default function ProfessorPage() {
 
               {/* Recording controls */}
               <div className="flex flex-col items-center gap-4 py-4">
-                {/* Timer */}
-                <div className="text-3xl font-mono font-bold tabular-nums">
+                {/* Timer com cor progressiva */}
+                <div className={cn(
+                  "text-3xl font-mono font-bold tabular-nums transition-colors",
+                  recordingTime >= MAX_RECORDING_SECONDS ? "text-red-500" :
+                  recordingTime >= MAX_RECORDING_SECONDS * 0.8 ? "text-amber-500" :
+                  "text-foreground"
+                )}>
                   {formatDuration(recordingTime)}
+                  <span className="text-sm font-normal text-muted-foreground ml-2">/ {formatDuration(MAX_RECORDING_SECONDS)}</span>
                 </div>
+
+                {/* Barra de progresso do tempo */}
+                {(isRecording || recordingTime > 0) && (
+                  <div className="w-full max-w-xs">
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-1000",
+                          recordingTime >= MAX_RECORDING_SECONDS ? "bg-red-500" :
+                          recordingTime >= MAX_RECORDING_SECONDS * 0.8 ? "bg-amber-500" :
+                          "bg-primary"
+                        )}
+                        style={{ width: `${Math.min((recordingTime / MAX_RECORDING_SECONDS) * 100, 100)}%` }}
+                      />
+                    </div>
+                    {recordingTime >= MAX_RECORDING_SECONDS * 0.8 && recordingTime < MAX_RECORDING_SECONDS && (
+                      <p className="text-xs text-amber-500 text-center mt-1">
+                        Gravação encerra em {MAX_RECORDING_SECONDS - recordingTime}s
+                      </p>
+                    )}
+                    {recordingTime >= MAX_RECORDING_SECONDS && (
+                      <p className="text-xs text-red-500 text-center mt-1">
+                        Limite atingido — gravação encerrada automaticamente
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Waveform indicator */}
                 {isRecording && (

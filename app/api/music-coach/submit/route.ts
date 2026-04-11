@@ -103,6 +103,16 @@ Seja específico, prático e encorajador nas suas observações.`;
       const SUPPORTED_FORMATS = ["mp3", "mp4", "wav", "flac", "ogg", "webm", "mpeg"];
       const isAudioFormatSupported = SUPPORTED_FORMATS.includes(audioFormat);
 
+      // Validar tamanho — limite de 30MB (equivale a ~3 min de WAV 16kHz)
+      const MAX_AUDIO_BYTES = 30 * 1024 * 1024;
+      const contentLength = audioResponse.headers.get("content-length");
+      if (contentLength && parseInt(contentLength) > MAX_AUDIO_BYTES) {
+        return NextResponse.json(
+          { error: "Arquivo de áudio excede o limite de 3 minutos. Grave uma prática mais curta." },
+          { status: 400 }
+        );
+      }
+
       let s3AudioBase64: string | null = null;
       if (isAudioFormatSupported) {
         const audioBuffer = await audioResponse.arrayBuffer();
