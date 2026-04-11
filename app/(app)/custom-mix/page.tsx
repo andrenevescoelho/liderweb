@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-interface Album { id: string; title: string; artist: string; coverUrl: string | null; bpm: number | null; musicalKey: string | null; }
+interface Album { id: string; title: string; artist: string; coverUrl: string | null; bpm: number | null; musicalKey: string | null; rented?: boolean; }
 interface StemConfig { index: number; name: string; included: boolean; pan: number; volume: number; solo: boolean; }
 interface CustomMix { id: string; name: string; albumId: string; config: any; createdAt: string; durationSec: number | null; album: { title: string; artist: string; coverUrl: string | null }; }
 
@@ -200,9 +200,13 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Cache em memória — sempre funciona, dura a sessão
 const memoryAudioCache = new Map<string, ArrayBuffer>();
 
-async function fetchAudioCached(url: string): Promise<ArrayBuffer> {
+async function fetchAudioCached(
+  url: string,
+  onProgress?: (pct: number) => void
+): Promise<ArrayBuffer> {
   // 1. Cache em memória (sessão atual)
   if (memoryAudioCache.has(url)) {
+    onProgress?.(100);
     return memoryAudioCache.get(url)!.slice(0);
   }
 
@@ -217,6 +221,7 @@ async function fetchAudioCached(url: string): Promise<ArrayBuffer> {
         if (!expired) {
           const buf = await cached.arrayBuffer();
           memoryAudioCache.set(url, buf.slice(0));
+          onProgress?.(100);
           return buf;
         }
         await cache.delete(url);
@@ -224,10 +229,33 @@ async function fetchAudioCached(url: string): Promise<ArrayBuffer> {
     }
   } catch {}
 
-  // 3. Fetch da rede
+  // 3. Fetch da rede com progresso via ReadableStream
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Falha ao carregar áudio: ${res.status}`);
-  const buf = await res.arrayBuffer();
+
+  const contentLength = res.headers.get("content-length");
+  const total = contentLength ? parseInt(contentLength) : 0;
+
+  let buf: ArrayBuffer;
+  if (total > 0 && res.body && onProgress) {
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      onProgress(Math.round((received / total) * 100));
+    }
+    const combined = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
+    buf = combined.buffer;
+  } else {
+    buf = await res.arrayBuffer();
+    onProgress?.(100);
+  }
 
   // Salvar no cache em memória
   memoryAudioCache.set(url, buf.slice(0));
@@ -285,6 +313,7 @@ export default function CustomMixPage() {
   const [playAllProgress, setPlayAllProgress] = useState(0);
   const [playAllDuration, setPlayAllDuration] = useState(0);
   const [loadingAll, setLoadingAll] = useState(false);
+  const [stemProgress, setStemProgress] = useState<Record<number, number>>({});
   const playAllCtxRef = useRef<AudioContext | null>(null);
   const playAllSrcsRef = useRef<AudioBufferSourceNode[]>([]);
   const playAllGainsRef = useRef<GainNode[]>([]);
@@ -459,16 +488,23 @@ export default function CustomMixPage() {
     try {
       toast.loading("Carregando faixas...", { id: "playall" });
 
-      // Carregar todos os buffers (com cache)
+      // Carregar todos os buffers (com cache + progresso por stream)
+      setStemProgress({});
       const bufs = await Promise.all(stemConfigs.map(async sc => {
         let buf = previewBufsRef.current.get(sc.index);
         if (!buf) {
           const url = `/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`;
-          buf = await ctx.decodeAudioData(await fetchAudioCached(url));
+          const ab = await fetchAudioCached(url, (pct) => {
+            setStemProgress(prev => ({ ...prev, [sc.index]: pct }));
+          });
+          buf = await ctx.decodeAudioData(ab);
           previewBufsRef.current.set(sc.index, buf);
+        } else {
+          setStemProgress(prev => ({ ...prev, [sc.index]: 100 }));
         }
         return { sc, buffer: buf! };
       }));
+      setStemProgress({});
 
       const maxDur = Math.max(...bufs.map(b => b.buffer.duration));
       setPlayAllDuration(maxDur);
@@ -584,11 +620,21 @@ export default function CustomMixPage() {
     try {
       toast.loading("Carregando faixas...", { id: "bounce" });
       const tmpCtx = new AudioContext();
+      setStemProgress({});
       const bufs = await Promise.all(included.map(async sc => {
         let buf = previewBufsRef.current.get(sc.index);
-        if (!buf) { const res = await fetch(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`); buf = await tmpCtx.decodeAudioData(await res.arrayBuffer()); previewBufsRef.current.set(sc.index, buf); }
+        if (!buf) {
+          const ab = await fetchAudioCached(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`, (pct) => {
+            setStemProgress(prev => ({ ...prev, [sc.index]: pct }));
+          });
+          buf = await tmpCtx.decodeAudioData(ab);
+          previewBufsRef.current.set(sc.index, buf);
+        } else {
+          setStemProgress(prev => ({ ...prev, [sc.index]: 100 }));
+        }
         return { sc, buffer: buf! };
       }));
+      setStemProgress({});
       toast.loading("Processando mix...", { id: "bounce" });
       const maxDur = Math.max(...bufs.map(b => b.buffer.duration));
       const sr = bufs[0].buffer.sampleRate;
@@ -795,9 +841,12 @@ export default function CustomMixPage() {
             {albums.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Nenhuma multitrack disponível.</p>
               : <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {albums.map(album => (
-                    <button key={album.id} onClick={() => selectAlbum(album)} className="flex flex-col rounded-xl border border-border hover:border-primary/40 overflow-hidden transition-all text-left">
+                    <button key={album.id} onClick={() => selectAlbum(album)} className={cn("flex flex-col rounded-xl border overflow-hidden transition-all text-left relative", album.rented ? "border-primary/40 hover:border-primary/70 ring-1 ring-primary/20" : "border-border hover:border-border/80 opacity-60")}>
+                      {album.rented && (
+                        <div className="absolute top-1.5 right-1.5 z-10 rounded-full bg-primary/90 px-1.5 py-0.5 text-[8px] font-bold text-primary-foreground">✓ Alugada</div>
+                      )}
                       <div className="aspect-square bg-muted">{album.coverUrl ? <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center"><Music2 className="h-8 w-8 text-muted-foreground/20"/></div>}</div>
-                      <div className="p-2"><p className="text-xs font-semibold truncate">{album.title}</p><p className="text-[10px] text-muted-foreground truncate">{album.artist}</p></div>
+                      <div className="p-2"><p className="text-xs font-semibold truncate">{album.title}</p><p className="text-[10px] text-muted-foreground truncate">{album.artist}</p>{!album.rented && <p className="text-[9px] text-amber-500/80 mt-0.5">Não alugada</p>}</div>
                     </button>
                   ))}
                 </div>}
@@ -870,6 +919,31 @@ export default function CustomMixPage() {
                   <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
                     {Math.floor(playAllProgress * playAllDuration / 60)}:{String(Math.floor((playAllProgress * playAllDuration) % 60)).padStart(2, "0")} / {Math.floor(playAllDuration / 60)}:{String(Math.floor(playAllDuration % 60)).padStart(2, "0")}
                   </span>
+                </div>
+              )}
+
+              {/* Barras de progresso de download por stream */}
+              {Object.keys(stemProgress).length > 0 && (
+                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2 mb-3">
+                  <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Baixando faixas...
+                  </p>
+                  {stemConfigs.map((sc, i) => {
+                    const pct = stemProgress[sc.index] ?? 0;
+                    const done = pct >= 100;
+                    return (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-24 truncate flex-shrink-0" style={{ color: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }}>{sc.name}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-200"
+                            style={{ width: `${pct}%`, backgroundColor: done ? "#4ade80" : CHANNEL_COLORS[i % CHANNEL_COLORS.length] }}
+                          />
+                        </div>
+                        <span className="text-[10px] tabular-nums text-muted-foreground w-8 text-right flex-shrink-0">{done ? "✓" : `${pct}%`}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
