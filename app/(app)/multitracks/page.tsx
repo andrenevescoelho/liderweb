@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Music2, Search, Play, Lock, Loader2, CheckCircle2, Clock, Layers,
-  LayoutGrid, Grid2x2, List,
+  LayoutGrid, Grid2x2, List, Download, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -29,11 +29,26 @@ interface Album {
   stemCount: number;
   rented: boolean;
   expiresAt: string | null;
+  albumStatus: "READY" | "CATALOGED" | "DOWNLOADING";
 }
 
 interface Usage {
   count: number;
   limit: number;
+}
+
+function AlbumStatusBadge({ albumStatus }: { albumStatus: string }) {
+  if (albumStatus === "CATALOGED") return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[9px] font-semibold text-blue-400">
+      <Download className="h-2.5 w-2.5" /> Disponível
+    </span>
+  );
+  if (albumStatus === "DOWNLOADING") return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 text-[9px] font-semibold text-violet-400">
+      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Preparando...
+    </span>
+  );
+  return null;
 }
 
 export default function MultitracksPage() {
@@ -52,6 +67,7 @@ export default function MultitracksPage() {
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [canRent, setCanRent] = useState(false);
   const [viewMode, setViewMode] = useState<"large" | "small" | "list">("large");
+  const [downloadingAlbums, setDownloadingAlbums] = useState<Record<string, "polling" | "ready" | "error">>({});
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -77,11 +93,22 @@ export default function MultitracksPage() {
         setAlbums(data.albums || []);
         setUsage(data.usage || { count: 0, limit: 0 });
         const rentAllowed = data.canRent ?? false;
-        setCanRent(rentAllowed);
-        setBlockedByPlan(!rentAllowed);
+        const isAdmin = ["ADMIN", "SUPERADMIN"].includes((session?.user as any)?.role ?? "");
+        setCanRent(rentAllowed || isAdmin);
+        setBlockedByPlan(!rentAllowed && !isAdmin);
         // Cota esgotada: tem acesso ao plano mas usou tudo
         const u = data.usage || { count: 0, limit: 0 };
         setQuotaExceeded(rentAllowed && u.limit > 0 && u.count >= u.limit);
+        // Auto-iniciar polling para tracks alugadas ainda em download
+        (data.albums || []).forEach((album: any) => {
+          if (album.rented && (album.albumStatus === "DOWNLOADING" || album.albumStatus === "CATALOGED")) {
+            setDownloadingAlbums(prev => {
+              if (prev[album.id]) return prev;
+              return { ...prev, [album.id]: "polling" };
+            });
+            pollDownloadStatus(album.id);
+          }
+        });
       }
     } catch {
       toast.error("Erro ao carregar multitracks");
@@ -112,7 +139,9 @@ export default function MultitracksPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ albumId }),
       });
+      const status202 = res.status === 202;
       const data = await res.json();
+      console.log('[rent debug] status:', res.status, 'status202:', status202, 'data:', JSON.stringify(data));
       if (!res.ok) {
         if (data.code === "QUOTA_EXCEEDED") {
           setQuotaExceeded(true);
@@ -120,6 +149,13 @@ export default function MultitracksPage() {
         } else {
           toast.error(data.error || "Erro ao alugar");
         }
+        return;
+      }
+      if (status202 && data.downloading) {
+        // Track ainda nao esta no bucket — iniciar polling
+        toast.success("Preparando sua multitrack... Aguarde alguns minutos.");
+        pollDownloadStatus(albumId);
+        fetchAlbums(search);
         return;
       }
       toast.success("Multitrack alugada! Abrindo player...");
@@ -130,6 +166,29 @@ export default function MultitracksPage() {
     } finally {
       setRenting(null);
     }
+  };
+
+  const pollDownloadStatus = (albumId: string) => {
+    setDownloadingAlbums(prev => ({ ...prev, [albumId]: "polling" }));
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/multitracks/rent/status?albumId=${albumId}`);
+        const data = await res.json();
+        if (data.status === "READY") {
+          clearInterval(interval);
+          setDownloadingAlbums(prev => ({ ...prev, [albumId]: "ready" }));
+          toast.success("Multitrack pronta! Abrindo player...");
+          fetchAlbums(search);
+          setTimeout(() => router.push(`/multitracks/${albumId}`), 1000);
+        } else if (data.status === "ERROR") {
+          clearInterval(interval);
+          setDownloadingAlbums(prev => ({ ...prev, [albumId]: "error" }));
+          toast.error("Erro ao preparar multitrack. Tente novamente.");
+        }
+      } catch {
+        // ignorar erros de rede no polling
+      }
+    }, 3000);
   };
 
   const addToCartAndRedirect = async (albumId?: string) => {
@@ -303,10 +362,15 @@ export default function MultitracksPage() {
                 {album.genre && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{album.genre}</span>}
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{album.stemCount} stems</span>
                 {album.rented && album.expiresAt && <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="h-3 w-3" />{daysLeft(album.expiresAt)}d</span>}
+                {album.albumStatus !== "READY" && <AlbumStatusBadge albumStatus={album.albumStatus} />}
               </div>
               {/* Botão */}
               <div className="flex-shrink-0">
-                {album.rented ? (
+                {album.rented && downloadingAlbums[album.id] === "polling" ? (
+                  <Button size="sm" variant="outline" disabled>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
+                  </Button>
+                ) : album.rented ? (
                   <Button size="sm" onClick={() => handlePlay(album.id)}>
                     <Play className="mr-1.5 h-3.5 w-3.5" />Abrir
                   </Button>
@@ -315,9 +379,21 @@ export default function MultitracksPage() {
                     <Lock className="mr-1.5 h-3.5 w-3.5" />R$ 9,90
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
-                    {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
-                  </Button>
+                  <>
+                  {downloadingAlbums[album.id] === "polling" ? (
+                    <Button size="sm" variant="outline" disabled>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
+                    </Button>
+                  ) : downloadingAlbums[album.id] === "error" ? (
+                    <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} className="text-red-400 border-red-400/30">
+                      <AlertCircle className="h-3.5 w-3.5 mr-1.5" />Tentar novamente
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
+                      {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
+                    </Button>
+                  )}
+                  </>
                 )}
               </div>
             </div>
@@ -365,13 +441,25 @@ export default function MultitracksPage() {
                   </div>
                 )}
 
-                {album.rented ? (
+                {album.rented && downloadingAlbums[album.id] === "polling" ? (
+                  <Button size="sm" variant="outline" className="w-full" disabled>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
+                  </Button>
+                ) : album.rented ? (
                   <Button size="sm" className="w-full" onClick={() => handlePlay(album.id)}>
                     <Play className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Abrir Player" : "Abrir"}
                   </Button>
                 ) : quotaExceeded ? (
                   <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleRent(album.id)}>
                     <Lock className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Alugar — R$ 9,90" : "R$ 9,90"}
+                  </Button>
+                ) : downloadingAlbums[album.id] === "polling" ? (
+                  <Button size="sm" variant="outline" className="w-full" disabled>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
+                  </Button>
+                ) : downloadingAlbums[album.id] === "error" ? (
+                  <Button size="sm" variant="outline" className="w-full text-red-400 border-red-400/30" onClick={() => handleRent(album.id)}>
+                    <AlertCircle className="h-3.5 w-3.5 mr-1.5" />Tentar novamente
                   </Button>
                 ) : (
                   <Button size="sm" variant="outline" className="w-full" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>

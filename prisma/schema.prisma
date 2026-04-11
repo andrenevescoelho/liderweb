@@ -154,9 +154,18 @@ enum AuditEntityType {
 }
 
 enum MultitracksAlbumStatus {
-  PENDING
-  READY
-  ERROR
+  PENDING      // cadastro em andamento pelo admin
+  CATALOGED    // metadados salvos, aguardando primeiro aluguel para baixar
+  DOWNLOADING  // download do Drive em andamento
+  READY        // stems no bucket, disponivel para uso
+  ERROR        // falha no processamento
+}
+
+enum MultitracksDownloadJobStatus {
+  PENDING      // aguardando worker processar
+  DOWNLOADING  // worker em execucao
+  DONE         // concluido com sucesso
+  ERROR        // falhou
 }
 
 enum MultitracksRentalStatus {
@@ -947,19 +956,37 @@ model MultitracksAlbum {
   musicalKey  String?
   coverUrl    String?
   description String?                @db.Text
-  status      MultitracksAlbumStatus @default(PENDING)
+  status      MultitracksAlbumStatus @default(CATALOGED)
+  driveZipUrl String?                // link do Google Drive — preenchido no cadastro
   markers     Json                   @default("[]")
-  stems       Json // Array de { name: string, driveUrl: string, r2Key: string | null }
+  stems       Json                   @default("[]") // Array de { name: string, r2Key: string }
   isActive    Boolean                @default(true)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   songId      String?
   song        Song?                  @relation(fields: [songId], references: [id], onDelete: SetNull)
-  rentals     MultitracksRental[]
-  customMixes CustomMix[]
+  rentals      MultitracksRental[]
+  customMixes  CustomMix[]
+  downloadJob  MultitracksDownloadJob?
 
   @@index([status, isActive])
   @@index([title, artist])
+}
+
+model MultitracksDownloadJob {
+  id          String                        @id @default(cuid())
+  albumId     String
+  album       MultitracksAlbum              @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  status      MultitracksDownloadJobStatus  @default(PENDING)
+  requestedBy String[]                      // groupIds que estao aguardando
+  errorMsg    String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+
+  @@unique([albumId])
+  @@index([status])
 }
 
 model MultitracksRental {
