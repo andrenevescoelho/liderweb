@@ -81,30 +81,28 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = prompts[contentType] || prompts.general;
 
-    const apiKey = process.env.ABACUSAI_API_KEY;
+
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "API key não configurada" }, { status: 500 });
+      return NextResponse.json({ error: "API key nao configurada" }, { status: 500 });
     }
 
-    const llmResponse = await fetch("https://apps.abacus.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Gere o conteúdo de ${contentType === "general" ? "hoje" : contentType} para mim.` },
-        ],
-        stream: true,
-      }),
-    });
+    // Gemini — streaming via SSE nativo
+    const llmResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }],
+        }),
+      }
+    );
 
     if (!llmResponse.ok || !llmResponse.body) {
-      console.error("[music-coach/content] LLM error:", llmResponse.status);
-      return NextResponse.json({ error: "Erro ao gerar conteúdo" }, { status: 500 });
+      const errBody = await llmResponse.text().catch(() => "");
+      console.error("[music-coach/content] LLM error:", llmResponse.status, errBody);
+      return NextResponse.json({ error: "Erro ao gerar conteudo" }, { status: 500 });
     }
 
     // Stream the response and accumulate for cache
@@ -120,40 +118,41 @@ export async function POST(req: NextRequest) {
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              // Salvar cache ao terminar o stream
+              try {
+                await prisma.coachContentCache.upsert({
+                  where: { userId_groupId_contentType: { userId, groupId, contentType } },
+                  create: { userId, groupId, contentType, content: fullContent },
+                  update: { content: fullContent, generatedAt: new Date() },
+                });
+                await logUserAction({
+                  userId,
+                  groupId,
+                  action: AUDIT_ACTIONS.COACH_CONTENT_GENERATED,
+                  entityType: "COACH",
+                  description: `Conteudo de ${contentType} gerado pelo Professor IA`,
+                  metadata: { contentType, contentLength: fullContent.length },
+                });
+              } catch (cacheErr) {
+                console.error("[music-coach/content] cache save error:", cacheErr);
+              }
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              break;
+            }
+
+            // Gemini SSE — cada chunk e "data: {...}"
             const text = decoder.decode(value, { stream: true });
             const lines = text.split("\n").filter((l) => l.startsWith("data: "));
             for (const line of lines) {
-              const data = line.slice(6);
-              if (data === "[DONE]") {
-                // Save to cache before closing
-                try {
-                  await prisma.coachContentCache.upsert({
-                    where: { userId_groupId_contentType: { userId, groupId, contentType } },
-                    create: { userId, groupId, contentType, content: fullContent },
-                    update: { content: fullContent, generatedAt: new Date() },
-                  });
-                  // Audit log for content generation
-                  await logUserAction({
-                    userId,
-                    groupId,
-                    action: AUDIT_ACTIONS.COACH_CONTENT_GENERATED,
-                    entityType: "COACH",
-                    description: `Conteúdo de ${contentType} gerado pelo Professor IA`,
-                    metadata: { contentType, contentLength: fullContent.length },
-                  });
-                } catch (cacheErr) {
-                  console.error("[music-coach/content] cache save error:", cacheErr);
-                }
-                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                break;
-              }
+              const data = line.slice(6).trim();
+              if (!data || data === "[DONE]") continue;
               try {
                 const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content;
-                if (content) {
-                  fullContent += content;
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+                const chunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+                if (chunk) {
+                  fullContent += chunk;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
                 }
               } catch { /* skip malformed */ }
             }
