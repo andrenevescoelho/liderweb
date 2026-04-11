@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, addDays, nextSunday, startOfMonth, endOfMonth, eachWeekOfInterval, nextDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Loader2, Sparkles, ChevronRight, ChevronLeft, Check, Calendar, Clock, Music, Users, AlertCircle } from "lucide-react";
@@ -36,6 +36,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onAccept: (schedules: AiSchedule[]) => void;
+}
+
+interface Member {
+  id: string;
+  name: string;
 }
 
 // ── Helpers de data ──────────────────────────────────────────────────────────
@@ -81,6 +86,19 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
   // Draft
   const [draft, setDraft] = useState<AiSchedule[]>([]);
   const [error, setError] = useState("");
+  const [members, setMembers] = useState<Member[]>([]);
+
+  // Buscar membros ao abrir o wizard
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch("/api/members?limit=100")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data.members ?? data.users ?? []);
+        setMembers(list.map((m: any) => ({ id: m.id, name: m.name })));
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   function getDates(): string[] {
     switch (period) {
@@ -394,13 +412,23 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
                     <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" /> Equipe sugerida
                     </p>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {sched.roles.map((r, ri) => (
                         <div key={ri} className="flex items-center gap-2 text-sm">
-                          <span className="w-28 flex-shrink-0 text-muted-foreground truncate">{r.role}</span>
-                          <span className={`flex-1 font-medium ${r.memberId ? "text-foreground" : "text-muted-foreground italic"}`}>
-                            {r.memberName ?? "Não atribuído"}
-                          </span>
+                          <span className="w-28 flex-shrink-0 text-muted-foreground truncate text-xs">{r.role}</span>
+                          <select
+                            value={r.memberId ?? ""}
+                            onChange={(e) => {
+                              const selected = members.find((m) => m.id === e.target.value);
+                              updateDraftRole(si, ri, e.target.value, selected?.name ?? "");
+                            }}
+                            className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <option value="">— Não atribuído —</option>
+                            {members.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
                         </div>
                       ))}
                     </div>
