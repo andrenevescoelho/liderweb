@@ -134,7 +134,7 @@ ${songs.map((s) => `${s.title}: "${s.id}"`).join(", ")}`;
 
     // ── Chamar Gemini ──────────────────────────────────────────────────
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,6 +143,7 @@ ${songs.map((s) => `${s.title}: "${s.id}"`).join(", ")}`;
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 4096,
+            responseMimeType: "application/json",
           },
         }),
       }
@@ -150,12 +151,17 @@ ${songs.map((s) => `${s.title}: "${s.id}"`).join(", ")}`;
 
     if (!geminiRes.ok) {
       const err = await geminiRes.text();
-      console.error("[suggest-schedule] Gemini error:", err);
+      console.error("[suggest-schedule] Gemini error:", geminiRes.status, err);
       return NextResponse.json({ error: "Erro ao consultar IA" }, { status: 500 });
     }
 
     const geminiData = await geminiRes.json();
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+    if (!rawText) {
+      console.error("[suggest-schedule] Gemini resposta vazia:", JSON.stringify(geminiData).slice(0, 300));
+      return NextResponse.json({ error: "IA retornou resposta vazia" }, { status: 500 });
+    }
 
     // Parse defensivo do JSON
     let parsed: any;
@@ -170,8 +176,12 @@ ${songs.map((s) => `${s.title}: "${s.id}"`).join(", ")}`;
       const match = rawText.match(/\{[\s\S]*\}/);
       if (match) {
         try { parsed = JSON.parse(match[0]); }
-        catch { return NextResponse.json({ error: "IA retornou formato inválido" }, { status: 500 }); }
+        catch {
+          console.error("[suggest-schedule] Parse falhou. rawText:", rawText.slice(0, 500));
+          return NextResponse.json({ error: "IA retornou formato inválido" }, { status: 500 });
+        }
       } else {
+        console.error("[suggest-schedule] Sem JSON no rawText:", rawText.slice(0, 500));
         return NextResponse.json({ error: "IA retornou formato inválido" }, { status: 500 });
       }
     }
