@@ -34,6 +34,8 @@ import {
   Trophy,
   Target,
   TrendingUp,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
@@ -149,6 +151,9 @@ export default function ProfessorPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "success" | "error">("idle");
   const [uploadMessage, setUploadMessage] = useState("");
+  const [inlineFeedback, setInlineFeedback] = useState<any | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingTarget, setSpeakingTarget] = useState<"content" | "feedback" | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -344,6 +349,9 @@ export default function ProfessorPage() {
     setAudioPreviewUrl(null);
     setRecordingTime(0);
     setUploadStatus("idle");
+    setInlineFeedback(null);
+    setIsSpeaking(false);
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
   };
 
   const submitRecording = async () => {
@@ -405,9 +413,10 @@ export default function ProfessorPage() {
       setUploadStatus("success");
       setUploadMessage(
         result.feedback?.score
-          ? `Prática enviada! Nota: ${result.feedback.score}/100`
-          : "Prática enviada com sucesso! Feedback será processado."
+          ? `Análise concluída! Nota: ${result.feedback.score}/100`
+          : "Prática enviada! Feedback sendo processado."
       );
+      if (result.feedback) setInlineFeedback(result.feedback);
       // Refresh dashboard count
       setDashData((prev) => prev ? { ...prev, submissionCount: prev.submissionCount + 1 } : prev);
       // Clear form after short delay
@@ -640,9 +649,45 @@ export default function ProfessorPage() {
                   <span>Gerando conteúdo personalizado...</span>
                 </div>
               ) : content[activeTab] ? (
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {content[activeTab]}
-                  {streaming && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />}
+                <div className="space-y-3">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {content[activeTab]}
+                    {streaming && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />}
+                  </div>
+                  {!streaming && (
+                    <div className="pt-2 border-t border-border/50">
+                      <button
+                        onClick={() => {
+                          if (speakingTarget === "content") {
+                            window.speechSynthesis.cancel();
+                            setSpeakingTarget(null);
+                            setIsSpeaking(false);
+                            return;
+                          }
+                          window.speechSynthesis.cancel();
+                          const utt = new SpeechSynthesisUtterance(content[activeTab]);
+                          utt.lang = "pt-BR";
+                          utt.rate = 0.95;
+                          utt.onend = () => { setSpeakingTarget(null); setIsSpeaking(false); };
+                          utt.onerror = () => { setSpeakingTarget(null); setIsSpeaking(false); };
+                          window.speechSynthesis.speak(utt);
+                          setSpeakingTarget("content");
+                          setIsSpeaking(true);
+                        }}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+                          speakingTarget === "content"
+                            ? "border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                            : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                        )}
+                      >
+                        {speakingTarget === "content"
+                          ? <><VolumeX className="h-3 w-3" /> Parar</>
+                          : <><Volume2 className="h-3 w-3" /> Ouvir conteúdo</>
+                        }
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-center py-8">
@@ -806,12 +851,6 @@ export default function ProfessorPage() {
                 )}
 
                 {/* Status messages */}
-                {uploadStatus === "success" && (
-                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                    <CheckCircle2 className="h-4 w-4" />
-                    {uploadMessage}
-                  </div>
-                )}
                 {uploadStatus === "error" && (
                   <div className="flex items-center gap-2 text-red-400 text-sm">
                     <AlertCircle className="h-4 w-4" />
@@ -819,8 +858,113 @@ export default function ProfessorPage() {
                   </div>
                 )}
                 {uploading && uploadMessage && uploadStatus === "idle" && (
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground text-sm py-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <span>{uploadMessage}</span>
+                  </div>
+                )}
+
+                {/* Feedback inline após análise */}
+                {uploadStatus === "success" && inlineFeedback && (
+                  <div className="w-full space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
+                    {/* Header com nota e TTS */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        <span className="font-semibold">{uploadMessage}</span>
+                      </div>
+                      {inlineFeedback.feedback && (
+                        <button
+                          onClick={() => {
+                            if (speakingTarget === "feedback") {
+                              window.speechSynthesis.cancel();
+                              setSpeakingTarget(null);
+                              setIsSpeaking(false);
+                              return;
+                            }
+                            window.speechSynthesis.cancel();
+                            const text = [
+                              inlineFeedback.feedback,
+                              ...(inlineFeedback.metricsJson?.pontos_fortes ?? []).map((p: string) => `Ponto forte: ${p}`),
+                              ...(inlineFeedback.metricsJson?.areas_melhoria ?? []).map((a: string) => `Área para melhorar: ${a}`),
+                              inlineFeedback.metricsJson?.exercicio_recomendado
+                                ? `Exercício recomendado: ${inlineFeedback.metricsJson.exercicio_recomendado}`
+                                : null,
+                            ].filter(Boolean).join(". ");
+                            const utt = new SpeechSynthesisUtterance(text);
+                            utt.lang = "pt-BR";
+                            utt.rate = 0.95;
+                            utt.onend = () => { setSpeakingTarget(null); setIsSpeaking(false); };
+                            utt.onerror = () => { setSpeakingTarget(null); setIsSpeaking(false); };
+                            window.speechSynthesis.speak(utt);
+                            setSpeakingTarget("feedback");
+                            setIsSpeaking(true);
+                          }}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+                            speakingTarget === "feedback"
+                              ? "border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                              : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                          )}
+                        >
+                          {speakingTarget === "feedback" ? <><VolumeX className="h-3 w-3" /> Parar</> : <><Volume2 className="h-3 w-3" /> Ouvir feedback</>}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Feedback geral */}
+                    {inlineFeedback.feedback && (
+                      <p className="text-sm leading-relaxed text-foreground/90">{inlineFeedback.feedback}</p>
+                    )}
+
+                    {/* Pontos fortes */}
+                    {(inlineFeedback.metricsJson?.pontos_fortes ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-400 mb-1">Pontos Fortes</p>
+                        <ul className="space-y-1">
+                          {(inlineFeedback.metricsJson.pontos_fortes as string[]).map((p, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />{p}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Áreas para melhorar */}
+                    {(inlineFeedback.metricsJson?.areas_melhoria ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-amber-400 mb-1">Áreas para Melhorar</p>
+                        <ul className="space-y-1">
+                          {(inlineFeedback.metricsJson.areas_melhoria as string[]).map((a, i) => (
+                            <li key={i} className="flex items-start gap-1.5 text-xs">
+                              <AlertCircle className="h-3.5 w-3.5 text-amber-400 mt-0.5 flex-shrink-0" />{a}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Exercício recomendado */}
+                    {inlineFeedback.metricsJson?.exercicio_recomendado && (
+                      <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+                        <p className="text-xs font-semibold text-blue-400 mb-0.5">Exercício Recomendado</p>
+                        <p className="text-xs">{inlineFeedback.metricsJson.exercicio_recomendado}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => { discardRecording(); setPracticeNotes(""); setPracticeInstrument(""); }}
+                      className="text-xs text-muted-foreground hover:text-foreground underline mt-1"
+                    >
+                      Gravar nova prática
+                    </button>
+                  </div>
+                )}
+
+                {uploadStatus === "success" && !inlineFeedback && (
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                    <CheckCircle2 className="h-4 w-4" />
                     {uploadMessage}
                   </div>
                 )}
@@ -894,7 +1038,31 @@ export default function ProfessorPage() {
                       <div className="mt-4 pt-4 border-t border-border space-y-3">
                         {sub.feedback.feedback && (
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-1">Feedback</p>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs font-medium text-muted-foreground">Feedback</p>
+                              <button
+                                onClick={() => {
+                                  if (window.speechSynthesis.speaking) {
+                                    window.speechSynthesis.cancel();
+                                    return;
+                                  }
+                                  const m = sub.feedback!.metricsJson as Record<string, any> ?? {};
+                                  const text = [
+                                    sub.feedback!.feedback,
+                                    ...(m.pontos_fortes ?? []).map((p: string) => `Ponto forte: ${p}`),
+                                    ...(m.areas_melhoria ?? []).map((a: string) => `Área para melhorar: ${a}`),
+                                    m.exercicio_recomendado ? `Exercício: ${m.exercicio_recomendado}` : null,
+                                  ].filter(Boolean).join(". ");
+                                  const utt = new SpeechSynthesisUtterance(text);
+                                  utt.lang = "pt-BR";
+                                  utt.rate = 0.95;
+                                  window.speechSynthesis.speak(utt);
+                                }}
+                                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                              >
+                                <Volume2 className="h-3 w-3" /> Ouvir
+                              </button>
+                            </div>
                             <p className="text-sm whitespace-pre-wrap">{sub.feedback.feedback}</p>
                           </div>
                         )}
