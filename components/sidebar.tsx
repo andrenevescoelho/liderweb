@@ -126,6 +126,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["member.manage"] },
         { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"] },
         { label: "Grupos", href: "/admin?tab=groups", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Músicas", href: "/admin?tab=songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Membros", href: "/admin?tab=users", icon: <Users className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Assinaturas", href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Cupons", href: "/cupons", icon: <TicketPercent className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
