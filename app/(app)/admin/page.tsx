@@ -29,6 +29,8 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -93,7 +95,19 @@ function formatLastLogin(date: string | null): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-type TabType = "groups" | "users" | "subscriptions";
+type TabType = "groups" | "users" | "subscriptions" | "songs";
+
+interface SongAdmin {
+  id: string;
+  title: string;
+  artist: string | null;
+  bpm: number | null;
+  originalKey: string;
+  youtubeUrl: string | null;
+  groupId: string | null;
+  createdAt: string;
+  _group?: { name: string } | null;
+}
 
 interface SubscriptionData {
   id: string;
@@ -162,19 +176,26 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const tab = searchParams?.get("tab");
-    if (tab === "users" || tab === "subscriptions" || tab === "groups") return tab;
+    if (tab === "users" || tab === "subscriptions" || tab === "groups" || tab === "songs") return tab;
     return "groups";
   });
 
   // Sincronizar com mudanças na URL
   useEffect(() => {
     const tab = searchParams?.get("tab");
-    if (tab === "users" || tab === "subscriptions" || tab === "groups") setActiveTab(tab);
+    if (tab === "users" || tab === "subscriptions" || tab === "groups" || tab === "songs") setActiveTab(tab);
   }, [searchParams]);
 
   // Groups state
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
+  const [songs, setSongs] = useState<SongAdmin[]>([]);
+  const [loadingSongs, setLoadingSongs] = useState(false);
+  const [songSearch, setSongSearch] = useState("");
+  const [songForm, setSongForm] = useState({ title: "", artist: "", bpm: "", originalKey: "C", youtubeUrl: "" });
+  const [editingSongId, setEditingSongId] = useState<string | null>(null);
+  const [savingSong, setSavingSong] = useState(false);
+  const [showSongForm, setShowSongForm] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [groupForm, setGroupForm] = useState({
@@ -558,6 +579,79 @@ export default function AdminPage() {
     }
   };
 
+  const fetchSongs = async (q = "") => {
+    setLoadingSongs(true);
+    try {
+      const res = await fetch(`/api/songs/admin-list?search=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSongs(data.songs ?? []);
+      }
+    } catch {}
+    finally { setLoadingSongs(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === "songs") fetchSongs(songSearch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const handleSaveSong = async () => {
+    if (!songForm.title.trim()) { alert("Título obrigatório"); return; }
+    setSavingSong(true);
+    try {
+      const payload = {
+        title: songForm.title.trim(),
+        artist: songForm.artist.trim() || null,
+        bpm: songForm.bpm ? Number(songForm.bpm) : null,
+        originalKey: songForm.originalKey || "C",
+        youtubeUrl: songForm.youtubeUrl.trim() || null,
+      };
+      let res;
+      if (editingSongId) {
+        res = await fetch(`/api/songs/${editingSongId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch("/api/songs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      if (res.ok) {
+        setShowSongForm(false);
+        setEditingSongId(null);
+        setSongForm({ title: "", artist: "", bpm: "", originalKey: "C", youtubeUrl: "" });
+        fetchSongs(songSearch);
+      } else {
+        const d = await res.json();
+        alert(d.error || "Erro ao salvar");
+      }
+    } finally { setSavingSong(false); }
+  };
+
+  const handleEditSong = (song: SongAdmin) => {
+    setSongForm({
+      title: song.title,
+      artist: song.artist ?? "",
+      bpm: song.bpm ? String(song.bpm) : "",
+      originalKey: song.originalKey ?? "C",
+      youtubeUrl: song.youtubeUrl ?? "",
+    });
+    setEditingSongId(song.id);
+    setShowSongForm(true);
+  };
+
+  const handleDeleteSong = async (id: string, title: string) => {
+    if (!confirm(`Apagar a música "${title}"? Esta ação não pode ser desfeita.`)) return;
+    const res = await fetch(`/api/songs/${id}`, { method: "DELETE" });
+    if (res.ok) fetchSongs(songSearch);
+    else alert("Erro ao apagar música");
+  };
+
   const getRoleBadge = (role: string) => {
     const variants: Record<string, "default" | "success" | "warning" | "info"> = {
       SUPERADMIN: "default",
@@ -588,10 +682,10 @@ export default function AdminPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
-            {activeTab === "groups" ? "Grupos" : activeTab === "users" ? "Membros" : "Assinaturas"}
+            {activeTab === "groups" ? "Grupos" : activeTab === "users" ? "Membros" : activeTab === "songs" ? "Músicas" : "Assinaturas"}
           </h1>
           <p className="text-muted-foreground text-sm">
-            {activeTab === "groups" ? "Gerencie os grupos da plataforma" : activeTab === "users" ? "Gerencie os usuários da plataforma" : "Gerencie assinaturas e planos"}
+            {activeTab === "groups" ? "Gerencie os grupos da plataforma" : activeTab === "users" ? "Gerencie os usuários da plataforma" : activeTab === "songs" ? "Cadastre e gerencie músicas globais da plataforma" : "Gerencie assinaturas e planos"}
           </p>
         </div>
         {/* Resumo rápido */}
@@ -811,6 +905,128 @@ export default function AdminPage() {
       )}
 
       {/* Subscriptions Tab */}
+      {/* Songs Tab */}
+      {activeTab === "songs" && (
+        <div className="space-y-4">
+          {/* Barra de ações */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <input
+                type="text"
+                placeholder="Buscar por título ou artista..."
+                value={songSearch}
+                onChange={e => { setSongSearch(e.target.value); fetchSongs(e.target.value); }}
+                className="h-9 flex-1 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <Button onClick={() => { setEditingSongId(null); setSongForm({ title: "", artist: "", bpm: "", originalKey: "C", youtubeUrl: "" }); setShowSongForm(true); }}>
+              <Plus className="h-4 w-4 mr-2" /> Nova Música
+            </Button>
+          </div>
+
+          {/* Formulário inline */}
+          {showSongForm && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="pt-4 space-y-3">
+                <h3 className="font-semibold text-sm">{editingSongId ? "Editar Música" : "Nova Música"}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Título *</label>
+                    <input value={songForm.title} onChange={e => setSongForm(f => ({...f, title: e.target.value}))}
+                      placeholder="Nome da música"
+                      className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Artista</label>
+                    <input value={songForm.artist} onChange={e => setSongForm(f => ({...f, artist: e.target.value}))}
+                      placeholder="Nome do artista"
+                      className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">BPM</label>
+                    <input type="number" value={songForm.bpm} onChange={e => setSongForm(f => ({...f, bpm: e.target.value}))}
+                      placeholder="Ex: 120"
+                      className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Tom Original</label>
+                    <select value={songForm.originalKey} onChange={e => setSongForm(f => ({...f, originalKey: e.target.value}))}
+                      className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                      {["C","C#","Db","D","D#","Eb","E","F","F#","Gb","G","G#","Ab","A","A#","Bb","B",
+                        "Cm","C#m","Dm","D#m","Ebm","Em","Fm","F#m","Gm","G#m","Am","A#m","Bbm","Bm"].map(k => (
+                        <option key={k} value={k}>{k}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground">Link do YouTube</label>
+                    <input value={songForm.youtubeUrl} onChange={e => setSongForm(f => ({...f, youtubeUrl: e.target.value}))}
+                      placeholder="https://youtu.be/..."
+                      className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setShowSongForm(false)}>Cancelar</Button>
+                  <Button size="sm" onClick={handleSaveSong} disabled={savingSong}>
+                    {savingSong ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    {editingSongId ? "Salvar alterações" : "Criar música"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lista de músicas */}
+          {loadingSongs ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : songs.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Nenhuma música encontrada.</CardContent></Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border">
+                  {songs.map(song => (
+                    <div key={song.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{song.title}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                          {song.artist && <span>{song.artist}</span>}
+                          {song.bpm && <span className="bg-muted px-1.5 py-0.5 rounded">{song.bpm} BPM</span>}
+                          {song.originalKey && <span className="bg-muted px-1.5 py-0.5 rounded">{song.originalKey}</span>}
+                          {song.youtubeUrl && (
+                            <a href={song.youtubeUrl} target="_blank" rel="noreferrer"
+                              className="flex items-center gap-0.5 text-primary hover:underline">
+                              <ExternalLink className="h-3 w-3" /> YouTube
+                            </a>
+                          )}
+                          {song.groupId && song._group && (
+                            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                              {song._group.name}
+                            </span>
+                          )}
+                          {!song.groupId && (
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded">Global</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button variant="ghost" size="sm" onClick={() => handleEditSong(song)} className="h-7 w-7 p-0">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteSong(song.id, song.title)}
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {activeTab === "subscriptions" && (
         <div className="space-y-6">
           {/* Stats Cards */}
