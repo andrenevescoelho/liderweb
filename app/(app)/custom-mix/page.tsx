@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-interface Album { id: string; title: string; artist: string; coverUrl: string | null; bpm: number | null; musicalKey: string | null; }
+interface Album { id: string; title: string; artist: string; coverUrl: string | null; bpm: number | null; musicalKey: string | null; rented?: boolean; expiresAt?: string | null; }
 interface StemConfig { index: number; name: string; included: boolean; pan: number; volume: number; solo: boolean; }
 interface CustomMix { id: string; name: string; albumId: string; config: any; createdAt: string; durationSec: number | null; album: { title: string; artist: string; coverUrl: string | null }; }
 
@@ -347,6 +347,11 @@ export default function CustomMixPage() {
   };
 
   const selectAlbum = async (album: Album) => {
+    // Verificar se está alugada antes de tentar carregar
+    if (album.rented === false) {
+      toast.error("Você precisa alugar esta multitrack antes de criar um mix.", { duration: 4000 });
+      return;
+    }
     setSelectedAlbum(album); setStemConfigs([]);
     setMixName(`${album.title} — Custom Mix`); setSelectedPreset("custom");
     setLoadingStems(true);
@@ -823,9 +828,29 @@ export default function CustomMixPage() {
                     ? <p className="text-sm text-muted-foreground text-center py-8">Nenhuma multitrack encontrada.</p>
                     : <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {filtered.map(album => (
-                    <button key={album.id} onClick={() => selectAlbum(album)} className="flex flex-col rounded-xl border border-border hover:border-primary/40 overflow-hidden transition-all text-left">
-                      <div className="aspect-square bg-muted">{album.coverUrl ? <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center"><Music2 className="h-8 w-8 text-muted-foreground/20"/></div>}</div>
-                      <div className="p-2"><p className="text-xs font-semibold truncate">{album.title}</p><p className="text-[10px] text-muted-foreground truncate">{album.artist}</p></div>
+                    <button
+                      key={album.id}
+                      onClick={() => selectAlbum(album)}
+                      className={cn(
+                        "relative flex flex-col rounded-xl border overflow-hidden transition-all text-left",
+                        album.rented === false
+                          ? "border-border opacity-50 cursor-not-allowed"
+                          : "border-border hover:border-primary/40"
+                      )}>
+                      <div className="aspect-square bg-muted">
+                        {album.coverUrl
+                          ? <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover"/>
+                          : <div className="w-full h-full flex items-center justify-center"><Music2 className="h-8 w-8 text-muted-foreground/20"/></div>}
+                        {album.rented === false && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-t-xl">
+                            <span className="text-[10px] font-bold text-white bg-black/60 rounded px-2 py-1">Alugar</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-2">
+                        <p className="text-xs font-semibold truncate">{album.title}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{album.artist}</p>
+                      </div>
                     </button>
                   ))}
                 </div>;
