@@ -11,16 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-interface Album { id: string; title: string; artist: string; coverUrl: string | null; bpm: number | null; musicalKey: string | null; rented?: boolean; }
+interface Album { id: string; title: string; artist: string; coverUrl: string | null; bpm: number | null; musicalKey: string | null; }
 interface StemConfig { index: number; name: string; included: boolean; pan: number; volume: number; solo: boolean; }
 interface CustomMix { id: string; name: string; albumId: string; config: any; createdAt: string; durationSec: number | null; album: { title: string; artist: string; coverUrl: string | null }; }
-
-// SoundTouchNode — mesmo padrão do player de multitrack
-let SoundTouchNode: any = null;
-const RHYTHMIC_STEMS = ["click", "clik", "clique", "guia", "guide", "drum", "drums", "bateria", "perc", "loop", "beat", "fx"];
-function isRhythmicStem(name: string) {
-  return RHYTHMIC_STEMS.some((r) => name.toLowerCase().includes(r));
-}
 
 const PRESETS = [
   { key: "click-right", label: "Click+Guia → D",  apply: (s: StemConfig[]) => s.map(x => ({ ...x, pan: /click|guia|guide/i.test(x.name) ?  0.85 : -0.85, included: true, solo: false })) },
@@ -201,61 +194,15 @@ function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   return ab;
 }
 
-
-// ── Pitch shift de buffer sem mudar duração (resample + stretch) ─────────────
-// Usado no bounce/export onde OfflineAudioContext não suporta AudioWorklet.
-// Técnica: resample com playbackRate (muda tom + duração) → stretch de volta à duração original.
-async function pitchShiftBuffer(buffer: AudioBuffer, semitones: number): Promise<AudioBuffer> {
-  if (semitones === 0) return buffer;
-  const rate = Math.pow(2, semitones / 12);
-  const origLen = buffer.length;
-  const origSR = buffer.sampleRate;
-  const nc = buffer.numberOfChannels;
-
-  // 1. Criar buffer com playbackRate — duração muda (rate * origLen samples)
-  const shiftedLen = Math.round(origLen / rate);
-  const offCtx = new OfflineAudioContext(nc, shiftedLen, origSR);
-  const src = offCtx.createBufferSource();
-  src.buffer = buffer;
-  src.playbackRate.value = rate;
-  src.connect(offCtx.destination);
-  src.start(0);
-  const shiftedBuf = await offCtx.startRendering();
-
-  // 2. Stretch de volta à duração original usando resample simples (linear interpolation)
-  const finalCtx = new OfflineAudioContext(nc, origLen, origSR);
-  const finalSrc = finalCtx.createBufferSource();
-  // Criar buffer stretched manualmente via linear interp
-  const stretchedBuf = finalCtx.createBuffer(nc, origLen, origSR);
-  for (let c = 0; c < nc; c++) {
-    const src_data = shiftedBuf.getChannelData(c);
-    const dst_data = stretchedBuf.getChannelData(c);
-    const ratio = shiftedBuf.length / origLen;
-    for (let i = 0; i < origLen; i++) {
-      const pos = i * ratio;
-      const idx = Math.floor(pos);
-      const frac = pos - idx;
-      const a = src_data[idx] ?? 0;
-      const b = src_data[idx + 1] ?? 0;
-      dst_data[i] = a + frac * (b - a);
-    }
-  }
-  return stretchedBuf;
-}
-
 // ── Cache em memória (por sessão) + Cache API quando disponível (7 dias) ──────
 const AUDIO_CACHE_NAME = "liderweb-stems-v1";
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Cache em memória — sempre funciona, dura a sessão
 const memoryAudioCache = new Map<string, ArrayBuffer>();
 
-async function fetchAudioCached(
-  url: string,
-  onProgress?: (pct: number) => void
-): Promise<ArrayBuffer> {
+async function fetchAudioCached(url: string): Promise<ArrayBuffer> {
   // 1. Cache em memória (sessão atual)
   if (memoryAudioCache.has(url)) {
-    onProgress?.(100);
     return memoryAudioCache.get(url)!.slice(0);
   }
 
@@ -270,7 +217,6 @@ async function fetchAudioCached(
         if (!expired) {
           const buf = await cached.arrayBuffer();
           memoryAudioCache.set(url, buf.slice(0));
-          onProgress?.(100);
           return buf;
         }
         await cache.delete(url);
@@ -278,33 +224,10 @@ async function fetchAudioCached(
     }
   } catch {}
 
-  // 3. Fetch da rede com progresso via ReadableStream
+  // 3. Fetch da rede
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Falha ao carregar áudio: ${res.status}`);
-
-  const contentLength = res.headers.get("content-length");
-  const total = contentLength ? parseInt(contentLength) : 0;
-
-  let buf: ArrayBuffer;
-  if (total > 0 && res.body && onProgress) {
-    const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      received += value.length;
-      onProgress(Math.round((received / total) * 100));
-    }
-    const combined = new Uint8Array(received);
-    let offset = 0;
-    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
-    buf = combined.buffer;
-  } else {
-    buf = await res.arrayBuffer();
-    onProgress?.(100);
-  }
+  const buf = await res.arrayBuffer();
 
   // Salvar no cache em memória
   memoryAudioCache.set(url, buf.slice(0));
@@ -336,35 +259,14 @@ export default function CustomMixPage() {
   const [blockedByPermission, setBlockedByPermission] = useState(false);
 
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [albumSearch, setAlbumSearch] = useState("");
+  const [filterRentedMix, setFilterRentedMix] = useState(false);
   const [stemConfigs, setStemConfigs] = useState<StemConfig[]>([]);
   const [mixName, setMixName] = useState("");
   const [selectedPreset, setSelectedPreset] = useState("custom");
   const [bouncing, setBouncing] = useState(false);
   const [loadingStems, setLoadingStems] = useState(false);
   const [masterVol, setMasterVol] = useState(1);
-  const [semitones, setSemitones] = useState(0); // transpose: -6 a +6
-  const workletReadyRef = useRef(false);
-  const soundTouchNodesRef = useRef<any[]>([]);
-
-  const ensureWorklet = useCallback(async (ctx: AudioContext) => {
-    if (workletReadyRef.current) return true;
-    try {
-      if (ctx.state === "suspended") await ctx.resume();
-      if (!ctx.audioWorklet) { console.warn("[pitch] audioWorklet não disponível"); return false; }
-      if (!SoundTouchNode) {
-        const m = await import(/* webpackIgnore: true */ "/soundtouch-node.js");
-        SoundTouchNode = m.SoundTouchNode;
-        console.log("[pitch] SoundTouchNode carregado:", !!SoundTouchNode);
-      }
-      await SoundTouchNode.register(ctx, "/soundtouch-processor.js");
-      workletReadyRef.current = true;
-      console.log("[pitch] Worklet registrado com sucesso");
-      return true;
-    } catch (e) {
-      console.error("[pitch] ensureWorklet falhou:", e);
-      return false;
-    }
-  }, []);
 
   // VU meters via DOM refs (zero re-renders — sem useState)
   const vuBarRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -385,7 +287,6 @@ export default function CustomMixPage() {
   const [playAllProgress, setPlayAllProgress] = useState(0);
   const [playAllDuration, setPlayAllDuration] = useState(0);
   const [loadingAll, setLoadingAll] = useState(false);
-  const [stemProgress, setStemProgress] = useState<Record<number, number>>({});
   const playAllCtxRef = useRef<AudioContext | null>(null);
   const playAllSrcsRef = useRef<AudioBufferSourceNode[]>([]);
   const playAllGainsRef = useRef<GainNode[]>([]);
@@ -413,7 +314,7 @@ export default function CustomMixPage() {
     return () => { cancelAnimationFrame(vuRafRef.current); };
   }, [status, user]);
 
-  useEffect(() => { stopPreview(); stopPlayAll(); previewBufsRef.current.clear(); analyserNodes.current = []; vuBarRefs.current = []; setSemitones(0); }, [selectedAlbum]);
+  useEffect(() => { stopPreview(); stopPlayAll(); previewBufsRef.current.clear(); analyserNodes.current = []; vuBarRefs.current = []; }, [selectedAlbum]);
 
   const addExtraToCart = async () => {
     try {
@@ -535,40 +436,6 @@ export default function CustomMixPage() {
     vuBarRefs.current.forEach((el, i) => updateVuDom(el, 0, vuColors.current[i] ?? "#8b5cf6", true));
   };
 
-
-  // Conecta source → gain com SoundTouch se transpose ativo e faixa harmônica
-  const connectWithPitch = useCallback((
-    ctx: AudioContext,
-    src: AudioBufferSourceNode,
-    gain: GainNode,
-    name: string,
-    semitonesVal: number,
-    delaySeconds: number
-  ) => {
-    const rhythmic = isRhythmicStem(name);
-    console.log(`[pitch] ${name} | semitones=${semitonesVal} | rhythmic=${rhythmic} | workletReady=${workletReadyRef.current} | SoundTouchNode=${!!SoundTouchNode}`);
-    if (!rhythmic && semitonesVal !== 0 && workletReadyRef.current && SoundTouchNode) {
-      try {
-        const stNode = new SoundTouchNode(ctx);
-        stNode.pitchSemitones.value = semitonesVal;
-        src.connect(stNode);
-        stNode.connect(gain);
-        console.log(`[pitch] SoundTouch aplicado em: ${name}`);
-        return;
-      } catch (e) {
-        console.error(`[pitch] SoundTouch falhou em ${name}:`, e);
-      }
-    }
-    if (rhythmic && semitonesVal !== 0 && delaySeconds > 0) {
-      const delay = ctx.createDelay(delaySeconds + 0.01);
-      delay.delayTime.value = delaySeconds;
-      src.connect(delay);
-      delay.connect(gain);
-      return;
-    }
-    src.connect(gain);
-  }, []);
-
   const togglePlayAll = async () => {
     if (playingAll) { stopPlayAll(); return; }
     // Parar player de mix salvo se estiver tocando
@@ -591,35 +458,19 @@ export default function CustomMixPage() {
     const ctx = playAllCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
 
-    // Registrar SoundTouch worklet — sempre re-registrar se contexto foi recriado
-    if (semitones !== 0) {
-      workletReadyRef.current = false; // forçar re-registro no novo contexto
-      await ensureWorklet(ctx);
-    }
-    const soundtouchLatency = semitones !== 0 && workletReadyRef.current
-      ? 4096 / ctx.sampleRate
-      : 0;
-
     try {
       toast.loading("Carregando faixas...", { id: "playall" });
 
-      // Carregar todos os buffers (com cache + progresso por stream)
-      setStemProgress({});
+      // Carregar todos os buffers (com cache)
       const bufs = await Promise.all(stemConfigs.map(async sc => {
         let buf = previewBufsRef.current.get(sc.index);
         if (!buf) {
           const url = `/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`;
-          const ab = await fetchAudioCached(url, (pct) => {
-            setStemProgress(prev => ({ ...prev, [sc.index]: pct }));
-          });
-          buf = await ctx.decodeAudioData(ab);
+          buf = await ctx.decodeAudioData(await fetchAudioCached(url));
           previewBufsRef.current.set(sc.index, buf);
-        } else {
-          setStemProgress(prev => ({ ...prev, [sc.index]: 100 }));
         }
         return { sc, buffer: buf! };
       }));
-      setStemProgress({});
 
       const maxDur = Math.max(...bufs.map(b => b.buffer.duration));
       setPlayAllDuration(maxDur);
@@ -643,8 +494,7 @@ export default function CustomMixPage() {
         if (hasSol) gain.gain.value = sc.solo ? sc.volume : 0;
         const pan = ctx.createStereoPanner(); pan.pan.value = sc.pan;
         const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
-        connectWithPitch(ctx, src, gain, sc.name, semitones, soundtouchLatency);
-        gain.connect(pan); pan.connect(analyser); analyser.connect(masterGain);
+        src.connect(gain); gain.connect(pan); pan.connect(analyser); analyser.connect(masterGain);
         src.start(startAt);
         srcs.push(src); gains.push(gain); pans.push(pan); analysers.push(analyser);
       });
@@ -701,12 +551,6 @@ export default function CustomMixPage() {
     if (!previewCtxRef.current) previewCtxRef.current = new AudioContext();
     const ctx = previewCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
-    if (semitones !== 0) {
-      workletReadyRef.current = false;
-      await ensureWorklet(ctx);
-    }
-    const soundtouchLatency = semitones !== 0 && workletReadyRef.current
-      ? 4096 / ctx.sampleRate : 0;
     setPreviewingIdx(sc.index);
     try {
       let buf = previewBufsRef.current.get(sc.index);
@@ -722,8 +566,7 @@ export default function CustomMixPage() {
       const gain = ctx.createGain(); gain.gain.value = sc.volume;
       const pan = ctx.createStereoPanner(); pan.pan.value = sc.pan;
       const analyser = ctx.createAnalyser(); analyser.fftSize = 64;
-      connectWithPitch(ctx, src, gain, sc.name, semitones, soundtouchLatency);
-      gain.connect(pan); pan.connect(analyser); analyser.connect(ctx.destination);
+      src.connect(gain); gain.connect(pan); pan.connect(analyser); analyser.connect(ctx.destination);
       src.start(0);
       previewSrcRef.current = src; previewGainRef.current = gain; previewPanRef.current = pan;
       // Criar array de analysers — só o canal ativo tem sinal
@@ -743,34 +586,17 @@ export default function CustomMixPage() {
     try {
       toast.loading("Carregando faixas...", { id: "bounce" });
       const tmpCtx = new AudioContext();
-      setStemProgress({});
       const bufs = await Promise.all(included.map(async sc => {
         let buf = previewBufsRef.current.get(sc.index);
-        if (!buf) {
-          const ab = await fetchAudioCached(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`, (pct) => {
-            setStemProgress(prev => ({ ...prev, [sc.index]: pct }));
-          });
-          buf = await tmpCtx.decodeAudioData(ab);
-          previewBufsRef.current.set(sc.index, buf);
-        } else {
-          setStemProgress(prev => ({ ...prev, [sc.index]: 100 }));
-        }
+        if (!buf) { const res = await fetch(`/api/multitracks/${selectedAlbum.id}/audio/${sc.index}`); buf = await tmpCtx.decodeAudioData(await res.arrayBuffer()); previewBufsRef.current.set(sc.index, buf); }
         return { sc, buffer: buf! };
       }));
-      setStemProgress({});
       toast.loading("Processando mix...", { id: "bounce" });
-      // Aplicar pitch shift nos buffers antes do bounce (OfflineAudioContext não suporta AudioWorklet)
-      const shiftedBufs = semitones !== 0
-        ? await Promise.all(bufs.map(async ({ sc, buffer }) => ({
-            sc,
-            buffer: await pitchShiftBuffer(buffer, isRhythmicStem(sc.name) ? 0 : semitones)
-          })))
-        : bufs;
-      const maxDur = Math.max(...shiftedBufs.map(b => b.buffer.duration));
-      const sr = shiftedBufs[0].buffer.sampleRate;
+      const maxDur = Math.max(...bufs.map(b => b.buffer.duration));
+      const sr = bufs[0].buffer.sampleRate;
       const offCtx = new OfflineAudioContext(2, Math.ceil(maxDur * sr), sr);
       const masterGain = offCtx.createGain(); masterGain.gain.value = masterVol; masterGain.connect(offCtx.destination);
-      shiftedBufs.forEach(({ sc, buffer }) => {
+      bufs.forEach(({ sc, buffer }) => {
         const src = offCtx.createBufferSource(); src.buffer = buffer;
         const gain = offCtx.createGain(); gain.gain.value = sc.volume;
         const pan = offCtx.createStereoPanner(); pan.pan.value = sc.pan;
@@ -902,10 +728,6 @@ export default function CustomMixPage() {
     toast.loading("Preparando...", { id: "dl" });
     try {
       const tmpCtx = new AudioContext();
-      if (semitones !== 0) await ensureWorklet(tmpCtx);
-      const soundtouchLatency = semitones !== 0 && workletReadyRef.current
-        ? 4096 / tmpCtx.sampleRate
-        : 0;
       const bufs = await Promise.all(included.map(async sc => { const res = await fetch(`/api/multitracks/${mix.albumId}/audio/${sc.index}`); return { sc, buffer: await tmpCtx.decodeAudioData(await res.arrayBuffer()) }; }));
       const maxDur = Math.max(...bufs.map(b => b.buffer.duration)); const sr = bufs[0].buffer.sampleRate;
       const offCtx = new OfflineAudioContext(2, Math.ceil(maxDur*sr), sr);
@@ -971,19 +793,43 @@ export default function CustomMixPage() {
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Plus className="h-4 w-4 text-primary" />Criar novo mix</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">Escolha uma multitrack alugada:</p>
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <input
+                type="text"
+                placeholder="Buscar multitrack..."
+                value={albumSearch}
+                onChange={e => setAlbumSearch(e.target.value)}
+                className="h-8 flex-1 min-w-[160px] rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                onClick={() => setFilterRentedMix(v => !v)}
+                className={cn(
+                  "h-8 flex items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-all whitespace-nowrap",
+                  filterRentedMix
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/30"
+                )}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Só alugadas
+              </button>
+            </div>
             {albums.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Nenhuma multitrack disponível.</p>
-              : <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {albums.map(album => (
-                    <button key={album.id} onClick={() => selectAlbum(album)} className={cn("flex flex-col rounded-xl border overflow-hidden transition-all text-left relative", album.rented ? "border-primary/40 hover:border-primary/70 ring-1 ring-primary/20" : "border-border hover:border-border/80 opacity-60")}>
-                      {album.rented && (
-                        <div className="absolute top-1.5 right-1.5 z-10 rounded-full bg-primary/90 px-1.5 py-0.5 text-[8px] font-bold text-primary-foreground">✓ Alugada</div>
-                      )}
+              : (() => {
+                  const filtered = albums.filter(a =>
+                    (!albumSearch || a.title.toLowerCase().includes(albumSearch.toLowerCase()) || a.artist.toLowerCase().includes(albumSearch.toLowerCase())) &&
+                    (!filterRentedMix || (a as any).rented)
+                  );
+                  return filtered.length === 0
+                    ? <p className="text-sm text-muted-foreground text-center py-8">Nenhuma multitrack encontrada.</p>
+                    : <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {filtered.map(album => (
+                    <button key={album.id} onClick={() => selectAlbum(album)} className="flex flex-col rounded-xl border border-border hover:border-primary/40 overflow-hidden transition-all text-left">
                       <div className="aspect-square bg-muted">{album.coverUrl ? <img src={album.coverUrl} alt={album.title} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center"><Music2 className="h-8 w-8 text-muted-foreground/20"/></div>}</div>
-                      <div className="p-2"><p className="text-xs font-semibold truncate">{album.title}</p><p className="text-[10px] text-muted-foreground truncate">{album.artist}</p>{!album.rented && <p className="text-[9px] text-amber-500/80 mt-0.5">Não alugada</p>}</div>
+                      <div className="p-2"><p className="text-xs font-semibold truncate">{album.title}</p><p className="text-[10px] text-muted-foreground truncate">{album.artist}</p></div>
                     </button>
                   ))}
-                </div>}
+                </div>;
+                })()}
           </CardContent>
         </Card>
       ) : (
@@ -1036,36 +882,11 @@ export default function CustomMixPage() {
                       : <><Play className="h-3 w-3" />Preview do mix</>}
                   </button>
                 </div>
-                <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">Master</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Master</span>
                     <input type="range" min={0} max={1} step={0.01} value={masterVol} onChange={e => setMasterVol(Number(e.target.value))} className="w-20 accent-primary h-1"/>
                     <span className="text-xs font-semibold tabular-nums text-primary w-8">{Math.round(masterVol*100)}%</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Tom</span>
-                    <button
-                      onClick={() => setSemitones(s => Math.max(-6, s - 1))}
-                      disabled={semitones <= -6}
-                      className="h-6 w-6 rounded border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-30 transition-colors"
-                    >−</button>
-                    <span className={cn(
-                      "text-xs font-bold tabular-nums w-10 text-center rounded-md px-1.5 py-0.5 border",
-                      semitones === 0 ? "text-muted-foreground border-border" :
-                      semitones > 0 ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" :
-                      "text-blue-400 border-blue-500/30 bg-blue-500/10"
-                    )}>
-                      {semitones === 0 ? "0" : semitones > 0 ? `+${semitones}` : `${semitones}`}
-                    </span>
-                    <button
-                      onClick={() => setSemitones(s => Math.min(6, s + 1))}
-                      disabled={semitones >= 6}
-                      className="h-6 w-6 rounded border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-30 transition-colors"
-                    >+</button>
-                    <button
-                      onClick={() => setSemitones(0)}
-                      className={cn("text-[10px] text-muted-foreground hover:text-foreground transition-colors", semitones === 0 && "invisible")}
-                    >reset</button>
                   </div>
                 </div>
               </div>
@@ -1078,31 +899,6 @@ export default function CustomMixPage() {
                   <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
                     {Math.floor(playAllProgress * playAllDuration / 60)}:{String(Math.floor((playAllProgress * playAllDuration) % 60)).padStart(2, "0")} / {Math.floor(playAllDuration / 60)}:{String(Math.floor(playAllDuration % 60)).padStart(2, "0")}
                   </span>
-                </div>
-              )}
-
-              {/* Barras de progresso de download por stream */}
-              {Object.keys(stemProgress).length > 0 && (
-                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2 mb-3">
-                  <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Baixando faixas...
-                  </p>
-                  {stemConfigs.map((sc, i) => {
-                    const pct = stemProgress[sc.index] ?? 0;
-                    const done = pct >= 100;
-                    return (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground w-24 truncate flex-shrink-0" style={{ color: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }}>{sc.name}</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-200"
-                            style={{ width: `${pct}%`, backgroundColor: done ? "#4ade80" : CHANNEL_COLORS[i % CHANNEL_COLORS.length] }}
-                          />
-                        </div>
-                        <span className="text-[10px] tabular-nums text-muted-foreground w-8 text-right flex-shrink-0">{done ? "✓" : `${pct}%`}</span>
-                      </div>
-                    );
-                  })}
                 </div>
               )}
 

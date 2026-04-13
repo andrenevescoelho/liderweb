@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Music2, Search, Play, Lock, Loader2, CheckCircle2, Clock, Layers,
-  LayoutGrid, Grid2x2, List, Download, AlertCircle,
+  LayoutGrid, Grid2x2, List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -27,28 +27,14 @@ interface Album {
   coverUrl: string | null;
   description: string | null;
   stemCount: number;
+  createdAt?: string | null;
   rented: boolean;
   expiresAt: string | null;
-  albumStatus: "READY" | "CATALOGED" | "DOWNLOADING";
 }
 
 interface Usage {
   count: number;
   limit: number;
-}
-
-function AlbumStatusBadge({ albumStatus }: { albumStatus: string }) {
-  if (albumStatus === "CATALOGED") return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[9px] font-semibold text-blue-400">
-      <Download className="h-2.5 w-2.5" /> Disponível
-    </span>
-  );
-  if (albumStatus === "DOWNLOADING") return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 text-[9px] font-semibold text-violet-400">
-      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Preparando...
-    </span>
-  );
-  return null;
 }
 
 export default function MultitracksPage() {
@@ -61,13 +47,15 @@ export default function MultitracksPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterArtist, setFilterArtist] = useState("");
+  const [filterRented, setFilterRented] = useState(false);
+  const [sortBy, setSortBy] = useState<"title"|"artist"|"recent"|"bpm"|"stems"|"expiry">("title");
+  const [sortAsc, setSortAsc] = useState(true);
   const [renting, setRenting] = useState<string | null>(null);
   const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [blockedByPermission, setBlockedByPermission] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [canRent, setCanRent] = useState(false);
   const [viewMode, setViewMode] = useState<"large" | "small" | "list">("large");
-  const [downloadingAlbums, setDownloadingAlbums] = useState<Record<string, "polling" | "ready" | "error">>({});
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -93,22 +81,11 @@ export default function MultitracksPage() {
         setAlbums(data.albums || []);
         setUsage(data.usage || { count: 0, limit: 0 });
         const rentAllowed = data.canRent ?? false;
-        const isAdmin = ["ADMIN", "SUPERADMIN"].includes((session?.user as any)?.role ?? "");
-        setCanRent(rentAllowed || isAdmin);
-        setBlockedByPlan(!rentAllowed && !isAdmin);
+        setCanRent(rentAllowed);
+        setBlockedByPlan(!rentAllowed);
         // Cota esgotada: tem acesso ao plano mas usou tudo
         const u = data.usage || { count: 0, limit: 0 };
         setQuotaExceeded(rentAllowed && u.limit > 0 && u.count >= u.limit);
-        // Auto-iniciar polling para tracks alugadas ainda em download
-        (data.albums || []).forEach((album: any) => {
-          if (album.rented && (album.albumStatus === "DOWNLOADING" || album.albumStatus === "CATALOGED")) {
-            setDownloadingAlbums(prev => {
-              if (prev[album.id]) return prev;
-              return { ...prev, [album.id]: "polling" };
-            });
-            pollDownloadStatus(album.id);
-          }
-        });
       }
     } catch {
       toast.error("Erro ao carregar multitracks");
@@ -139,9 +116,7 @@ export default function MultitracksPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ albumId }),
       });
-      const status202 = res.status === 202;
       const data = await res.json();
-      console.log('[rent debug] status:', res.status, 'status202:', status202, 'data:', JSON.stringify(data));
       if (!res.ok) {
         if (data.code === "QUOTA_EXCEEDED") {
           setQuotaExceeded(true);
@@ -149,13 +124,6 @@ export default function MultitracksPage() {
         } else {
           toast.error(data.error || "Erro ao alugar");
         }
-        return;
-      }
-      if (status202 && data.downloading) {
-        // Track ainda nao esta no bucket — iniciar polling
-        toast.success("Preparando sua multitrack... Aguarde alguns minutos.");
-        pollDownloadStatus(albumId);
-        fetchAlbums(search);
         return;
       }
       toast.success("Multitrack alugada! Abrindo player...");
@@ -166,29 +134,6 @@ export default function MultitracksPage() {
     } finally {
       setRenting(null);
     }
-  };
-
-  const pollDownloadStatus = (albumId: string) => {
-    setDownloadingAlbums(prev => ({ ...prev, [albumId]: "polling" }));
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/multitracks/rent/status?albumId=${albumId}`);
-        const data = await res.json();
-        if (data.status === "READY") {
-          clearInterval(interval);
-          setDownloadingAlbums(prev => ({ ...prev, [albumId]: "ready" }));
-          toast.success("Multitrack pronta! Abrindo player...");
-          fetchAlbums(search);
-          setTimeout(() => router.push(`/multitracks/${albumId}`), 1000);
-        } else if (data.status === "ERROR") {
-          clearInterval(interval);
-          setDownloadingAlbums(prev => ({ ...prev, [albumId]: "error" }));
-          toast.error("Erro ao preparar multitrack. Tente novamente.");
-        }
-      } catch {
-        // ignorar erros de rede no polling
-      }
-    }, 3000);
   };
 
   const addToCartAndRedirect = async (albumId?: string) => {
@@ -315,7 +260,54 @@ export default function MultitracksPage() {
               <option key={artist} value={artist!}>{artist}</option>
             ))}
           </select>
+          {/* Filtro Alugadas */}
+          <button
+            onClick={() => setFilterRented(v => !v)}
+            className={cn(
+              "h-9 flex items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-all",
+              filterRented
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+            )}>
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Alugadas
+            {filterRented && albums.filter(a => a.rented).length > 0 && (
+              <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold">
+                {albums.filter(a => a.rented).length}
+              </span>
+            )}
+          </button>
         </div>
+        {/* Ordenação */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {([
+            { key: "title",  label: "A–Z"        },
+            { key: "artist", label: "Artista"     },
+            { key: "recent", label: "Recentes"    },
+            { key: "bpm",    label: "BPM"         },
+            { key: "stems",  label: "Stems"       },
+            { key: "expiry", label: "Expira"      },
+          ] as const).map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                if (sortBy === opt.key) setSortAsc(v => !v);
+                else { setSortBy(opt.key); setSortAsc(true); }
+              }}
+              className={cn(
+                "h-8 flex items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-all",
+                sortBy === opt.key
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+              )}>
+              {opt.label}
+              {sortBy === opt.key && (
+                <span className="text-[10px]">{sortAsc ? "↑" : "↓"}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* View mode */}
         <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
           <button onClick={() => setViewMode("large")}
@@ -332,7 +324,28 @@ export default function MultitracksPage() {
 
       {/* Grid de álbuns */}
       {(() => {
-        const filtered = filterArtist ? albums.filter(a => a.artist === filterArtist) : albums;
+        const filtered = albums
+          .filter(a =>
+            (!filterArtist || a.artist === filterArtist) &&
+            (!filterRented || a.rented)
+          )
+          .sort((a, b) => {
+            let cmp = 0;
+            switch (sortBy) {
+              case "title":  cmp = a.title.localeCompare(b.title, "pt"); break;
+              case "artist": cmp = (a.artist ?? "").localeCompare(b.artist ?? "", "pt"); break;
+              case "recent": cmp = new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(); break;
+              case "bpm":    cmp = (b.bpm ?? 0) - (a.bpm ?? 0); break;
+              case "stems":  cmp = (b.stemCount ?? 0) - (a.stemCount ?? 0); break;
+              case "expiry":
+                if (!a.rented && !b.rented) cmp = 0;
+                else if (!a.rented) cmp = 1;
+                else if (!b.rented) cmp = -1;
+                else cmp = new Date(a.expiresAt!).getTime() - new Date(b.expiresAt!).getTime();
+                break;
+            }
+            return sortAsc ? cmp : -cmp;
+          });
         return filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Music2 className="h-12 w-12 text-muted-foreground/30 mb-4" />
@@ -362,15 +375,10 @@ export default function MultitracksPage() {
                 {album.genre && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{album.genre}</span>}
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{album.stemCount} stems</span>
                 {album.rented && album.expiresAt && <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="h-3 w-3" />{daysLeft(album.expiresAt)}d</span>}
-                {album.albumStatus !== "READY" && <AlbumStatusBadge albumStatus={album.albumStatus} />}
               </div>
               {/* Botão */}
               <div className="flex-shrink-0">
-                {album.rented && downloadingAlbums[album.id] === "polling" ? (
-                  <Button size="sm" variant="outline" disabled>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
-                  </Button>
-                ) : album.rented ? (
+                {album.rented ? (
                   <Button size="sm" onClick={() => handlePlay(album.id)}>
                     <Play className="mr-1.5 h-3.5 w-3.5" />Abrir
                   </Button>
@@ -379,21 +387,9 @@ export default function MultitracksPage() {
                     <Lock className="mr-1.5 h-3.5 w-3.5" />R$ 9,90
                   </Button>
                 ) : (
-                  <>
-                  {downloadingAlbums[album.id] === "polling" ? (
-                    <Button size="sm" variant="outline" disabled>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
-                    </Button>
-                  ) : downloadingAlbums[album.id] === "error" ? (
-                    <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} className="text-red-400 border-red-400/30">
-                      <AlertCircle className="h-3.5 w-3.5 mr-1.5" />Tentar novamente
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
-                      {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
-                    </Button>
-                  )}
-                  </>
+                  <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
+                    {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
+                  </Button>
                 )}
               </div>
             </div>
@@ -441,25 +437,13 @@ export default function MultitracksPage() {
                   </div>
                 )}
 
-                {album.rented && downloadingAlbums[album.id] === "polling" ? (
-                  <Button size="sm" variant="outline" className="w-full" disabled>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
-                  </Button>
-                ) : album.rented ? (
+                {album.rented ? (
                   <Button size="sm" className="w-full" onClick={() => handlePlay(album.id)}>
                     <Play className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Abrir Player" : "Abrir"}
                   </Button>
                 ) : quotaExceeded ? (
                   <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleRent(album.id)}>
                     <Lock className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Alugar — R$ 9,90" : "R$ 9,90"}
-                  </Button>
-                ) : downloadingAlbums[album.id] === "polling" ? (
-                  <Button size="sm" variant="outline" className="w-full" disabled>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Preparando...
-                  </Button>
-                ) : downloadingAlbums[album.id] === "error" ? (
-                  <Button size="sm" variant="outline" className="w-full text-red-400 border-red-400/30" onClick={() => handleRent(album.id)}>
-                    <AlertCircle className="h-3.5 w-3.5 mr-1.5" />Tentar novamente
                   </Button>
                 ) : (
                   <Button size="sm" variant="outline" className="w-full" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
