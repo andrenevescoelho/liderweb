@@ -80,11 +80,14 @@ export async function GET(
         return new NextResponse(chunk, {
           status: 206,
           headers: {
-            "Content-Type":   contentType,
-            "Content-Length": String(chunkSize),
-            "Content-Range":  `bytes ${start}-${end}/${totalSize}`,
-            "Accept-Ranges":  "bytes",
-            "Cache-Control":  "private, max-age=3600",
+            "Content-Type":        contentType,
+            "Content-Length":      String(chunkSize),
+            "Content-Range":       `bytes ${start}-${end}/${totalSize}`,
+            "Accept-Ranges":       "bytes",
+            "Cache-Control":       "private, no-store, max-age=0",
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+            "X-Robots-Tag":        "noindex",
           },
         });
       }
@@ -94,10 +97,13 @@ export async function GET(
     return new NextResponse(fullBuffer, {
       status: 200,
       headers: {
-        "Content-Type":   contentType,
-        "Content-Length": String(totalSize),
-        "Accept-Ranges":  "bytes",
-        "Cache-Control":  "private, max-age=3600",
+        "Content-Type":        contentType,
+        "Content-Length":      String(totalSize),
+        "Accept-Ranges":       "bytes",
+        "Cache-Control":       "private, no-store, max-age=0",
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag":        "noindex",
       },
     });
   } catch (err) {
