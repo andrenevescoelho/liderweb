@@ -154,49 +154,107 @@ const WaveformBar = memo(function WaveformBar({ data, progress, color }: { data:
   return <canvas ref={canvasRef} className="w-full h-12" style={{ display: "block" }} />;
 });
 
-const CACHE_NAME = "liderweb-multitracks-v1";
+const CACHE_NAME = "liderweb-multitracks-v2";
 const CACHE_TTL_DAYS = 7;
 
-async function fetchWithCache(url: string): Promise<ArrayBuffer> {
-  if (typeof window === "undefined" || !("caches" in window)) {
-    // Fallback para ambientes sem Cache API
-    return fetch(url).then((r) => r.arrayBuffer());
-  }
+// Tamanho do chunk inicial para tocar rapidamente (~30s de MP3 320kbps ≈ 1.2MB)
+const INITIAL_CHUNK_BYTES = 1.5 * 1024 * 1024; // 1.5MB
 
+// Verifica se há cache completo válido para a URL
+async function getCached(url: string): Promise<ArrayBuffer | null> {
+  if (typeof window === "undefined" || !("caches" in window)) return null;
   const cache = await caches.open(CACHE_NAME);
-  const cacheKey = new Request(url);
-
-  // Verificar cache existente
-  const cached = await cache.match(cacheKey);
-  if (cached) {
-    const cachedAt = cached.headers.get("x-cached-at");
-    if (cachedAt) {
-      const age = Date.now() - Number(cachedAt);
-      const maxAge = CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
-      if (age < maxAge) {
-        return cached.arrayBuffer();
-      }
-      // Cache expirado — remove
-      await cache.delete(cacheKey);
-    }
+  const cached = await cache.match(new Request(url));
+  if (!cached) return null;
+  const cachedAt = cached.headers.get("x-cached-at");
+  if (!cachedAt) return null;
+  const age = Date.now() - Number(cachedAt);
+  if (age > CACHE_TTL_DAYS * 24 * 60 * 60 * 1000) {
+    await cache.delete(new Request(url));
+    return null;
   }
+  return cached.arrayBuffer();
+}
 
-  // Baixar e armazenar no cache
+// Salva buffer completo no cache
+async function saveCache(url: string, buffer: ArrayBuffer, contentType: string): Promise<void> {
+  if (typeof window === "undefined" || !("caches" in window)) return;
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put(new Request(url), new Response(buffer.slice(0), {
+    headers: { "Content-Type": contentType, "x-cached-at": String(Date.now()) },
+  }));
+}
+
+// Baixar arquivo completo com cache
+async function fetchWithCache(url: string): Promise<ArrayBuffer> {
+  const cached = await getCached(url);
+  if (cached) return cached;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
   const buffer = await response.arrayBuffer();
-
-  // Salvar no cache com timestamp
-  const cachedResponse = new Response(buffer.slice(0), {
-    headers: {
-      "Content-Type": response.headers.get("Content-Type") || "audio/wav",
-      "x-cached-at": String(Date.now()),
-    },
-  });
-  await cache.put(cacheKey, cachedResponse);
-
+  const ct = response.headers.get("Content-Type") || "audio/mpeg";
+  await saveCache(url, buffer, ct);
   return buffer;
+}
+
+// Baixar apenas o chunk inicial para tocar rapidamente
+async function fetchInitialChunk(url: string): Promise<{ buffer: ArrayBuffer; totalSize: number; complete: boolean }> {
+  // Se já tem cache completo, usar direto
+  const cached = await getCached(url);
+  if (cached) return { buffer: cached, totalSize: cached.byteLength, complete: true };
+
+  // Pedir apenas os primeiros INITIAL_CHUNK_BYTES bytes
+  const response = await fetch(url, {
+    headers: { "Range": `bytes=0-${INITIAL_CHUNK_BYTES - 1}` },
+  });
+
+  if (response.status === 206) {
+    // Servidor suporta Range — retornar chunk inicial
+    const buffer = await response.arrayBuffer();
+    const contentRange = response.headers.get("Content-Range") ?? "";
+    const totalMatch = contentRange.match(/\/([0-9]+)/);
+    const totalSize = totalMatch ? parseInt(totalMatch[1]) : buffer.byteLength;
+    const complete = buffer.byteLength >= totalSize;
+    if (complete) {
+      const ct = response.headers.get("Content-Type") || "audio/mpeg";
+      await saveCache(url, buffer, ct);
+    }
+    return { buffer, totalSize, complete };
+  } else {
+    // Servidor não suporta Range — baixar tudo
+    const buffer = await response.arrayBuffer();
+    const ct = response.headers.get("Content-Type") || "audio/mpeg";
+    await saveCache(url, buffer, ct);
+    return { buffer, totalSize: buffer.byteLength, complete: true };
+  }
+}
+
+// Baixar o restante do arquivo em background e atualizar cache
+async function fetchRemainder(
+  url: string,
+  startByte: number,
+  onComplete: (buffer: ArrayBuffer) => void
+): Promise<void> {
+  try {
+    const response = await fetch(url, {
+      headers: { "Range": `bytes=${startByte}-` },
+    });
+    if (!response.ok) return;
+    const remainder = await response.arrayBuffer();
+
+    // Reconstruir arquivo completo combinando chunk inicial + restante
+    const initial = await getCached(url + "__initial__") ?? new ArrayBuffer(0);
+    const combined = new Uint8Array(startByte + remainder.byteLength);
+    // Buscar o arquivo completo diretamente
+    const full = await fetch(url);
+    if (!full.ok) return;
+    const fullBuffer = await full.arrayBuffer();
+    const ct = full.headers.get("Content-Type") || "audio/mpeg";
+    await saveCache(url, fullBuffer, ct);
+    onComplete(fullBuffer);
+  } catch (err) {
+    console.warn("[multitracks] fetchRemainder failed:", err);
+  }
 }
 
 // Limpar entradas expiradas do cache
@@ -311,66 +369,12 @@ export default function MultitracksPlayerPage() {
   const [transpose, setTranspose] = useState(0);
   const transposeRef = useRef(0);
   const [isMobile, setIsMobile] = useState(false);
-  const [deviceType, setDeviceType] = useState<"desktop"|"tablet"|"mobile">("desktop");
-  const isMobileOrTablet = deviceType !== "desktop";
-  const showDesktopOnlyMessage = useCallback(() => {
-    toast("Esse recurso só está disponível acessando por um computador.", {
-      icon: "💻",
-      duration: 2600,
-    });
-  }, []);
-
-  const handleTransposeChange = useCallback((delta: number) => {
-    if (isMobileOrTablet) {
-      showDesktopOnlyMessage();
-      return;
-    }
-    setTranspose((v) => Math.max(-6, Math.min(6, v + delta)));
-  }, [isMobileOrTablet, showDesktopOnlyMessage]);
-
-  const handleToggleMixer = useCallback(() => {
-    if (isMobileOrTablet) {
-      showDesktopOnlyMessage();
-      return;
-    }
-    setShowMixer((v) => !v);
-  }, [isMobileOrTablet, showDesktopOnlyMessage]);
-
   useEffect(() => {
-    const ua = navigator.userAgent.toLowerCase();
-    const isPhone = /iphone|android.*mobile|mobile.*android/.test(ua);
-    const isIpad  = /ipad/.test(ua) || (/macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-    const isAndroidTablet = /android/.test(ua) && !/mobile/.test(ua);
-    const check = () => {
-      const w = window.innerWidth;
-      const mobile = isPhone || w < 640;
-      const tablet = isIpad || isAndroidTablet || (w >= 640 && w < 1024);
-      setIsMobile(mobile);
-      setDeviceType(mobile ? "mobile" : tablet ? "tablet" : "desktop");
-    };
+    const check = () => setIsMobile(window.innerWidth < 640);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
-
-  // Waveform e VU — desabilitados por padrão em mobile/tablet
-  const [showWaveform, setShowWaveform] = useState(true);
-  const [showVU, setShowVU] = useState(true);
-  useEffect(() => {
-    if (deviceType === "mobile" || deviceType === "tablet") {
-      setShowWaveform(false);
-      setShowVU(false);
-    }
-  }, [deviceType]);
-
-  // Painel de performance
-  const [showPerfPanel, setShowPerfPanel] = useState(false);
-  const [perfMetrics, setPerfMetrics] = useState<{
-    fps: number;
-    memory: number | null; memoryLimit: number | null;
-    audioCtxState: string; latency: number | null;
-    bufferCount: number; analyserCount: number;
-  } | null>(null);
   const [mixerPos, setMixerPos] = useState({ x: 0, y: 0 });
   const [mixerSize, setMixerSize] = useState({ w: 0, h: 340 });
   const [mixerInitialized, setMixerInitialized] = useState(false);
@@ -434,6 +438,8 @@ export default function MultitracksPlayerPage() {
   const soundTouchNodesRef = useRef<SoundTouchNode[]>([]); // AudioWorklet nodes para pitch
   const workletReadyRef = useRef(false); // true após audioWorklet.addModule
   const buffersRef = useRef<AudioBuffer[]>([]);
+  const fullBuffersRef = useRef<ArrayBuffer[]>([]); // buffer completo por stem (pode chegar depois)
+  const prefetchingRef = useRef<Set<number>>(new Set()); // stems com prefetch em andamento
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
   const animFrameRef = useRef<number>(0);
@@ -532,18 +538,50 @@ export default function MultitracksPlayerPage() {
     if (!audioCtxRef.current) audioCtxRef.current = ctx;
 
     // Carregar todos os stems e depois gerar waveforms com a duração máxima
+    // ── Carregamento progressivo ──────────────────────────────────────────────
+    // Fase 1: baixar chunk inicial de cada stem → decodificar → liberar play
+    // Fase 2: baixar restante em background → atualizar buffer sem interromper
     const loadAll = async () => {
-      const decodePromises = stems.map(async (stem, i) => {
-        if (!stem.loading) return;
+      // Fase 1 — chunk inicial em paralelo (limitado a 3 simultâneos para não saturar)
+      const PARALLEL = 3;
+      const loadInitial = async (stem: typeof stems[0], i: number) => {
+        if (!stem.loading) return null;
         try {
-          const buf = await fetchWithCache(stem.url);
+          const { buffer, totalSize, complete } = await fetchInitialChunk(stem.url);
           setCachedStems((prev) => new Set(prev).add(i));
-          const decoded = await ctx.decodeAudioData(buf);
+
+          // Decodificar chunk inicial (pode ser parcial)
+          const decoded = await ctx.decodeAudioData(buffer.slice(0));
           buffersRef.current[i] = decoded;
-          // Marcar como carregado (sem waveform ainda)
+          fullBuffersRef.current[i] = buffer;
+
           setStems((prev) => prev.map((s, idx) =>
             idx === i ? { ...s, loading: false, ready: true } : s
           ));
+
+          // Fase 2 — se não está completo, baixar restante em background
+          if (!complete && !prefetchingRef.current.has(i)) {
+            prefetchingRef.current.add(i);
+            fetchRemainder(stem.url, buffer.byteLength, async (fullBuffer) => {
+              try {
+                // Substituir buffer com versão completa (sem interromper playback)
+                const fullDecoded = await ctx.decodeAudioData(fullBuffer.slice(0));
+                buffersRef.current[i] = fullDecoded;
+                fullBuffersRef.current[i] = fullBuffer;
+                prefetchingRef.current.delete(i);
+                // Atualizar waveform com duração real
+                const maxDur = Math.max(...buffersRef.current.map(b => b?.duration || 0), 0.001);
+                const waveformData = await generateWaveform(fullDecoded, 200, maxDur);
+                setStems((prev) => prev.map((s, idx) =>
+                  idx === i ? { ...s, waveformData } : s
+                ));
+              } catch (err) {
+                console.warn(`[multitracks] Fase 2 stem ${i} falhou:`, err);
+                prefetchingRef.current.delete(i);
+              }
+            });
+          }
+
           return decoded;
         } catch (err) {
           console.warn(`[multitracks] Stem ${i} (${stem.name}) falhou:`, err);
@@ -552,16 +590,22 @@ export default function MultitracksPlayerPage() {
           ));
           return null;
         }
-      });
+      };
 
-      const decoded = await Promise.all(decodePromises);
+      // Carregar em grupos de PARALLEL stems
+      const results: (AudioBuffer | null)[] = [];
+      for (let i = 0; i < stems.length; i += PARALLEL) {
+        const group = stems.slice(i, i + PARALLEL);
+        const groupResults = await Promise.all(group.map((s, j) => loadInitial(s, i + j)));
+        results.push(...groupResults);
+      }
 
-      // Duração total = stem mais longo
-      const maxDuration = Math.max(...decoded.map(d => d?.duration || 0), 0.001);
+      // Duração total baseada nos buffers iniciais (será atualizada pela fase 2)
+      const maxDuration = Math.max(...results.map(d => d?.duration || 0), 0.001);
       setDuration(maxDuration);
 
-      // Gerar waveforms com a duração total como referência
-      await Promise.all(decoded.map(async (d, i) => {
+      // Gerar waveforms dos chunks iniciais
+      await Promise.all(results.map(async (d, i) => {
         if (!d) return;
         const waveformData = await generateWaveform(d, 200, maxDuration);
         setStems((prev) => prev.map((s, idx) =>
@@ -878,13 +922,13 @@ export default function MultitracksPlayerPage() {
           break;
         case "KeyX":
           e.preventDefault();
-          handleToggleMixer();
+          setShowMixer(v => !v);
           break;
         case "Comma": // Shift+< diminui tom
-          if (e.shiftKey) { e.preventDefault(); handleTransposeChange(-1); }
+          if (e.shiftKey) { e.preventDefault(); setTranspose(v => Math.max(-6, v - 1)); }
           break;
         case "Period": // Shift+> aumenta tom
-          if (e.shiftKey) { e.preventDefault(); handleTransposeChange(1); }
+          if (e.shiftKey) { e.preventDefault(); setTranspose(v => Math.min(6, v + 1)); }
           break;
         case "Escape":
           if (scheduledJumpRef.current) {
@@ -912,7 +956,7 @@ export default function MultitracksPlayerPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker, recordingShortcut, saveShortcuts, handleToggleMixer, handleTransposeChange]);
+  }, [isPlaying, currentTime, duration, stems, selectedStem, markers, stopAll, playAll, jumpToMarker, recordingShortcut, saveShortcuts]);
 
   const togglePlay = () => {
     if (isPlaying) { stopAll(); offsetRef.current = currentTime; setIsPlaying(false); }
@@ -983,41 +1027,12 @@ export default function MultitracksPlayerPage() {
     ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000))
     : 0;
 
-  // Coletar métricas de performance — deve ficar antes de qualquer return condicional
-  useEffect(() => {
-    if (!showPerfPanel) return;
-    let frames = 0, lastT = performance.now(), raf: number;
-    const tick = () => {
-      frames++;
-      const now = performance.now();
-      if (now - lastT >= 1000) {
-        const fps = Math.round(frames * 1000 / (now - lastT));
-        frames = 0; lastT = now;
-        const mem = (performance as any).memory;
-        const ctx = audioCtxRef.current;
-        setPerfMetrics({
-          fps,
-          memory:        mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
-          memoryLimit:   mem ? Math.round(mem.jsHeapSizeLimit / 1048576) : null,
-          audioCtxState: ctx?.state ?? "—",
-          latency:       ctx?.baseLatency != null ? Math.round(ctx.baseLatency * 1000) : null,
-          bufferCount:   buffersRef.current.filter(Boolean).length,
-          analyserCount: analyserNodesRef.current.filter(Boolean).length,
-        });
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [showPerfPanel]);
-
   if (loading || status === "loading") {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
   if (!album) return null;
 
   return (
-    <>
     <div className="fixed inset-0 top-[64px] flex flex-col bg-background z-10">
       {/* Header */}
       <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-2 sm:py-3 border-b border-border flex-shrink-0">
@@ -1055,79 +1070,25 @@ export default function MultitracksPlayerPage() {
           {/* Controle de Tom */}
           <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-1.5 py-0.5">
             <span className="text-[10px] text-muted-foreground font-medium mr-0.5">Tom</span>
-            <button onClick={() => handleTransposeChange(-1)}
-              className={cn(
-                "h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground transition-colors",
-                isMobileOrTablet
-                  ? "opacity-45 cursor-not-allowed"
-                  : "hover:text-foreground hover:bg-muted"
-              )}
-              aria-disabled={isMobileOrTablet}
-              title={isMobileOrTablet ? "Disponível apenas no computador" : "Diminuir tom"}
-            >−</button>
+            <button onClick={() => setTranspose(v => Math.max(-6, v - 1))}
+              className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">−</button>
             <span className={cn("text-xs font-bold tabular-nums w-6 text-center",
               transpose > 0 ? "text-emerald-400" : transpose < 0 ? "text-amber-400" : "text-muted-foreground")}>
               {transpose > 0 ? `+${transpose}` : transpose}
             </span>
-            <button onClick={() => handleTransposeChange(1)}
-              className={cn(
-                "h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground transition-colors",
-                isMobileOrTablet
-                  ? "opacity-45 cursor-not-allowed"
-                  : "hover:text-foreground hover:bg-muted"
-              )}
-              aria-disabled={isMobileOrTablet}
-              title={isMobileOrTablet ? "Disponível apenas no computador" : "Aumentar tom"}
-            >+</button>
+            <button onClick={() => setTranspose(v => Math.min(6, v + 1))}
+              className="h-5 w-5 rounded flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">+</button>
             {transpose !== 0 && (
-              <button onClick={() => {
-                if (isMobileOrTablet) {
-                  showDesktopOnlyMessage();
-                  return;
-                }
-                setTranspose(0);
-              }}
-                className={cn(
-                  "h-4 w-4 rounded flex items-center justify-center text-[9px] ml-0.5",
-                  isMobileOrTablet
-                    ? "text-muted-foreground/35 cursor-not-allowed"
-                    : "text-muted-foreground/50 hover:text-muted-foreground"
-                )}
-                aria-disabled={isMobileOrTablet}
-                title={isMobileOrTablet ? "Disponível apenas no computador" : "Resetar tom"}
-              >↺</button>
+              <button onClick={() => setTranspose(0)}
+                className="h-4 w-4 rounded flex items-center justify-center text-[9px] text-muted-foreground/50 hover:text-muted-foreground ml-0.5" title="Resetar tom">↺</button>
             )}
           </div>
-          <button onClick={() => setShowWaveform(v => !v)}
-            title={showWaveform ? "Ocultar waveform" : "Mostrar waveform"}
-            className={cn("rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all",
-              showWaveform ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-white/30 hover:text-white/60"
-            )}>~W</button>
-          <button onClick={() => setShowVU(v => !v)}
-            title={showVU ? "Ocultar VU" : "Mostrar VU"}
-            className={cn("rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all",
-              showVU ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-white/30 hover:text-white/60"
-            )}>VU</button>
-          {deviceType !== "desktop" && (
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold text-amber-400">
-              {deviceType === "tablet" ? "TABLET" : "MOBILE"}
-            </span>
-          )}
-          <button onClick={() => setShowPerfPanel(v => !v)}
-            title="Métricas de performance"
-            className={cn("rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all",
-              showPerfPanel ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-white/30 hover:text-white/60"
-            )}>⚡</button>
           <button
-            onClick={handleToggleMixer}
+            onClick={() => setShowMixer(v => !v)}
             className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
-              showMixer
-                ? "border-primary/50 bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30",
-              isMobileOrTablet && "opacity-50 cursor-not-allowed"
+              showMixer ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
             )}
-            aria-disabled={isMobileOrTablet}
-            title={isMobileOrTablet ? "Mixer disponível apenas no computador" : "Mixer (X)"}>
+            title="Mixer (X)">
             🎛 Mixer
           </button>
         </div>
@@ -1494,18 +1455,16 @@ export default function MultitracksPlayerPage() {
                     className="w-14 accent-primary h-1" disabled={stem.muted} />
                 </div>
                 {/* VU meter horizontal — atualizado via DOM ref, zero re-renders */}
-                {showVU && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[9px] text-muted-foreground w-4">VU</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                      <div
-                        ref={(el) => { vuBarRefsMain.current[i] = el; }}
-                        className="h-full rounded-full"
-                        style={{ width: "0%", backgroundColor: stem.color, opacity: stem.muted ? 0.2 : 0.9, transition: "width 60ms linear" }}
-                      />
-                    </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] text-muted-foreground w-4">VU</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      ref={(el) => { vuBarRefsMain.current[i] = el; }}
+                      className="h-full rounded-full"
+                      style={{ width: "0%", backgroundColor: stem.color, opacity: stem.muted ? 0.2 : 0.9, transition: "width 60ms linear" }}
+                    />
                   </div>
-                )}
+                </div>
               </div>
               <PanKnob value={stem.pan} onChange={(v) => updateStem(i, { pan: v })} />
             </div>
@@ -1524,7 +1483,7 @@ export default function MultitracksPlayerPage() {
                   <div className="h-full flex items-center px-2">
                     <div className="h-1 w-full rounded bg-muted animate-pulse" />
                   </div>
-                ) : stem.waveformData && showWaveform ? (
+                ) : stem.waveformData ? (
                   <WaveformBar
                     data={stem.waveformData}
                     progress={zoom > 1
@@ -1816,92 +1775,5 @@ export default function MultitracksPlayerPage() {
         );
       })()}
     </div>
-
-    {/* Painel de Performance */}
-    {showPerfPanel && (
-      <div className="fixed bottom-20 right-4 z-[60] w-52 rounded-xl border border-emerald-500/30 bg-[#0b0d12]/95 backdrop-blur-md p-3 shadow-2xl font-mono text-[11px]">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-emerald-400 font-bold text-[10px] uppercase tracking-wider">⚡ Performance</span>
-          <button onClick={() => setShowPerfPanel(false)} className="text-white/30 hover:text-white/70 text-xs">✕</button>
-        </div>
-        {perfMetrics ? (
-          <div className="space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-white/40">FPS</span>
-              <span className={cn("font-bold", perfMetrics.fps >= 50 ? "text-emerald-400" : perfMetrics.fps >= 30 ? "text-amber-400" : "text-red-400")}>
-                {perfMetrics.fps}
-              </span>
-            </div>
-            {perfMetrics.memory !== null && (<>
-              <div className="flex justify-between">
-                <span className="text-white/40">Memória JS</span>
-                <span className={cn("font-bold", perfMetrics.memory < 200 ? "text-emerald-400" : perfMetrics.memory < 400 ? "text-amber-400" : "text-red-400")}>
-                  {perfMetrics.memory} MB
-                </span>
-              </div>
-              {perfMetrics.memoryLimit && (
-                <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                  <div className={cn("h-full rounded-full transition-all",
-                    perfMetrics.memory / perfMetrics.memoryLimit < 0.5 ? "bg-emerald-500" :
-                    perfMetrics.memory / perfMetrics.memoryLimit < 0.75 ? "bg-amber-500" : "bg-red-500"
-                  )} style={{ width: `${Math.min(100, perfMetrics.memory / perfMetrics.memoryLimit * 100)}%` }} />
-                </div>
-              )}
-              {perfMetrics.memoryLimit && (
-                <div className="flex justify-between">
-                  <span className="text-white/40">Limite heap</span>
-                  <span className="text-white/50">{perfMetrics.memoryLimit} MB</span>
-                </div>
-              )}
-            </>)}
-            <div className="flex justify-between">
-              <span className="text-white/40">AudioCtx</span>
-              <span className={cn("font-bold", perfMetrics.audioCtxState === "running" ? "text-emerald-400" : "text-amber-400")}>
-                {perfMetrics.audioCtxState}
-              </span>
-            </div>
-            {perfMetrics.latency !== null && (
-              <div className="flex justify-between">
-                <span className="text-white/40">Latência</span>
-                <span className={cn("font-bold", perfMetrics.latency < 10 ? "text-emerald-400" : perfMetrics.latency < 30 ? "text-amber-400" : "text-red-400")}>
-                  {perfMetrics.latency} ms
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-white/40">Buffers</span>
-              <span className="text-white/70">{perfMetrics.bufferCount}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-white/40">Analisadores</span>
-              <span className="text-white/70">{perfMetrics.analyserCount}</span>
-            </div>
-            <div className="border-t border-white/5 pt-1.5 mt-0.5 space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-white/40">Dispositivo</span>
-                <span className="text-white/70 capitalize">{deviceType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/40">Waveform</span>
-                <button onClick={() => setShowWaveform(v => !v)}
-                  className={cn("font-bold", showWaveform ? "text-emerald-400" : "text-white/30")}>
-                  {showWaveform ? "on" : "off"}
-                </button>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/40">VU meter</span>
-                <button onClick={() => setShowVU(v => !v)}
-                  className={cn("font-bold", showVU ? "text-emerald-400" : "text-white/30")}>
-                  {showVU ? "on" : "off"}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-white/30 text-center py-2">Coletando dados...</p>
-        )}
-      </div>
-    )}
-    </>
   );
 }

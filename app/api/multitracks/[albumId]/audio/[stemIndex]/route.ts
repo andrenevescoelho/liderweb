@@ -55,26 +55,49 @@ export async function GET(
       return new NextResponse("Arquivo não encontrado no storage", { status: 404 });
     }
 
-    // Stream o áudio diretamente para o cliente
+    // Ler arquivo completo do R2
     const chunks: Uint8Array[] = [];
     const reader = response.Body.transformToWebStream().getReader();
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
     }
-
-    const buffer = Buffer.concat(chunks);
+    const fullBuffer = Buffer.concat(chunks);
+    const totalSize = fullBuffer.length;
     const contentType = stem.r2Key.endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
 
-    return new NextResponse(buffer, {
+    // Suporte a Range Requests (streaming progressivo)
+    const rangeHeader = req.headers.get("range");
+    if (rangeHeader) {
+      const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+      if (match) {
+        const start = match[1] ? parseInt(match[1]) : 0;
+        const end   = match[2] ? parseInt(match[2]) : totalSize - 1;
+        const chunkSize = end - start + 1;
+        const chunk = fullBuffer.slice(start, end + 1);
+
+        return new NextResponse(chunk, {
+          status: 206,
+          headers: {
+            "Content-Type":   contentType,
+            "Content-Length": String(chunkSize),
+            "Content-Range":  `bytes ${start}-${end}/${totalSize}`,
+            "Accept-Ranges":  "bytes",
+            "Cache-Control":  "private, max-age=3600",
+          },
+        });
+      }
+    }
+
+    // Sem Range — retornar arquivo completo
+    return new NextResponse(fullBuffer, {
       status: 200,
       headers: {
-        "Content-Type": contentType,
-        "Content-Length": String(buffer.length),
-        "Cache-Control": "private, max-age=3600",
-        "Accept-Ranges": "bytes",
+        "Content-Type":   contentType,
+        "Content-Length": String(totalSize),
+        "Accept-Ranges":  "bytes",
+        "Cache-Control":  "private, max-age=3600",
       },
     });
   } catch (err) {
