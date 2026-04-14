@@ -154,119 +154,49 @@ const WaveformBar = memo(function WaveformBar({ data, progress, color }: { data:
   return <canvas ref={canvasRef} className="w-full h-12" style={{ display: "block" }} />;
 });
 
-const CACHE_NAME = "liderweb-multitracks-v2";
+const CACHE_NAME = "liderweb-multitracks-v1";
 const CACHE_TTL_DAYS = 7;
 
-// Tamanho do chunk inicial para tocar rapidamente (~30s de MP3 320kbps ≈ 1.2MB)
-const INITIAL_CHUNK_BYTES = 1.5 * 1024 * 1024; // 1.5MB
-
-// Verifica se há cache completo válido para a URL
-async function getCached(url: string): Promise<ArrayBuffer | null> {
-  if (typeof window === "undefined" || !("caches" in window)) return null;
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(new Request(url));
-  if (!cached) return null;
-  const cachedAt = cached.headers.get("x-cached-at");
-  if (!cachedAt) return null;
-  const age = Date.now() - Number(cachedAt);
-  if (age > CACHE_TTL_DAYS * 24 * 60 * 60 * 1000) {
-    await cache.delete(new Request(url));
-    return null;
-  }
-  return cached.arrayBuffer();
-}
-
-// Salva buffer completo no cache
-async function saveCache(url: string, buffer: ArrayBuffer, contentType: string): Promise<void> {
-  if (typeof window === "undefined" || !("caches" in window)) return;
-  const cache = await caches.open(CACHE_NAME);
-  await cache.put(new Request(url), new Response(buffer.slice(0), {
-    headers: { "Content-Type": contentType, "x-cached-at": String(Date.now()) },
-  }));
-}
-
-// Baixar arquivo completo com cache
 async function fetchWithCache(url: string): Promise<ArrayBuffer> {
-  const cached = await getCached(url);
-  if (cached) return cached;
+  if (typeof window === "undefined" || !("caches" in window)) {
+    // Fallback para ambientes sem Cache API
+    return fetch(url).then((r) => r.arrayBuffer());
+  }
+
+  const cache = await caches.open(CACHE_NAME);
+  const cacheKey = new Request(url);
+
+  // Verificar cache existente
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const cachedAt = cached.headers.get("x-cached-at");
+    if (cachedAt) {
+      const age = Date.now() - Number(cachedAt);
+      const maxAge = CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
+      if (age < maxAge) {
+        return cached.arrayBuffer();
+      }
+      // Cache expirado — remove
+      await cache.delete(cacheKey);
+    }
+  }
+
+  // Baixar e armazenar no cache
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
   const buffer = await response.arrayBuffer();
-  const ct = response.headers.get("Content-Type") || "audio/mpeg";
-  await saveCache(url, buffer, ct);
-  return buffer;
-}
 
-// Baixar apenas o chunk inicial para tocar rapidamente
-async function fetchInitialChunk(url: string): Promise<{ buffer: ArrayBuffer; totalSize: number; complete: boolean }> {
-  // Se já tem cache completo, usar direto
-  const cached = await getCached(url);
-  if (cached) return { buffer: cached, totalSize: cached.byteLength, complete: true };
-
-  // Pedir apenas os primeiros INITIAL_CHUNK_BYTES bytes
-  const response = await fetch(url, {
-    headers: { "Range": `bytes=0-${INITIAL_CHUNK_BYTES - 1}` },
+  // Salvar no cache com timestamp
+  const cachedResponse = new Response(buffer.slice(0), {
+    headers: {
+      "Content-Type": response.headers.get("Content-Type") || "audio/wav",
+      "x-cached-at": String(Date.now()),
+    },
   });
+  await cache.put(cacheKey, cachedResponse);
 
-  if (response.status === 206) {
-    // Servidor suporta Range — retornar chunk inicial
-    const buffer = await response.arrayBuffer();
-    const contentRange = response.headers.get("Content-Range") ?? "";
-    const totalMatch = contentRange.match(/\/([0-9]+)/);
-    const totalSize = totalMatch ? parseInt(totalMatch[1]) : buffer.byteLength;
-    const complete = buffer.byteLength >= totalSize;
-    if (complete) {
-      const ct = response.headers.get("Content-Type") || "audio/mpeg";
-      await saveCache(url, buffer, ct);
-    }
-    return { buffer, totalSize, complete };
-  } else {
-    // Servidor não suporta Range — baixar tudo
-    const buffer = await response.arrayBuffer();
-    const ct = response.headers.get("Content-Type") || "audio/mpeg";
-    await saveCache(url, buffer, ct);
-    return { buffer, totalSize: buffer.byteLength, complete: true };
-  }
-}
-
-// Baixar o restante do arquivo em background e atualizar cache
-async function fetchRemainder(
-  url: string,
-  initialBuffer: ArrayBuffer,  // chunk inicial já baixado
-  onComplete: (buffer: ArrayBuffer) => void
-): Promise<void> {
-  try {
-    const startByte = initialBuffer.byteLength;
-
-    const response = await fetch(url, {
-      headers: { "Range": `bytes=${startByte}-` },
-    });
-
-    // Se servidor não suporta Range ou retornou erro, baixar tudo do zero
-    if (response.status === 200) {
-      const fullBuffer = await response.arrayBuffer();
-      const ct = response.headers.get("Content-Type") || "audio/mpeg";
-      await saveCache(url, fullBuffer, ct);
-      onComplete(fullBuffer);
-      return;
-    }
-
-    if (!response.ok) return;
-
-    const remainder = await response.arrayBuffer();
-
-    // Combinar chunk inicial + restante em um único ArrayBuffer
-    const combined = new Uint8Array(startByte + remainder.byteLength);
-    combined.set(new Uint8Array(initialBuffer), 0);
-    combined.set(new Uint8Array(remainder), startByte);
-    const fullBuffer = combined.buffer;
-
-    const ct = response.headers.get("Content-Type") || "audio/mpeg";
-    await saveCache(url, fullBuffer, ct);
-    onComplete(fullBuffer);
-  } catch (err) {
-    console.warn("[multitracks] fetchRemainder failed:", err);
-  }
+  return buffer;
 }
 
 // Limpar entradas expiradas do cache
@@ -444,14 +374,13 @@ export default function MultitracksPlayerPage() {
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceNodesRef = useRef<AudioBufferSourceNode[]>([]);
+  const mutedBeforeSoloRef = useRef<boolean[]>([]); // estado de mute antes de entrar em solo
   const gainNodesRef = useRef<GainNode[]>([]);
   const panNodesRef = useRef<StereoPannerNode[]>([]);
   const analyserNodesRef = useRef<AnalyserNode[]>([]);
   const soundTouchNodesRef = useRef<SoundTouchNode[]>([]); // AudioWorklet nodes para pitch
   const workletReadyRef = useRef(false); // true após audioWorklet.addModule
   const buffersRef = useRef<AudioBuffer[]>([]);
-  const fullBuffersRef = useRef<ArrayBuffer[]>([]); // buffer completo por stem (pode chegar depois)
-  const prefetchingRef = useRef<Set<number>>(new Set()); // stems com prefetch em andamento
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
   const animFrameRef = useRef<number>(0);
@@ -550,54 +479,18 @@ export default function MultitracksPlayerPage() {
     if (!audioCtxRef.current) audioCtxRef.current = ctx;
 
     // Carregar todos os stems e depois gerar waveforms com a duração máxima
-    // ── Carregamento progressivo ──────────────────────────────────────────────
-    // Fase 1: baixar chunk inicial de cada stem → decodificar → liberar play
-    // Fase 2: baixar restante em background → atualizar buffer sem interromper
     const loadAll = async () => {
-      // Fase 1 — chunk inicial em paralelo (limitado a 3 simultâneos para não saturar)
-      const PARALLEL = 3;
-      const loadInitial = async (stem: typeof stems[0], i: number) => {
-        if (!stem.loading) return null;
+      const decodePromises = stems.map(async (stem, i) => {
+        if (!stem.loading) return;
         try {
-          const { buffer, totalSize, complete } = await fetchInitialChunk(stem.url);
+          const buf = await fetchWithCache(stem.url);
           setCachedStems((prev) => new Set(prev).add(i));
-
-          // Decodificar chunk inicial (pode ser parcial)
-          const decoded = await ctx.decodeAudioData(buffer.slice(0));
+          const decoded = await ctx.decodeAudioData(buf);
           buffersRef.current[i] = decoded;
-          fullBuffersRef.current[i] = buffer;
-          console.log(`[multitracks] Fase 1 stem ${i}: ${decoded.duration.toFixed(1)}s / total ${totalSize} bytes / complete=${complete}`);
-
+          // Marcar como carregado (sem waveform ainda)
           setStems((prev) => prev.map((s, idx) =>
             idx === i ? { ...s, loading: false, ready: true } : s
           ));
-
-          // Fase 2 — se não está completo, baixar restante em background
-          if (!complete && !prefetchingRef.current.has(i)) {
-            prefetchingRef.current.add(i);
-            const initialBuf = buffer; // capturar referência ao chunk inicial
-            fetchRemainder(stem.url, initialBuf, async (fullBuffer) => {
-              try {
-                // Substituir buffer com versão completa (sem interromper playback)
-                const fullDecoded = await ctx.decodeAudioData(fullBuffer.slice(0));
-                buffersRef.current[i] = fullDecoded;
-                fullBuffersRef.current[i] = fullBuffer;
-                prefetchingRef.current.delete(i);
-                // Atualizar duração e waveform com valores reais do arquivo completo
-                const maxDur = Math.max(...buffersRef.current.map(b => b?.duration || 0), 0.001);
-                setDuration(maxDur); // atualizar duração total do player
-                const waveformData = await generateWaveform(fullDecoded, 200, maxDur);
-                setStems((prev) => prev.map((s, idx) =>
-                  idx === i ? { ...s, waveformData } : s
-                ));
-                console.log(`[multitracks] Fase 2 stem ${i} completo: ${fullDecoded.duration.toFixed(1)}s`);
-              } catch (err) {
-                console.warn(`[multitracks] Fase 2 stem ${i} falhou:`, err);
-                prefetchingRef.current.delete(i);
-              }
-            });
-          }
-
           return decoded;
         } catch (err) {
           console.warn(`[multitracks] Stem ${i} (${stem.name}) falhou:`, err);
@@ -606,22 +499,16 @@ export default function MultitracksPlayerPage() {
           ));
           return null;
         }
-      };
+      });
 
-      // Carregar em grupos de PARALLEL stems
-      const results: (AudioBuffer | null)[] = [];
-      for (let i = 0; i < stems.length; i += PARALLEL) {
-        const group = stems.slice(i, i + PARALLEL);
-        const groupResults = await Promise.all(group.map((s, j) => loadInitial(s, i + j)));
-        results.push(...groupResults);
-      }
+      const decoded = await Promise.all(decodePromises);
 
-      // Duração total baseada nos buffers iniciais (será atualizada pela fase 2)
-      const maxDuration = Math.max(...results.map(d => d?.duration || 0), 0.001);
+      // Duração total = stem mais longo
+      const maxDuration = Math.max(...decoded.map(d => d?.duration || 0), 0.001);
       setDuration(maxDuration);
 
-      // Gerar waveforms dos chunks iniciais
-      await Promise.all(results.map(async (d, i) => {
+      // Gerar waveforms com a duração total como referência
+      await Promise.all(decoded.map(async (d, i) => {
         if (!d) return;
         const waveformData = await generateWaveform(d, 200, maxDuration);
         setStems((prev) => prev.map((s, idx) =>
@@ -933,7 +820,14 @@ export default function MultitracksPlayerPage() {
         case "KeyS":
           if (selectedStem !== null) {
             const isSolo = stems[selectedStem]?.solo;
-            setStems((prev) => prev.map((s, idx) => ({ ...s, solo: idx === selectedStem ? !isSolo : false, muted: false })));
+            setStems((prev) => {
+              if (!isSolo) mutedBeforeSoloRef.current = prev.map(s => s.muted);
+              return prev.map((s, idx) => ({
+                ...s,
+                solo: idx === selectedStem ? !isSolo : false,
+                muted: isSolo ? (mutedBeforeSoloRef.current[idx] ?? false) : false,
+              }));
+            });
           }
           break;
         case "KeyX":
@@ -1027,7 +921,14 @@ export default function MultitracksPlayerPage() {
   const toggleSolo = (i: number) => {
     const isSolo = stems[i]?.solo;
     setStems((prev) => {
-      const next = prev.map((s, idx) => ({ ...s, solo: idx === i ? !isSolo : false, muted: false }));
+      // Ao ativar solo: guardar estado de mute atual
+      if (!isSolo) mutedBeforeSoloRef.current = prev.map(s => s.muted);
+      const next = prev.map((s, idx) => ({
+        ...s,
+        solo: idx === i ? !isSolo : false,
+        // Ao desativar solo: restaurar mute original de cada stem
+        muted: isSolo ? (mutedBeforeSoloRef.current[idx] ?? false) : false,
+      }));
       saveStemConfigs(next);
       return next;
     });
@@ -1748,7 +1649,7 @@ export default function MultitracksPlayerPage() {
                     <div className="flex gap-1 w-full px-2">
                       <button onClick={()=>updateStem(idx,{muted:!stem.muted,solo:false})} className="flex-1 rounded py-1 text-[9px] font-black transition-all"
                         style={{background:stem.muted?"rgba(239,68,68,0.25)":"rgba(255,255,255,0.05)",border:stem.muted?"1px solid rgba(239,68,68,0.5)":"1px solid rgba(255,255,255,0.08)",color:stem.muted?"#f87171":"rgba(255,255,255,0.3)",boxShadow:stem.muted?"0 0 8px rgba(239,68,68,0.3)":"none"}}>M</button>
-                      <button onClick={()=>setStems(prev=>prev.map((s,i)=>({...s,solo:i===idx?!stem.solo:false,muted:false})))} className="flex-1 rounded py-1 text-[9px] font-black transition-all"
+                      <button onClick={()=>setStems(prev=>{if(!stem.solo)mutedBeforeSoloRef.current=prev.map(s=>s.muted);return prev.map((s,i)=>({...s,solo:i===idx?!stem.solo:false,muted:stem.solo?(mutedBeforeSoloRef.current[i]??false):false}));})} className="flex-1 rounded py-1 text-[9px] font-black transition-all"
                         style={{background:stem.solo?"rgba(245,158,11,0.25)":"rgba(255,255,255,0.05)",border:stem.solo?"1px solid rgba(245,158,11,0.5)":"1px solid rgba(255,255,255,0.08)",color:stem.solo?"#fbbf24":"rgba(255,255,255,0.3)",boxShadow:stem.solo?"0 0 8px rgba(245,158,11,0.3)":"none"}}>S</button>
                     </div>
                     <div className="w-full h-1 rounded-full" style={{background:isAudible?`linear-gradient(90deg,${stem.color}40,${stem.color}80,${stem.color}40)`:"rgba(255,255,255,0.05)",boxShadow:isAudible&&level>0.05?`0 0 6px ${stem.color}60`:"none",transition:"box-shadow 100ms"}}/>

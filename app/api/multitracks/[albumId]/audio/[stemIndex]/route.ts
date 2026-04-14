@@ -43,19 +43,13 @@ export async function GET(
     const s3Client = createS3Client();
     const { bucketName } = getBucketConfig();
 
-    // Buscar o arquivo diretamente do R2 via SDK (server-side, sem CORS)
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: stem.r2Key,
-    });
-
+    const command = new GetObjectCommand({ Bucket: bucketName, Key: stem.r2Key });
     const response = await s3Client.send(command);
 
     if (!response.Body) {
       return new NextResponse("Arquivo não encontrado no storage", { status: 404 });
     }
 
-    // Ler arquivo completo do R2
     const chunks: Uint8Array[] = [];
     const reader = response.Body.transformToWebStream().getReader();
     while (true) {
@@ -63,48 +57,42 @@ export async function GET(
       if (done) break;
       chunks.push(value);
     }
+
     const fullBuffer = Buffer.concat(chunks);
     const totalSize = fullBuffer.length;
     const contentType = stem.r2Key.endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
 
-    // Suporte a Range Requests (streaming progressivo)
+    const baseHeaders = {
+      "Content-Type":           contentType,
+      "Accept-Ranges":          "bytes",
+      "Cache-Control":          "private, max-age=3600",
+      "Content-Disposition":    "inline",
+      "X-Content-Type-Options": "nosniff",
+      "X-Robots-Tag":           "noindex",
+    };
+
+    // Suporte a Range Requests
     const rangeHeader = req.headers.get("range");
     if (rangeHeader) {
       const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
       if (match) {
         const start = match[1] ? parseInt(match[1]) : 0;
         const end   = match[2] ? parseInt(match[2]) : totalSize - 1;
-        const chunkSize = end - start + 1;
         const chunk = fullBuffer.slice(start, end + 1);
-
         return new NextResponse(chunk, {
           status: 206,
           headers: {
-            "Content-Type":        contentType,
-            "Content-Length":      String(chunkSize),
-            "Content-Range":       `bytes ${start}-${end}/${totalSize}`,
-            "Accept-Ranges":       "bytes",
-            "Cache-Control":       "private, max-age=3600",
-            "Content-Disposition": "inline",
-            "X-Content-Type-Options": "nosniff",
-            "X-Robots-Tag":        "noindex",
+            ...baseHeaders,
+            "Content-Length": String(chunk.length),
+            "Content-Range":  `bytes ${start}-${end}/${totalSize}`,
           },
         });
       }
     }
 
-    // Sem Range — retornar arquivo completo
     return new NextResponse(fullBuffer, {
       status: 200,
-      headers: {
-        "Content-Type":        contentType,
-        "Content-Length":      String(totalSize),
-        "Accept-Ranges":       "bytes",
-        "Cache-Control":       "private, max-age=3600",
-        "Content-Disposition": "inline",
-        "X-Content-Type-Options": "nosniff",
-        "X-Robots-Tag":        "noindex",
-      },
+      headers: { ...baseHeaders, "Content-Length": String(totalSize) },
     });
   } catch (err) {
     console.error("[audio-proxy] error:", err);
