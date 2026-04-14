@@ -31,6 +31,7 @@ import {
   XCircle,
   ExternalLink,
   Loader2,
+  ArrowUpRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -652,6 +653,27 @@ export default function AdminPage() {
     else alert("Erro ao apagar música");
   };
 
+  const handlePromoteSong = async (song: SongAdmin) => {
+    if (!confirm(`Promover "${song.title}" para o catálogo global?\nUma cópia será criada sem vínculo com nenhum ministério.`)) return;
+    const res = await fetch("/api/songs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title:       song.title,
+        artist:      song.artist,
+        bpm:         song.bpm,
+        originalKey: song.originalKey,
+        youtubeUrl:  song.youtubeUrl,
+      }),
+    });
+    if (res.ok) {
+      fetchSongs(songSearch);
+    } else {
+      const d = await res.json();
+      alert(d.error || "Erro ao promover música");
+    }
+  };
+
   const getRoleBadge = (role: string) => {
     const variants: Record<string, "default" | "success" | "warning" | "info"> = {
       SUPERADMIN: "default",
@@ -1000,16 +1022,29 @@ export default function AdminPage() {
                             </a>
                           )}
                           {song.groupId && song._group && (
-                            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                               {song._group.name}
                             </span>
                           )}
                           {!song.groupId && (
-                            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded">Global</span>
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded font-semibold">
+                              ✦ Global
+                            </span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* Promover para global — só aparece em músicas de grupo */}
+                        {song.groupId && (
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={() => handlePromoteSong(song)}
+                            className="h-7 px-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-600 hover:bg-emerald-500/10 gap-1"
+                            title="Promover para catálogo global">
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                            Global
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => handleEditSong(song)} className="h-7 w-7 p-0">
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
