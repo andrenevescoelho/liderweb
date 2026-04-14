@@ -635,6 +635,10 @@ function SongModal({
   const [communitySongs, setCommunitySongs] = useState<any[]>([]);
   const [loadingCommunitySongs, setLoadingCommunitySongs] = useState(false);
   const [addingSongId, setAddingSongId] = useState("");
+  const [showCommunityModal, setShowCommunityModal] = useState(false);
+  const [communitySearch, setCommunitySearch] = useState("");
+  const [communitySort, setCommunitySort] = useState<"title"|"artist"|"bpm"|"recent">("title");
+  const [communitySortAsc, setCommunitySortAsc] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -675,9 +679,9 @@ function SongModal({
     const fetchCommunitySongs = async () => {
       setLoadingCommunitySongs(true);
       try {
-        const res = await fetch("/api/songs?library=community");
+        const res = await fetch("/api/songs?library=community&limit=500");
         const data = await res.json();
-        setCommunitySongs(Array.isArray(data) ? data : []);
+        setCommunitySongs(Array.isArray(data) ? data : (data?.songs ?? []));
       } catch (error) {
         console.error(error);
       } finally {
@@ -834,7 +838,126 @@ function SongModal({
     }
   };
 
+  // Lista filtrada e ordenada do catálogo comunitário
+  const filteredCommunity = communitySongs
+    .filter(s =>
+      !communitySearch ||
+      s.title?.toLowerCase().includes(communitySearch.toLowerCase()) ||
+      (s.artist ?? "").toLowerCase().includes(communitySearch.toLowerCase())
+    )
+    .sort((a, b) => {
+      let cmp = 0;
+      if (communitySort === "title")  cmp = (a.title ?? "").localeCompare(b.title ?? "", "pt");
+      if (communitySort === "artist") cmp = (a.artist ?? "").localeCompare(b.artist ?? "", "pt");
+      if (communitySort === "bpm")    cmp = (b.bpm ?? 0) - (a.bpm ?? 0);
+      if (communitySort === "recent") cmp = new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+      return communitySortAsc ? cmp : -cmp;
+    });
+
   return (
+    <>
+    {/* Modal de busca no catálogo comunitário */}
+    {showCommunityModal && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCommunityModal(false)} />
+        <div className="relative bg-background rounded-2xl border border-border shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-500" />
+              <h2 className="font-semibold text-base">Catálogo de músicas</h2>
+              <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                {filteredCommunity.length} de {communitySongs.length}
+              </span>
+            </div>
+            <button onClick={() => setShowCommunityModal(false)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Busca + ordenação */}
+          <div className="px-5 py-3 border-b border-border flex-shrink-0 space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar por título ou artista..."
+                value={communitySearch}
+                onChange={e => setCommunitySearch(e.target.value)}
+                autoFocus
+                className="w-full h-9 rounded-lg border border-border bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {communitySearch && (
+                <button onClick={() => setCommunitySearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-muted-foreground mr-1">Ordenar:</span>
+              {([
+                { key: "title",  label: "A–Z"      },
+                { key: "artist", label: "Artista"  },
+                { key: "bpm",    label: "BPM"      },
+                { key: "recent", label: "Recentes" },
+              ] as const).map(opt => (
+                <button key={opt.key}
+                  onClick={() => {
+                    if (communitySort === opt.key) setCommunitySortAsc(v => !v);
+                    else { setCommunitySort(opt.key); setCommunitySortAsc(true); }
+                  }}
+                  className={cn(
+                    "h-7 flex items-center gap-0.5 rounded-lg border px-2.5 text-xs font-medium transition-all",
+                    communitySort === opt.key
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/30"
+                  )}>
+                  {opt.label}
+                  {communitySort === opt.key && <span className="text-[10px]">{communitySortAsc ? "↑" : "↓"}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Lista */}
+          <div className="flex-1 overflow-y-auto divide-y divide-border">
+            {filteredCommunity.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Music className="h-10 w-10 mb-3 opacity-20" />
+                <p className="text-sm">Nenhuma música encontrada.</p>
+              </div>
+            ) : filteredCommunity.map(s => (
+              <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{s.title}</p>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                    {s.artist && <span className="truncate max-w-[180px]">{s.artist}</span>}
+                    {s.bpm && <span className="bg-muted rounded px-1.5 py-0.5">{s.bpm} BPM</span>}
+                    {s.originalKey && <span className="bg-muted rounded px-1.5 py-0.5">{s.originalKey}</span>}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    await handleAddFromCommunity(s.id);
+                    setShowCommunityModal(false);
+                  }}
+                  disabled={!!addingSongId}
+                  className="flex-shrink-0">
+                  {addingSongId === s.id
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" />Adicionar</>}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -843,60 +966,31 @@ function SongModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
         {!song && (
-          <div className="space-y-3 p-4 border rounded-lg bg-purple-50/60 dark:bg-purple-900/10">
-            <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-              <Sparkles className="w-4 h-4" />
-              <h4 className="font-medium">Adicionar música já cadastrada</h4>
+          <div className="p-4 border rounded-lg bg-purple-50/60 dark:bg-purple-900/10">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                <Sparkles className="w-4 h-4" />
+                <div>
+                  <h4 className="font-medium text-sm">Adicionar música já cadastrada</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {loadingCommunitySongs ? "Carregando..." : `${communitySongs.length} músicas disponíveis`}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCommunityModal(true)}
+                disabled={loadingCommunitySongs || communitySongs.length === 0}
+                className="flex items-center gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300"
+              >
+                {loadingCommunitySongs
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Search className="w-3.5 h-3.5" />}
+                Buscar no catálogo
+              </Button>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Selecione uma música de outros grupos e adicione direto ao seu repertório.
-            </p>
-
-            {loadingCommunitySongs ? (
-              <div className="flex items-center justify-center h-20">
-                <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
-              </div>
-            ) : (communitySongs?.length ?? 0) === 0 ? (
-              <p className="text-sm text-gray-500">Nenhuma música compartilhada disponível no momento.</p>
-            ) : (
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {communitySongs.map((communitySong) => (
-                  <div
-                    key={communitySong?.id}
-                    className="min-w-[240px] max-w-[240px] border rounded-lg bg-white dark:bg-gray-900 p-3 space-y-2"
-                  >
-                    <div className="space-y-1">
-                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2">
-                        {communitySong?.title}
-                      </p>
-                      {communitySong?.artist && (
-                        <p className="text-xs text-gray-500">{communitySong.artist}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <Badge variant="info">{communitySong?.originalKey ?? "C"}</Badge>
-                      {communitySong?.bpm && <span>{communitySong.bpm} BPM</span>}
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleAddFromCommunity(communitySong?.id ?? "")}
-                      disabled={!!addingSongId}
-                    >
-                      {addingSongId === communitySong?.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 mr-1" />
-                          Adicionar ao repertório
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -1131,5 +1225,6 @@ function SongModal({
         </div>
       </form>
     </Modal>
+    </>
   );
 }
