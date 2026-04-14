@@ -5,7 +5,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
-// GET — listar todas as músicas (SUPERADMIN)
+/**
+ * GET — listar músicas para o painel SUPERADMIN
+ *
+ * Lógica de exibição:
+ * 1. Músicas globais (groupId = null) sempre aparecem
+ * 2. Músicas de grupos SÓ aparecem se não houver versão global com mesmo título+artista
+ *    → essas são candidatas a "Promover para global"
+ */
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,7 +24,6 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search")?.trim() ?? "";
-    const limit  = Number(searchParams.get("limit") ?? 200);
 
     const songs = await prisma.song.findMany({
       where: search ? {
@@ -26,8 +32,8 @@ export async function GET(req: NextRequest) {
           { artist: { contains: search, mode: "insensitive" } },
         ],
       } : {},
-      orderBy: { title: "asc" },
-      take: limit,
+      orderBy: [{ title: "asc" }, { groupId: "asc" }],
+      take: 1000,
       select: {
         id: true,
         title: true,
@@ -41,13 +47,45 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Separar globais e de grupos
+    const globals = new Set<string>();
+    for (const s of songs) {
+      if (!s.groupId) {
+        const key = `${s.title.toLowerCase().trim()}||${(s.artist ?? "").toLowerCase().trim()}`;
+        globals.add(key);
+      }
+    }
+
+    // Montar lista final:
+    // - Todas as globais
+    // - Músicas de grupos que NÃO têm versão global (candidatas a promover)
+    const seen = new Map<string, typeof songs[0]>();
+
+    for (const song of songs) {
+      const key = `${song.title.toLowerCase().trim()}||${(song.artist ?? "").toLowerCase().trim()}`;
+
+      if (!song.groupId) {
+        // Global — sempre incluir
+        seen.set(key, song);
+      } else if (!globals.has(key) && !seen.has(key)) {
+        // De grupo sem versão global — mostrar como candidata
+        seen.set(key, song);
+      }
+    }
+
+    const result = Array.from(seen.values()).sort((a, b) =>
+      a.title.localeCompare(b.title, "pt")
+    );
+
     return NextResponse.json({
-      songs: songs.map(s => ({
+      songs: result.map(s => ({
         ...s,
         _group: s.group,
         group: undefined,
+        needsPromotion: s.groupId !== null, // sinaliza que precisa ser promovida
       })),
-      total: songs.length,
+      total: result.length,
+      globalCount: globals.size,
     });
   } catch (err: any) {
     console.error("[songs/admin-list] error:", err);
