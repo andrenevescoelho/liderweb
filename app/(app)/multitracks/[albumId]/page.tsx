@@ -232,24 +232,36 @@ async function fetchInitialChunk(url: string): Promise<{ buffer: ArrayBuffer; to
 // Baixar o restante do arquivo em background e atualizar cache
 async function fetchRemainder(
   url: string,
-  startByte: number,
+  initialBuffer: ArrayBuffer,  // chunk inicial já baixado
   onComplete: (buffer: ArrayBuffer) => void
 ): Promise<void> {
   try {
+    const startByte = initialBuffer.byteLength;
+
     const response = await fetch(url, {
       headers: { "Range": `bytes=${startByte}-` },
     });
+
+    // Se servidor não suporta Range ou retornou erro, baixar tudo do zero
+    if (response.status === 200) {
+      const fullBuffer = await response.arrayBuffer();
+      const ct = response.headers.get("Content-Type") || "audio/mpeg";
+      await saveCache(url, fullBuffer, ct);
+      onComplete(fullBuffer);
+      return;
+    }
+
     if (!response.ok) return;
+
     const remainder = await response.arrayBuffer();
 
-    // Reconstruir arquivo completo combinando chunk inicial + restante
-    const initial = await getCached(url + "__initial__") ?? new ArrayBuffer(0);
+    // Combinar chunk inicial + restante em um único ArrayBuffer
     const combined = new Uint8Array(startByte + remainder.byteLength);
-    // Buscar o arquivo completo diretamente
-    const full = await fetch(url);
-    if (!full.ok) return;
-    const fullBuffer = await full.arrayBuffer();
-    const ct = full.headers.get("Content-Type") || "audio/mpeg";
+    combined.set(new Uint8Array(initialBuffer), 0);
+    combined.set(new Uint8Array(remainder), startByte);
+    const fullBuffer = combined.buffer;
+
+    const ct = response.headers.get("Content-Type") || "audio/mpeg";
     await saveCache(url, fullBuffer, ct);
     onComplete(fullBuffer);
   } catch (err) {
@@ -554,6 +566,7 @@ export default function MultitracksPlayerPage() {
           const decoded = await ctx.decodeAudioData(buffer.slice(0));
           buffersRef.current[i] = decoded;
           fullBuffersRef.current[i] = buffer;
+          console.log(`[multitracks] Fase 1 stem ${i}: ${decoded.duration.toFixed(1)}s / total ${totalSize} bytes / complete=${complete}`);
 
           setStems((prev) => prev.map((s, idx) =>
             idx === i ? { ...s, loading: false, ready: true } : s
@@ -562,19 +575,22 @@ export default function MultitracksPlayerPage() {
           // Fase 2 — se não está completo, baixar restante em background
           if (!complete && !prefetchingRef.current.has(i)) {
             prefetchingRef.current.add(i);
-            fetchRemainder(stem.url, buffer.byteLength, async (fullBuffer) => {
+            const initialBuf = buffer; // capturar referência ao chunk inicial
+            fetchRemainder(stem.url, initialBuf, async (fullBuffer) => {
               try {
                 // Substituir buffer com versão completa (sem interromper playback)
                 const fullDecoded = await ctx.decodeAudioData(fullBuffer.slice(0));
                 buffersRef.current[i] = fullDecoded;
                 fullBuffersRef.current[i] = fullBuffer;
                 prefetchingRef.current.delete(i);
-                // Atualizar waveform com duração real
+                // Atualizar duração e waveform com valores reais do arquivo completo
                 const maxDur = Math.max(...buffersRef.current.map(b => b?.duration || 0), 0.001);
+                setDuration(maxDur); // atualizar duração total do player
                 const waveformData = await generateWaveform(fullDecoded, 200, maxDur);
                 setStems((prev) => prev.map((s, idx) =>
                   idx === i ? { ...s, waveformData } : s
                 ));
+                console.log(`[multitracks] Fase 2 stem ${i} completo: ${fullDecoded.duration.toFixed(1)}s`);
               } catch (err) {
                 console.warn(`[multitracks] Fase 2 stem ${i} falhou:`, err);
                 prefetchingRef.current.delete(i);
