@@ -68,7 +68,12 @@ export default function LoginPage() {
     try {
       const result = await signIn("credentials", { email, password, redirect: false });
       if (result?.error) {
-        setError("Credenciais inválidas");
+        // Verificar se é erro de rate limit (mensagem começa com "Muitas tentativas")
+        if (result.error.includes("Muitas tentativas") || result.error.includes("tentativas")) {
+          setError(result.error);
+        } else {
+          setError("Credenciais inválidas");
+        }
         return;
       }
 
