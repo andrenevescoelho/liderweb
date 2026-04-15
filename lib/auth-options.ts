@@ -1,5 +1,69 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+
+// ── Rate limiter de login (in-memory) ────────────────────────────────────────
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS    = 15 * 60 * 1000; // 15 minutos
+const LOGIN_BLOCK_MS     = 30 * 60 * 1000; // bloqueio de 30 minutos
+
+interface LoginRecord { count: number; firstAt: number; blockedAt: number | null; }
+const loginAttempts = new Map<string, LoginRecord>();
+
+function checkRateLimit(email: string): { allowed: boolean; minutesLeft?: number } {
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const rec = loginAttempts.get(key);
+  if (!rec) return { allowed: true };
+
+  if (rec.blockedAt) {
+    const elapsed = now - rec.blockedAt;
+    if (elapsed < LOGIN_BLOCK_MS) {
+      return { allowed: false, minutesLeft: Math.ceil((LOGIN_BLOCK_MS - elapsed) / 60000) };
+    }
+    loginAttempts.delete(key);
+    return { allowed: true };
+  }
+
+  if (now - rec.firstAt > LOGIN_WINDOW_MS) {
+    loginAttempts.delete(key);
+    return { allowed: true };
+  }
+
+  if (rec.count >= LOGIN_MAX_ATTEMPTS) {
+    rec.blockedAt = now;
+    loginAttempts.set(key, rec);
+    return { allowed: false, minutesLeft: 30 };
+  }
+
+  return { allowed: true };
+}
+
+function recordFailedAttempt(email: string): void {
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const rec = loginAttempts.get(key);
+  if (!rec || now - rec.firstAt > LOGIN_WINDOW_MS) {
+    loginAttempts.set(key, { count: 1, firstAt: now, blockedAt: null });
+    return;
+  }
+  rec.count++;
+  loginAttempts.set(key, rec);
+}
+
+function clearLoginAttempts(email: string): void {
+  loginAttempts.delete(email.toLowerCase().trim());
+}
+
+// Limpar entradas expiradas a cada hora
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, rec] of loginAttempts.entries()) {
+    const expiry = rec.blockedAt
+      ? rec.blockedAt + LOGIN_BLOCK_MS
+      : rec.firstAt + LOGIN_WINDOW_MS;
+    if (now > expiry) loginAttempts.delete(key);
+  }
+}, 60 * 60 * 1000);
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import type { Adapter, AdapterUser } from "next-auth/adapters";
@@ -95,6 +159,13 @@ export const authOptions: NextAuthOptions = {
         }
 
         const normalizedEmail = credentials.email.trim();
+
+        // Rate limit — bloquear após 5 tentativas em 15 minutos
+        const rateCheck = checkRateLimit(normalizedEmail);
+        if (!rateCheck.allowed) {
+          console.warn(`[auth] Login bloqueado por rate limit: ${normalizedEmail} (${rateCheck.minutesLeft} min restantes)`);
+          throw new Error(`Muitas tentativas. Tente novamente em ${rateCheck.minutesLeft} minutos.`);
+        }
         
         const user = await prisma.user.findFirst({
           where: {
@@ -120,6 +191,7 @@ export const authOptions: NextAuthOptions = {
         });
         
         if (!user) {
+          recordFailedAttempt(normalizedEmail);
           await logUserAction({
             action: AUDIT_ACTIONS.LOGIN_FAILED,
             entityType: AuditEntityType.AUTH,
@@ -131,6 +203,7 @@ export const authOptions: NextAuthOptions = {
         
         const isValid = await verifyPassword(credentials.password, user.password, user.id);
         if (!isValid) {
+          recordFailedAttempt(normalizedEmail);
           await logUserAction({
             userId: user.id,
             groupId: user.groupId,
@@ -142,6 +215,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        clearLoginAttempts(normalizedEmail);
         await logUserAction({
           userId: user.id,
           groupId: user.groupId,
