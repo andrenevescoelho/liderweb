@@ -9,6 +9,7 @@ import {
   Guitar, Piano, Drumstick, Zap, Clock, CheckCircle2, XCircle,
   Play, Pause, Volume2, VolumeX, Download, ChevronDown, ChevronRight,
   Timer, MapPin, Lock, ArrowUpRight, RefreshCw, AlertCircle, Trash2,
+  ShoppingCart, Globe, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -250,6 +251,16 @@ export default function SplitsPage() {
   const [quota, setQuota] = useState(0);
   const [usedThisMonth, setUsedThisMonth] = useState(0);
 
+  // Catálogo público
+  const [catalog, setCatalog] = useState<any[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [buyingId, setBuyingId] = useState<string | null>(null);
+
+  // Verificação de duplicata
+  const [duplicateCheck, setDuplicateCheck] = useState<{ duplicate: boolean; location?: string; message?: string; job?: any; priceInCents?: number } | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+
   // Upload form
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -283,7 +294,44 @@ export default function SplitsPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  useEffect(() => { fetchJobs(); fetchCatalog(); }, [fetchJobs]);
+
+  const fetchCatalog = async (search = "") => {
+    setLoadingCatalog(true);
+    try {
+      const res = await fetch(`/api/splits/catalog?search=${encodeURIComponent(search)}`);
+      const data = await res.json();
+      setCatalog(data.catalog ?? []);
+    } catch {}
+    finally { setLoadingCatalog(false); }
+  };
+
+  const checkDuplicate = async (name: string, artist: string) => {
+    if (!name.trim()) { setDuplicateCheck(null); return; }
+    setCheckingDuplicate(true);
+    try {
+      const res = await fetch(`/api/splits/check-duplicate?songName=${encodeURIComponent(name)}&artistName=${encodeURIComponent(artist)}`);
+      const data = await res.json();
+      setDuplicateCheck(data.duplicate ? data : null);
+    } catch {}
+    finally { setCheckingDuplicate(false); }
+  };
+
+  const handleBuyCatalog = async (jobId: string) => {
+    setBuyingId(jobId);
+    try {
+      const res = await fetch("/api/splits/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || "Erro ao adquirir split"); return; }
+      toast.success("Split adicionado ao seu acervo!");
+      fetchJobs();
+      fetchCatalog();
+    } finally { setBuyingId(null); }
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
@@ -433,12 +481,113 @@ export default function SplitsPage() {
             </p>
           </div>
 
+          {/* Aviso de duplicata */}
+          {checkingDuplicate && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verificando catálogo...
+            </div>
+          )}
+          {duplicateCheck && !checkingDuplicate && (
+            <div className={cn("rounded-xl border p-3 text-sm",
+              duplicateCheck.location === "own"
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                : "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400"
+            )}>
+              <div className="flex items-start gap-2">
+                {duplicateCheck.location === "own"
+                  ? <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                  : <Globe className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-500" />
+                }
+                <div className="flex-1">
+                  <p className="font-medium mb-1">{duplicateCheck.message}</p>
+                  {duplicateCheck.location === "catalog" && duplicateCheck.job && (
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="text-xs opacity-75">
+                        {duplicateCheck.job.stems?.length} stems
+                        {duplicateCheck.job.bpm && ` · ${duplicateCheck.job.bpm} BPM`}
+                        {duplicateCheck.job.musicalKey && ` · ${duplicateCheck.job.musicalKey}`}
+                      </div>
+                      <Button size="sm" variant="outline"
+                        className="h-7 text-xs border-blue-500/40 text-blue-600 hover:bg-blue-500/10"
+                        onClick={() => handleBuyCatalog(duplicateCheck.job.id)}
+                        disabled={buyingId === duplicateCheck.job.id}>
+                        {buyingId === duplicateCheck.job.id
+                          ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          : <ShoppingCart className="h-3 w-3 mr-1" />}
+                        Adquirir por R${((duplicateCheck.priceInCents ?? 490) / 100).toFixed(2).replace(".", ",")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">O processamento leva ~5 minutos. Você pode fechar esta página.</p>
-            <Button onClick={handleSubmit} disabled={!file || !songName.trim() || uploading || selectedStems.length === 0}>
+            <Button onClick={handleSubmit}
+              disabled={!file || !songName.trim() || uploading || selectedStems.length === 0 || duplicateCheck?.location === "own"}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Scissors className="h-4 w-4 mr-1.5" />}
               Separar stems
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Catálogo de splits disponíveis */}
+      {catalog.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" />
+              <h2 className="font-semibold text-sm">Catálogo de Splits</h2>
+              <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-bold">{catalog.length}</span>
+            </div>
+            <div className="relative">
+              <input type="text" placeholder="Buscar no catálogo..."
+                value={catalogSearch}
+                onChange={e => { setCatalogSearch(e.target.value); fetchCatalog(e.target.value); }}
+                className="h-8 w-48 rounded-lg border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Acesse splits já processados por outros ministérios. R$ 4,90 por acesso.
+          </p>
+          <div className="space-y-2">
+            {loadingCatalog ? (
+              <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            ) : catalog.filter(j => !j.alreadyOwned).length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">Nenhum split disponível no catálogo.</p>
+            ) : catalog.filter(j => !j.alreadyOwned).map(item => (
+              <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{item.songName}</p>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                    {item.artistName && <span>{item.artistName}</span>}
+                    {item.bpm && <span className="bg-muted rounded px-1.5 py-0.5">{item.bpm} BPM</span>}
+                    {item.musicalKey && <span className="bg-muted rounded px-1.5 py-0.5">{item.musicalKey}</span>}
+                    <span className="bg-muted rounded px-1.5 py-0.5">{item.stemsCount} stems</span>
+                  </div>
+                  {item.stems?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {item.stems.map((s: string) => (
+                        <span key={s} className="text-[10px] bg-primary/5 text-primary border border-primary/10 rounded px-1.5 py-0.5">{s}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button size="sm" variant="outline"
+                  onClick={() => handleBuyCatalog(item.id)}
+                  disabled={buyingId === item.id}
+                  className="flex-shrink-0 text-xs gap-1">
+                  {buyingId === item.id
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <ShoppingCart className="h-3.5 w-3.5" />}
+                  R$ {((item.priceInCents ?? 490) / 100).toFixed(2).replace(".", ",")}
+                </Button>
+              </div>
+            ))}
           </div>
         </div>
       )}
