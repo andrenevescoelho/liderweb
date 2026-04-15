@@ -628,7 +628,7 @@ export default function PadsPage() {
 
   // MODO CULTO — UI minimalista
   if(modeCulto) return (
-    <div className="fixed inset-0 bg-background flex flex-col" style={{top:64}}>
+    <div className="fixed inset-0 bg-gray-950 flex flex-col" style={{top:64}}>
       <div className="flex items-center justify-between px-6 py-3 border-b border-white/5">
         <span className="text-sm font-bold text-white/40">MODO CULTO</span>
         <div className="flex items-center gap-4">
@@ -752,7 +752,7 @@ export default function PadsPage() {
 
   // MODO NORMAL
   return (
-    <div className="flex bg-background overflow-hidden" style={{height:"calc(100vh - 64px)"}}>
+    <div className="flex bg-gray-950 overflow-hidden" style={{height:"calc(100vh - 64px)"}}>
 
       {/* GRID DE PADS (CENTRO - FOCO) */}
       <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden min-w-0">
