@@ -154,18 +154,9 @@ enum AuditEntityType {
 }
 
 enum MultitracksAlbumStatus {
-  PENDING      // cadastro em andamento pelo admin
-  CATALOGED    // metadados salvos, aguardando primeiro aluguel para baixar
-  DOWNLOADING  // download do Drive em andamento
-  READY        // stems no bucket, disponivel para uso
-  ERROR        // falha no processamento
-}
-
-enum MultitracksDownloadJobStatus {
-  PENDING      // aguardando worker processar
-  DOWNLOADING  // worker em execucao
-  DONE         // concluido com sucesso
-  ERROR        // falhou
+  PENDING
+  READY
+  ERROR
 }
 
 enum MultitracksRentalStatus {
@@ -283,7 +274,6 @@ model Subscription {
   cancelAtPeriodEnd    Boolean            @default(false)
   cancelAt             DateTime?          // data exata de cancelamento agendado pelo Stripe
   trialEndsAt          DateTime?
-  trialEndingNotified  Boolean            @default(false) // true quando Stripe dispara trial_will_end (3 dias antes)
   couponRedemptions    CouponRedemption[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -956,37 +946,19 @@ model MultitracksAlbum {
   musicalKey  String?
   coverUrl    String?
   description String?                @db.Text
-  status      MultitracksAlbumStatus @default(CATALOGED)
-  driveZipUrl String?                // link do Google Drive — preenchido no cadastro
+  status      MultitracksAlbumStatus @default(PENDING)
   markers     Json                   @default("[]")
-  stems       Json                   @default("[]") // Array de { name: string, r2Key: string }
+  stems       Json // Array de { name: string, driveUrl: string, r2Key: string | null }
   isActive    Boolean                @default(true)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   songId      String?
   song        Song?                  @relation(fields: [songId], references: [id], onDelete: SetNull)
-  rentals      MultitracksRental[]
-  customMixes  CustomMix[]
-  downloadJob  MultitracksDownloadJob?
+  rentals     MultitracksRental[]
+  customMixes CustomMix[]
 
   @@index([status, isActive])
   @@index([title, artist])
-}
-
-model MultitracksDownloadJob {
-  id          String                        @id @default(cuid())
-  albumId     String
-  album       MultitracksAlbum              @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  status      MultitracksDownloadJobStatus  @default(PENDING)
-  requestedBy String[]                      // groupIds que estao aguardando
-  errorMsg    String?
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime                      @default(now())
-  updatedAt   DateTime                      @updatedAt
-
-  @@unique([albumId])
-  @@index([status])
 }
 
 model MultitracksRental {
@@ -1399,6 +1371,11 @@ model SplitJob {
   bpm           Float?
   musicalKey    String?       // ex: "C Major", "A minor"
   sections      Json?         // [{label: "Intro", startSec: 0, endSec: 8}, ...]
+
+  // Acervo público
+  isPublic      Boolean       @default(false)
+  priceInCents  Int           @default(490)
+  purchasedFrom String?       // id do job original se foi comprado do catálogo
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
