@@ -320,16 +320,17 @@ export default function SplitsPage() {
   const handleBuyCatalog = async (jobId: string) => {
     setBuyingId(jobId);
     try {
-      const res = await fetch("/api/splits/catalog", {
+      // Redirecionar para checkout Stripe
+      const res = await fetch("/api/splits/purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId }),
       });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error || "Erro ao adquirir split"); return; }
-      toast.success("Split adicionado ao seu acervo!");
-      fetchJobs();
-      fetchCatalog();
+      if (!res.ok) { toast.error(data.error || "Erro ao iniciar compra"); return; }
+      if (data.url) {
+        window.location.href = data.url; // redirecionar para Stripe
+      }
     } finally { setBuyingId(null); }
   };
 
