@@ -5,8 +5,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
-// GET /api/splits/check-duplicate?songName=X&artistName=Y
-// Verifica se já existe split da música — no próprio grupo ou no catálogo público
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,10 +15,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const songName   = searchParams.get("songName")?.trim() ?? "";
     const artistName = searchParams.get("artistName")?.trim() ?? "";
-
     if (!songName) return NextResponse.json({ duplicate: false });
 
-    // 1. Verificar no próprio grupo
+    // 1. No próprio grupo
     const ownJob = await (prisma as any).splitJob.findFirst({
       where: {
         groupId: user.groupId,
@@ -39,24 +36,27 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2. Verificar no catálogo público
+    // 2. No catálogo público
     const catalogJob = await (prisma as any).splitJob.findFirst({
       where: {
         groupId: { not: user.groupId },
         songName: { equals: songName, mode: "insensitive" },
         status: "DONE",
+        isPublic: true,
+        purchasedFrom: null,
       },
-      select: { id: true, songName: true, artistName: true, bpm: true, musicalKey: true, durationSec: true,
-        stems: { select: { displayName: true } }, metadata: true },
+      select: { id: true, songName: true, artistName: true, bpm: true, musicalKey: true,
+        durationSec: true, priceInCents: true,
+        stems: { select: { displayName: true } } },
     });
 
-    if (catalogJob?.metadata?.isPublic) {
+    if (catalogJob) {
       return NextResponse.json({
         duplicate: true,
         location: "catalog",
         job: catalogJob,
-        message: `Este split já existe no catálogo por R$ ${((catalogJob.metadata?.priceInCents ?? 490) / 100).toFixed(2).replace(".", ",")}. Deseja adquirir em vez de processar?`,
-        priceInCents: catalogJob.metadata?.priceInCents ?? 490,
+        message: `Este split já existe no catálogo. Deseja adquirir em vez de processar?`,
+        priceInCents: catalogJob.priceInCents ?? 490,
       });
     }
 

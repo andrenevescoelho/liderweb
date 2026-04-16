@@ -5,22 +5,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
-// GET — histórico de jobs e ações de splits para SUPERADMIN
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const user = session?.user as any;
-
     if (!session || user?.role !== "SUPERADMIN") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
-    const search  = searchParams.get("search")?.trim() ?? "";
-    const status  = searchParams.get("status") ?? "";
-    const limit   = Number(searchParams.get("limit") ?? 100);
+    const search = searchParams.get("search")?.trim() ?? "";
+    const status = searchParams.get("status") ?? "";
 
-    // Buscar todos os SplitJobs com dados de grupo e usuário
     const jobs = await (prisma as any).splitJob.findMany({
       where: {
         ...(search ? {
@@ -28,7 +24,6 @@ export async function GET(req: NextRequest) {
             { songName:   { contains: search, mode: "insensitive" } },
             { artistName: { contains: search, mode: "insensitive" } },
             { group: { name: { contains: search, mode: "insensitive" } } },
-            { user:  { name: { contains: search, mode: "insensitive" } } },
           ],
         } : {}),
         ...(status ? { status } : {}),
@@ -39,41 +34,34 @@ export async function GET(req: NextRequest) {
         stems: { select: { id: true, label: true, displayName: true, type: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: limit,
+      take: 200,
     });
 
-    // Estatísticas gerais
     const stats = await (prisma as any).splitJob.groupBy({
       by: ["status"],
       _count: { id: true },
     });
-
     const statsMap = stats.reduce((acc: any, s: any) => {
       acc[s.status] = s._count.id;
       return acc;
     }, {});
 
-    // Uso mensal
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthlyCount = await (prisma as any).splitJob.count({
       where: { createdAt: { gte: startOfMonth } },
     });
 
-    // Grupos mais ativos
     const topGroups = await (prisma as any).splitJob.groupBy({
       by: ["groupId"],
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 5,
     });
-
-    const topGroupIds = topGroups.map((g: any) => g.groupId);
     const groupNames = await prisma.group.findMany({
-      where: { id: { in: topGroupIds } },
+      where: { id: { in: topGroups.map((g: any) => g.groupId) } },
       select: { id: true, name: true },
     });
-
     const topGroupsWithNames = topGroups.map((g: any) => ({
       groupId: g.groupId,
       count: g._count.id,
@@ -82,12 +70,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       jobs,
-      stats: {
-        total:        jobs.length,
-        byStatus:     statsMap,
-        thisMonth:    monthlyCount,
-        topGroups:    topGroupsWithNames,
-      },
+      stats: { byStatus: statsMap, thisMonth: monthlyCount, topGroups: topGroupsWithNames },
     });
   } catch (err: any) {
     console.error("[splits/admin] GET error:", err);
@@ -95,7 +78,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH — marcar split como público (acervo)
+// PATCH — marcar split como público no acervo
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -104,13 +87,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    const { jobId, isPublic } = await req.json();
+    const { jobId, isPublic, priceInCents } = await req.json();
     if (!jobId) return NextResponse.json({ error: "jobId obrigatório" }, { status: 400 });
 
-    // Atualizar metadata do job (usando field genérico por enquanto)
     const job = await (prisma as any).splitJob.update({
       where: { id: jobId },
-      data: { metadata: { isPublic: Boolean(isPublic), priceInCents: 490 } } as any,
+      data: {
+        isPublic: Boolean(isPublic),
+        priceInCents: priceInCents ?? 490,
+      },
     });
 
     return NextResponse.json({ ok: true, job });

@@ -5,9 +5,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
-// GET /api/splits/catalog
-// Retorna splits públicos disponíveis para compra
-// Exclui splits que o grupo do usuário já possui
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,11 +15,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search")?.trim() ?? "";
 
-    // Buscar splits públicos — excluindo os do próprio grupo
     const publicJobs = await (prisma as any).splitJob.findMany({
       where: {
+        isPublic: true,
         status: "DONE",
-        groupId: { not: user.groupId }, // não mostrar do próprio grupo
+        groupId: { not: user.groupId },
+        purchasedFrom: null, // não mostrar cópias compradas, só originais
         ...(search ? {
           OR: [
             { songName:   { contains: search, mode: "insensitive" } },
@@ -37,50 +35,41 @@ export async function GET(req: NextRequest) {
       take: 100,
     });
 
-    // Filtrar apenas os marcados como públicos no metadata
-    const catalog = publicJobs.filter((j: any) => j.metadata?.isPublic === true);
-
-    // Verificar quais o grupo atual já possui (comprou)
-    // Por ora usamos um campo metadata no job — futuramente tabela SplitAccess
-    const ownedJobIds = new Set<string>();
-
-    // Buscar splits que o grupo já tem com mesma música (por nome)
+    // Músicas que o grupo já possui (para marcar como "já tem")
     const ownedSongs = await (prisma as any).splitJob.findMany({
       where: { groupId: user.groupId, status: "DONE" },
       select: { songName: true, artistName: true },
     });
-    const ownedSongKeys = new Set(
+    const ownedKeys = new Set(
       ownedSongs.map((s: any) =>
         `${s.songName.toLowerCase().trim()}||${(s.artistName ?? "").toLowerCase().trim()}`
       )
     );
 
-    const catalogWithOwnership = catalog.map((job: any) => {
+    const catalog = publicJobs.map((job: any) => {
       const key = `${job.songName.toLowerCase().trim()}||${(job.artistName ?? "").toLowerCase().trim()}`;
       return {
-        id:          job.id,
-        songName:    job.songName,
-        artistName:  job.artistName,
-        durationSec: job.durationSec,
-        bpm:         job.bpm,
-        musicalKey:  job.musicalKey,
-        stemsCount:  job.stems.length,
-        stems:       job.stems.map((s: any) => s.displayName),
-        priceInCents: job.metadata?.priceInCents ?? 490,
-        alreadyOwned: ownedSongKeys.has(key), // já tem essa música splitada
-        createdAt:   job.createdAt,
+        id:           job.id,
+        songName:     job.songName,
+        artistName:   job.artistName,
+        durationSec:  job.durationSec,
+        bpm:          job.bpm,
+        musicalKey:   job.musicalKey,
+        stemsCount:   job.stems.length,
+        stems:        job.stems.map((s: any) => s.displayName),
+        priceInCents: job.priceInCents ?? 490,
+        alreadyOwned: ownedKeys.has(key),
+        createdAt:    job.createdAt,
       };
     });
 
-    return NextResponse.json({ catalog: catalogWithOwnership });
+    return NextResponse.json({ catalog });
   } catch (err: any) {
-    console.error("[splits/catalog] error:", err);
+    console.error("[splits/catalog] GET error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-// POST /api/splits/catalog
-// Comprar acesso a um split do catálogo (por ora, simulado)
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -91,28 +80,24 @@ export async function POST(req: NextRequest) {
     const { jobId } = await req.json();
     if (!jobId) return NextResponse.json({ error: "jobId obrigatório" }, { status: 400 });
 
-    // Buscar job original
     const originalJob = await (prisma as any).splitJob.findFirst({
-      where: { id: jobId, status: "DONE" },
+      where: { id: jobId, status: "DONE", isPublic: true },
       include: { stems: true },
     });
 
     if (!originalJob) return NextResponse.json({ error: "Split não encontrado" }, { status: 404 });
-    if (!originalJob.metadata?.isPublic) return NextResponse.json({ error: "Split não disponível" }, { status: 403 });
-    if (originalJob.groupId === user.groupId) return NextResponse.json({ error: "Este split já é do seu grupo" }, { status: 400 });
+    if (originalJob.groupId === user.groupId) {
+      return NextResponse.json({ error: "Este split já é do seu grupo" }, { status: 400 });
+    }
 
-    // Verificar se já tem esse split
     const existing = await (prisma as any).splitJob.findFirst({
-      where: {
-        groupId: user.groupId,
-        songName: originalJob.songName,
-        status: "DONE",
-      },
+      where: { groupId: user.groupId, songName: originalJob.songName, status: "DONE" },
     });
-    if (existing) return NextResponse.json({ error: "Você já possui um split desta música" }, { status: 409 });
+    if (existing) {
+      return NextResponse.json({ error: "Você já possui um split desta música" }, { status: 409 });
+    }
 
-    // Criar cópia do job para o grupo comprador
-    // Os stems são os mesmos arquivos R2 (só referência, não duplica arquivo)
+    // Criar cópia para o grupo comprador (reutiliza chaves R2, não duplica arquivos)
     const newJob = await (prisma as any).splitJob.create({
       data: {
         groupId:      user.groupId,
@@ -127,11 +112,12 @@ export async function POST(req: NextRequest) {
         bpm:          originalJob.bpm,
         musicalKey:   originalJob.musicalKey,
         sections:     originalJob.sections,
-        metadata:     { purchasedFrom: jobId, priceInCents: originalJob.metadata?.priceInCents ?? 490 },
+        isPublic:     false,
+        purchasedFrom: jobId,
+        priceInCents: originalJob.priceInCents ?? 490,
       },
     });
 
-    // Copiar stems (mesmas chaves R2)
     await (prisma as any).splitStem.createMany({
       data: originalJob.stems.map((s: any) => ({
         jobId:       newJob.id,
