@@ -368,8 +368,47 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="avatarUrl">Avatar URL (https://)</Label>
-                <Input id="avatarUrl" value={form.avatarUrl} onChange={(e) => updateField("avatarUrl", e.target.value)} placeholder="https://..." />
+                <Label>Foto de perfil</Label>
+                <div className="flex items-center gap-4">
+                  {/* Preview */}
+                  <div className="h-16 w-16 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center flex-shrink-0 border border-border">
+                    {form.avatarUrl
+                      ? <img src={form.avatarUrl} alt="avatar" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      : <span className="text-xl font-bold text-primary">
+                          {((session?.user as any)?.name ?? "?").split(" ").slice(0,2).map((n: string) => n[0]).join("").toUpperCase()}
+                        </span>
+                    }
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    {isGoogleUser
+                      ? <p className="text-xs text-muted-foreground">Foto importada do Google. Para alterar, mude sua foto no Google e faça login novamente.</p>
+                      : <>
+                          <label className="cursor-pointer">
+                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 2 * 1024 * 1024) { alert("Imagem muito grande. Máximo 2MB."); return; }
+                                const reader = new FileReader();
+                                reader.onload = (ev) => updateField("avatarUrl", ev.target?.result as string);
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+                              Enviar foto
+                            </span>
+                          </label>
+                          {form.avatarUrl && (
+                            <button type="button" onClick={() => updateField("avatarUrl", "")}
+                              className="text-xs text-destructive hover:underline ml-2">
+                              Remover foto
+                            </button>
+                          )}
+                          <p className="text-[10px] text-muted-foreground">JPG, PNG ou WebP • máx. 2MB</p>
+                        </>
+                    }
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="instagram">Instagram (https://)</Label>

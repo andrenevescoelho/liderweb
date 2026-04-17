@@ -165,7 +165,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
     .filter((section) => section.items.length > 0);
 
   return (
-    <aside className={cn("flex h-full flex-col border-r border-border bg-card text-foreground transition-all duration-300", collapsed ? "w-[68px]" : "w-[260px]")}>
+    <aside className={cn("flex h-full flex-col border-r border-border bg-[#0f1728] text-foreground transition-all duration-300", collapsed ? "w-[68px]" : "w-[260px]")}>
       {/* Logo */}
       <div className={cn("flex h-14 items-center border-b border-white/10 px-3", collapsed ? "justify-center" : "justify-between")}>
         {!collapsed ? (
@@ -174,8 +174,8 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
               <Image src="/favicon.svg" alt="Líder Web" fill className="object-contain" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-foreground leading-tight">Líder Web</span>
-              <span className="text-[10px] text-muted-foreground leading-tight">by multitrackgospel.com</span>
+              <span className="text-sm font-semibold text-white leading-tight">Líder Web</span>
+              <span className="text-[10px] text-slate-500 leading-tight">by multitrackgospel.com</span>
             </div>
           </Link>
         ) : (
@@ -186,12 +186,12 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
           </Link>
         )}
         {!isMobile && !collapsed && (
-          <button onClick={onToggle} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+          <button onClick={onToggle} className="rounded-md p-1 text-slate-500 hover:bg-white/10 hover:text-white transition-colors">
             <ChevronLeft className="h-4 w-4" />
           </button>
         )}
         {!isMobile && collapsed && (
-          <button onClick={onToggle} className="absolute right-[-12px] top-[18px] z-10 rounded-full border border-border bg-card p-0.5 text-muted-foreground hover:text-foreground shadow-sm">
+          <button onClick={onToggle} className="absolute right-[-12px] top-[18px] z-10 rounded-full border border-white/10 bg-[#0f1728] p-0.5 text-slate-400 hover:text-white shadow-sm">
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         )}
@@ -202,7 +202,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         {visibleSections.map((section, si) => (
           <div key={si} className={si > 0 ? "mt-4" : ""}>
             {section.label && !collapsed && (
-              <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+              <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-widest text-slate-500">
                 {section.label}
               </p>
             )}
@@ -222,14 +222,14 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
                         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all relative",
                         isActive
                           ? "bg-primary/20 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          : "text-slate-400 hover:bg-white/8 hover:text-slate-100",
                         collapsed && "justify-center px-2"
                       )}
                     >
                       {isActive && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-primary" />
                       )}
-                      <span className={cn(isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}>
+                      <span className={cn(isActive ? "text-primary" : "text-slate-400 group-hover:text-slate-200")}>
                         {item.icon}
                       </span>
                       {!collapsed && (
@@ -262,22 +262,24 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
           href="/profile"
           onClick={handleLinkClick()}
           className={cn(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground",
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-slate-400 transition-all hover:bg-white/8 hover:text-slate-100",
             pathname === "/profile" && "bg-primary/20 text-primary",
             collapsed && "justify-center"
           )}
           title={collapsed ? "Perfil" : undefined}
         >
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/30 text-[10px] font-semibold text-primary">
-            {initials}
+          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full overflow-hidden bg-primary/30 text-[10px] font-semibold text-primary flex-shrink-0">
+            {(user as any)?.avatarUrl
+              ? <img src={(user as any).avatarUrl} alt={user?.name ?? ""} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              : initials}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12px] font-medium text-foreground">{user?.name ?? "Perfil"}</p>
-              <p className="text-[10px] text-muted-foreground">{roleLabel}</p>
+              <p className="text-[10px] text-slate-500">{roleLabel}</p>
             </div>
           )}
-          {!collapsed && <Settings className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
+          {!collapsed && <Settings className="h-3.5 w-3.5 flex-shrink-0 text-slate-500" />}
         </Link>
       </div>
     </aside>

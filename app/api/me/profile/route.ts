@@ -47,6 +47,27 @@ const validateHttpsUrl = (value: unknown, fieldLabel: string) => {
   }
 };
 
+// Valida URL https:// ou base64 de imagem (upload local)
+const validateAvatarUrl = (value: unknown) => {
+  if (typeof value !== "string" || !value.trim()) return { value: null } as const;
+  // Base64 de imagem — aceitar diretamente
+  if (value.startsWith("data:image/")) {
+    // Limitar tamanho (~2MB em base64)
+    if (value.length > 2.8 * 1024 * 1024) {
+      return { error: "Imagem muito grande. Máximo 2MB." } as const;
+    }
+    return { value } as const;
+  }
+  // URL https normal
+  try {
+    const parsed = new URL(stripHtml(value));
+    if (parsed.protocol !== "https:") return { error: "Avatar URL deve usar https://" } as const;
+    return { value: parsed.toString() } as const;
+  } catch {
+    return { error: "Avatar URL inválido" } as const;
+  }
+};
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -165,7 +186,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Nível inválido" }, { status: 400 });
     }
 
-    const avatarUrlCheck = validateHttpsUrl(body?.avatarUrl, "Avatar URL");
+    const avatarUrlCheck = validateAvatarUrl(body?.avatarUrl);
     if ("error" in avatarUrlCheck) {
       return NextResponse.json({ error: avatarUrlCheck.error }, { status: 400 });
     }
@@ -184,7 +205,10 @@ export async function PATCH(req: NextRequest) {
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
-        data: { name: displayName },
+        data: {
+          name: displayName,
+          ...(avatarUrlCheck.value !== undefined ? { avatarUrl: avatarUrlCheck.value } as any : {}),
+        },
       }),
       prisma.memberProfile.upsert({
         where: { userId: user.id },
