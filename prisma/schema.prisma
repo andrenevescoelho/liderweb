@@ -157,8 +157,6 @@ enum MultitracksAlbumStatus {
   PENDING
   READY
   ERROR
-  CATALOGED
-  DOWNLOADING
 }
 
 enum MultitracksRentalStatus {
@@ -352,6 +350,7 @@ model User {
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
   createdCoupons       Coupon[]              @relation("CouponCreator")
   redeemedCoupons      CouponRedemption[]    @relation("CouponRedeemer")
+  avatarUrl            String?   // foto do perfil (upload ou Google)
   accounts             Account[]
   sessions             Session[]
   auditLogs            AuditLog[]
