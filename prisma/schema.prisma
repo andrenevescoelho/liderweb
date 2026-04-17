@@ -157,6 +157,8 @@ enum MultitracksAlbumStatus {
   PENDING
   READY
   ERROR
+  CATALOGED
+  DOWNLOADING
 }
 
 enum MultitracksRentalStatus {
@@ -1371,11 +1373,6 @@ model SplitJob {
   bpm           Float?
   musicalKey    String?       // ex: "C Major", "A minor"
   sections      Json?         // [{label: "Intro", startSec: 0, endSec: 8}, ...]
-
-  // Acervo público
-  isPublic      Boolean       @default(false)
-  priceInCents  Int           @default(490)
-  purchasedFrom String?       // id do job original se foi comprado do catálogo
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
