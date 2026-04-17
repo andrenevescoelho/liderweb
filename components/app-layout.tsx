@@ -12,7 +12,7 @@ import { FloatingChat } from "@/components/floating-chat";
 const APP_VERSION = `Versão ${pkg.version}`;
 
 // Rotas que precisam de fullscreen sem padding nem scroll
-const FULLSCREEN_ROUTES = ["/pads"];
+const FULLSCREEN_ROUTES = ["/pads", "/splits/", "/multitracks/"];
 
 interface AppLayoutProps {
   children: React.ReactNode;
