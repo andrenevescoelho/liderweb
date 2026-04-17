@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   GraduationCap, Search, Users, CheckCircle2, XCircle, Loader2,
   BarChart3, Trophy, Target, TrendingUp, X,
+  Mic2, Guitar, Brain, MessageSquare, Star, BookOpen,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
@@ -274,6 +275,28 @@ export default function ProfessorConfigPage() {
           <span className="text-muted-foreground">{enabledCount} de {members.length} habilitados</span>
         </div>
       </div>
+      {/* Cards de recursos disponíveis */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { icon: Mic2,          label: "Análise Vocal",      desc: "Envio de áudio para avaliação de afinação e técnica" },
+          { icon: Guitar,        label: "Instrumental",       desc: "Avaliação de performance em instrumentos" },
+          { icon: Brain,         label: "Feedback com IA",    desc: "Feedback personalizado gerado por inteligência artificial" },
+          { icon: BarChart3,     label: "Progresso",          desc: "Gráfico de evolução e histórico de práticas" },
+          { icon: Trophy,        label: "Conquistas",         desc: "Badges e recompensas por metas atingidas" },
+          { icon: BookOpen,      label: "Plano de Estudos",   desc: "Conteúdo personalizado para cada membro" },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-border bg-muted/20 p-3 flex flex-col items-center text-center gap-2 hover:bg-muted/40 transition-colors">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+              <item.icon className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold">{item.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{item.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
