@@ -309,7 +309,7 @@ export default function SplitPlayerPage() {
   const allLoaded = tracks.every(t => t.ready);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-[#0a0a0f]">
+    <div className="flex flex-col bg-[#0a0a0f]" style={{height: "calc(100vh - 64px)", overflow: "hidden"}}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card/50 flex-shrink-0">
         <button onClick={() => router.back()} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -339,7 +339,7 @@ export default function SplitPlayerPage() {
       )}
 
       {/* Faixas */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {tracks.map((track, i) => (
           <div key={track.stemId}
             className={cn("flex items-center border-b border-border/30 transition-colors",
