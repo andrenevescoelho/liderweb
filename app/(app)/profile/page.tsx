@@ -461,7 +461,7 @@ export default function ProfilePage() {
       )}
 
       {isGoogleUser === true && (
-        <Card className="mt-6 border-muted">
+        <Card className="border-muted">
           <CardContent className="py-4 flex items-center gap-3 text-sm text-muted-foreground">
             <KeyRound className="h-4 w-4 flex-shrink-0" />
             Sua senha é gerenciada pelo Google. Para alterá-la, acesse as configurações da sua conta Google.
