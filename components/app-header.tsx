@@ -95,8 +95,10 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 hover:bg-accent"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                {session?.user?.name?.charAt(0).toUpperCase() || "U"}
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground overflow-hidden flex-shrink-0">
+                {(session?.user as any)?.avatarUrl
+                  ? <img src={(session?.user as any).avatarUrl} alt={session?.user?.name ?? ""} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  : session?.user?.name?.charAt(0).toUpperCase() || "U"}
               </div>
               <div className="hidden md:flex flex-col items-start">
                 <span className="text-sm font-medium text-foreground">{session?.user?.name || "Usuário"}</span>
