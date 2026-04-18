@@ -25,8 +25,7 @@ ENV NEXTAUTH_SECRET=build_placeholder
 ENV NEXTAUTH_URL=https://liderweb.multitrackgospel.com
 ENV DATABASE_URL=postgresql://user:pass@localhost:5432/db
 
-# Garantir que o Prisma client é gerado com o schema correto
-# Evita erros de "field not found" quando schema foi atualizado
+# Garantir Prisma client gerado com schema correto ANTES do build
 RUN npx prisma generate
 
 RUN npm run build
@@ -47,6 +46,10 @@ RUN apk add --no-cache ffmpeg
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./app/.next/static
 COPY --from=builder /app/public ./app/public
+
+# Copiar Prisma client gerado — necessário para o runtime
+COPY --from=builder /app/node_modules/.prisma ./app/node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./app/node_modules/@prisma
 
 USER nextjs
 
