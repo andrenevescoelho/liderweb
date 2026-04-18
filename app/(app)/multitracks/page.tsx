@@ -53,6 +53,7 @@ export default function MultitracksPage() {
   const [sortBy, setSortBy] = useState<"title"|"artist"|"recent"|"bpm"|"stems"|"expiry">("title");
   const [sortAsc, setSortAsc] = useState(true);
   const [renting, setRenting] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null); // albumId em download
   const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [blockedByPermission, setBlockedByPermission] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
@@ -128,14 +129,53 @@ export default function MultitracksPage() {
         }
         return;
       }
-      toast.success("Multitrack alugada! Abrindo player...");
+      if (res.status === 202 && data.downloading) {
+        // Album ainda sendo baixado — iniciar polling
+        toast.success("Preparando sua multitrack... Isso pode levar alguns minutos.");
+        setDownloading(albumId);
+        fetchAlbums(search);
+        pollDownloadStatus(albumId, data.pollUrl);
+        return;
+      }
+      toast.success("Multitrack alugada! Clique em Abrir Player para ouvir.");
       fetchAlbums(search);
-      setTimeout(() => router.push(`/multitracks/${albumId}`), 1000);
     } catch {
       toast.error("Erro ao alugar multitrack");
     } finally {
       setRenting(null);
     }
+  };
+
+  const pollDownloadStatus = async (albumId: string, pollUrl: string) => {
+    const maxAttempts = 40; // ~10 minutos (15s * 40)
+    let attempt = 0;
+    const interval = setInterval(async () => {
+      attempt++;
+      try {
+        const res = await fetch(pollUrl);
+        const data = await res.json();
+        if (data.status === "READY" || data.albumStatus === "READY") {
+          clearInterval(interval);
+          setDownloading(null);
+          fetchAlbums(search);
+          toast.success("Multitrack pronta! Clique em Abrir Player.");
+          return;
+        }
+        if (data.status === "ERROR" || data.albumStatus === "ERROR") {
+          clearInterval(interval);
+          setDownloading(null);
+          toast.error("Erro ao preparar multitrack. Tente novamente.");
+          return;
+        }
+      } catch {
+        // silencioso — continua tentando
+      }
+      if (attempt >= maxAttempts) {
+        clearInterval(interval);
+        setDownloading(null);
+        toast.error("Tempo esgotado. Tente abrir o player novamente em alguns minutos.");
+      }
+    }, 15000); // polling a cada 15s
   };
 
   const addToCartAndRedirect = async (albumId?: string) => {
@@ -397,8 +437,8 @@ export default function MultitracksPage() {
                     <Lock className="mr-1.5 h-3.5 w-3.5" />R$ 9,90
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
-                    {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
+                  <Button size="sm" variant="outline" onClick={() => handleRent(album.id)} disabled={renting === album.id || downloading === album.id || !canRent}>
+                    {renting === album.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : downloading === album.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Preparando...</> : <><Lock className="mr-1.5 h-3.5 w-3.5" />Alugar</>}
                   </Button>
                 )}
               </div>
