@@ -86,12 +86,17 @@ export async function GET(req: NextRequest) {
       where.originalKey = key;
     }
 
+    const artist = searchParams?.get?.("artist");
+    if (artist) {
+      where.artist = { contains: artist, mode: "insensitive" };
+    }
+
     const songs = await prisma.song.findMany({
       where,
       orderBy: { title: "asc" },
       include: {
         multitracksAlbums: {
-          where: { isActive: true, status: "READY" },
+          where: { isActive: true, status: { in: ["READY", "CATALOGED", "DOWNLOADING"] } },
           select: {
             id: true,
             rentals: user.groupId ? {
@@ -128,7 +133,16 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json(songsWithResources ?? []);
+    // Buscar artistas únicos para o filtro
+    const artists = [...new Set(
+      songsWithResources.map((s: any) => s.artist).filter(Boolean)
+    )].sort() as string[];
+
+    return NextResponse.json({
+      songs: songsWithResources ?? [],
+      total: songsWithResources.length,
+      artists,
+    });
   } catch (error) {
     console.error("Get songs error:", error);
     return NextResponse.json({ error: "Erro ao buscar músicas" }, { status: 500 });

@@ -105,10 +105,13 @@ export default function SongsPage() {
     userPermissions.includes("setlist.music.add");
 
   const [songs, setSongs] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [artists, setArtists] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterTag, setFilterTag] = useState("");
   const [filterKey, setFilterKey] = useState("");
+  const [filterArtist, setFilterArtist] = useState("");
   const [viewMode, setViewMode] = useState<"large" | "small" | "list">("large");
   const [modalOpen, setModalOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -128,6 +131,7 @@ export default function SongsPage() {
       if (search) url += `search=${encodeURIComponent(search)}&`;
       if (filterTag) url += `tag=${filterTag}&`;
       if (filterKey) url += `key=${filterKey}&`;
+      if (filterArtist) url += `artist=${encodeURIComponent(filterArtist)}&`;
       const res = await fetch(url);
       const data = await res.json();
 
@@ -142,6 +146,8 @@ export default function SongsPage() {
           : [];
 
       setSongs(normalizedSongs);
+      setTotal(data?.total ?? normalizedSongs.length);
+      if (data?.artists?.length) setArtists(data.artists);
     } catch (e) {
       console.error(e);
     } finally {
@@ -152,7 +158,7 @@ export default function SongsPage() {
   useEffect(() => {
     const timer = setTimeout(fetchSongs, 300);
     return () => clearTimeout(timer);
-  }, [search, filterTag, filterKey]);
+  }, [search, filterTag, filterKey, filterArtist]);
 
   useEffect(() => {
     if (
@@ -217,6 +223,17 @@ export default function SongsPage() {
         )}
       </div>
 
+      {/* Contagem */}
+      {!loading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{total}</span>
+          <span>{total === 1 ? "música" : "músicas"}</span>
+          {(filterArtist || filterTag || filterKey || search) && songs.length !== total && (
+            <span>· <span className="text-primary font-medium">{songs.length}</span> {songs.length === 1 ? "encontrada" : "encontradas"}</span>
+          )}
+        </div>
+      )}
+
       {/* Busca */}
       <div className="flex gap-2">
         <div className="relative flex-1">
@@ -253,6 +270,18 @@ export default function SongsPage() {
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
+          {/* Filtro Artista */}
+          {artists.length > 0 && (
+            <select
+              value={filterArtist}
+              onChange={(e) => setFilterArtist(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+              <option value="">Todos os artistas</option>
+              {artists.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          )}
         </div>
         {/* View mode */}
         <div className="flex items-center rounded-xl border border-border bg-muted/30 p-1 gap-0.5">
