@@ -287,6 +287,8 @@ export default function MultitracksPlayerPage() {
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preparing, setPreparing] = useState(false);
+  const [preparingPollUrl, setPreparingPollUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -435,6 +437,14 @@ export default function MultitracksPlayerPage() {
         setExpiresAt(data.expiresAt);
         if (data.markers?.length > 0) setMarkers(data.markers);
 
+        // Album ainda sendo preparado — mostrar tela de espera com polling
+        if (data.preparing) {
+          setAlbum(data.album);
+          setPreparing(true);
+          setPreparingPollUrl(data.pollUrl);
+          return;
+        }
+
         const rawStems = data.stems as { name: string; url: string }[];
         // Ignorar arquivos que começam com "." — são metadados do macOS (ex: .PIANO, .STRING)
         const filteredStems = rawStems.filter((s) => !s.name.startsWith('.'));
@@ -469,6 +479,50 @@ export default function MultitracksPlayerPage() {
     };
     load();
   }, [status, albumId, router]);
+
+  // Polling quando album está sendo preparado
+  useEffect(() => {
+    if (!preparing || !preparingPollUrl) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(preparingPollUrl);
+        const data = await res.json();
+        if (data.status === "READY" || data.albumStatus === "READY") {
+          clearInterval(interval);
+          setPreparing(false);
+          setPreparingPollUrl(null);
+          // Recarregar stems
+          const stemsRes = await fetch(`/api/multitracks/${albumId}/stems`);
+          if (stemsRes.ok) {
+            const stemsData = await stemsRes.json();
+            if (!stemsData.preparing && stemsData.stems?.length > 0) {
+              const rawStems = stemsData.stems as { name: string; url: string }[];
+              const filteredStems = rawStems.filter((s) => !s.name.startsWith("."));
+              const sorted = [
+                ...filteredStems.filter((s) => isPriority(s.name)),
+                ...filteredStems.filter((s) => !isPriority(s.name)),
+              ];
+              setStems(sorted.map((s, i) => ({
+                name: s.name, url: s.url,
+                volume: 1, pan: 0, muted: false, solo: false,
+                loading: true, ready: false,
+                color: STEM_COLORS[i % STEM_COLORS.length],
+                waveformData: null,
+              })));
+              if (stemsData.markers?.length > 0) setMarkers(stemsData.markers);
+            }
+          }
+        }
+        if (data.status === "ERROR" || data.albumStatus === "ERROR") {
+          clearInterval(interval);
+          setPreparing(false);
+          toast.error("Erro ao preparar multitrack. Contate o suporte.");
+          router.push("/multitracks");
+        }
+      } catch {}
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [preparing, preparingPollUrl, albumId, router]);
 
   // Carregar áudios e gerar waveforms (com cache local)
   useEffect(() => {
@@ -947,6 +1001,20 @@ export default function MultitracksPlayerPage() {
   if (loading || status === "loading") {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
+
+  if (preparing && album) {
+    return (
+      <div className="flex flex-col h-64 items-center justify-center gap-4 text-center px-6">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <div>
+          <p className="font-semibold text-foreground">{album.title}</p>
+          <p className="text-sm text-muted-foreground mt-1">Preparando sua multitrack...</p>
+          <p className="text-xs text-muted-foreground mt-1">Isso pode levar alguns minutos. Aguarde.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!album) return null;
 
   return (
