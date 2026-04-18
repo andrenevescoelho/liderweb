@@ -95,7 +95,11 @@ export default function SongsPage() {
   const { data: session } = useSession() || {};
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
-  const canUseMultitrack = userRole === "SUPERADMIN" || userPermissions.includes("multitrack.view");
+  // ADMIN e LEADER sempre podem tentar acessar — a validação real de plano
+  // acontece no servidor. A permissão "multitrack.view" é legada e não é
+  // necessariamente atribuída a todos os planos que incluem multitrack.
+  const canUseMultitrack = userRole === "SUPERADMIN" || userRole === "ADMIN" || 
+    userRole === "LEADER" || userPermissions.includes("multitrack.view");
   const canEdit =
     userRole === "ADMIN" ||
     userRole === "LEADER" ||
