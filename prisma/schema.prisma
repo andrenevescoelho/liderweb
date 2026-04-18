@@ -157,6 +157,8 @@ enum MultitracksAlbumStatus {
   PENDING
   READY
   ERROR
+  CATALOGED
+  DOWNLOADING
 }
 
 enum MultitracksRentalStatus {
