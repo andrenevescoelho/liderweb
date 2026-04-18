@@ -45,5 +45,6 @@ jobs:
           docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
           docker cp /opt/liderweb/prisma liderweb_app:/app/prisma
           docker exec liderweb_app node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma || echo "⚠️ Migration falhou - app continua rodando com schema anterior"
+          docker exec liderweb_app node_modules/.bin/prisma generate --schema=/app/prisma/schema.prisma && echo "✅ Prisma client regenerado" || echo "⚠️ prisma generate falhou"
           docker builder prune -f --keep-storage 2gb
           echo "✅ Deploy concluído!"
