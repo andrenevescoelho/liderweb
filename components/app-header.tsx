@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Sun, Moon, LogOut, ChevronDown, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LanguageSelector } from "@/components/language-selector";
+import { useI18n } from "@/lib/i18n";
 import { Input } from "@/components/ui/input";
 
 interface AppHeaderProps {
@@ -18,6 +20,7 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { t } = useI18n();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -82,6 +85,7 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <LanguageSelector variant="header" />
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="rounded-lg border border-border p-2 text-muted-foreground hover:text-foreground"
