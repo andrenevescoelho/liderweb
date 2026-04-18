@@ -87,7 +87,11 @@
     "administrator": "Administrator",
     "leader": "Leader",
     "member": "Member",
-    "byMinistry": "by multitrackgospel.com"
+    "byMinistry": "by multitrackgospel.com",
+    "smartAlerts": "Smart Alerts",
+    "systemHealth": "System Health",
+    "pushAnnouncements": "Push Announcements",
+    "adminDashboard": "Admin Dashboard"
   },
   "auth": {
     "login": "Sign in",
