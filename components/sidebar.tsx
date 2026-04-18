@@ -9,7 +9,7 @@ import {
   CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
   GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy, Headphones,
-} from "lucide-react";
+  Bell, Activity} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { LanguageSelector } from "@/components/language-selector";
@@ -135,6 +135,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: t("nav.billingPlans"), href: "/billing-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.attendance"), href: "/support-admin", icon: <Headphones className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
         { label: t("nav.singleProducts"), href: "/products-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.songs_admin"), href: "/admin?tab=songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.smartAlerts"), href: "/dashboard/alertas-inteligentes", icon: <Bell className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.systemHealth"), href: "/dashboard/saude-sistema", icon: <Activity className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.pushAnnouncements"), href: "/push-comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
       ],
     },
   ];
