@@ -953,6 +953,7 @@ model MultitracksAlbum {
   markers     Json                   @default("[]")
   stems       Json // Array de { name: string, driveUrl: string, r2Key: string | null }
   isActive    Boolean                @default(true)
+  driveZipUrl String?                // URL do zip no Google Drive para download lazy
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   songId      String?
