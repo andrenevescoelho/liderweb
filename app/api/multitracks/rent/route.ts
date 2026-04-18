@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
 
       // Disparar worker via fetch interno (evita problema de background process no standalone)
       if (isNew) {
-        const workerUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/api/multitracks/worker`;
+        // Sempre usar localhost para evitar loop pelo Cloudflare/proxy externo
+        const workerUrl = `http://localhost:${process.env.PORT ?? "3000"}/api/multitracks/worker`;
         fetch(workerUrl, {
           method: "POST",
           headers: {
