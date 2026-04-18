@@ -28,12 +28,29 @@ export async function GET(
       return NextResponse.json({ error: "Acesso não autorizado. Alugue esta multitrack primeiro." }, { status: 403 });
     }
 
-    const stems = Array.isArray(rental.album.stems)
-      ? rental.album.stems as { name: string; r2Key: string }[]
-      : [];
+    const albumStatus = rental.album.status;
+
+    // Album ainda sendo preparado — retornar status para o player fazer polling
+    if (albumStatus !== "READY" || !Array.isArray(rental.album.stems) || (rental.album.stems as any[]).length === 0) {
+      return NextResponse.json({
+        preparing: true,
+        albumStatus,
+        pollUrl: `/api/multitracks/rent/status?albumId=${albumId}`,
+        album: {
+          id: rental.album.id,
+          title: rental.album.title,
+          artist: rental.album.artist,
+          coverUrl: rental.album.coverUrl,
+        },
+        stems: [],
+        markers: [],
+        expiresAt: rental.expiresAt,
+      });
+    }
+
+    const stems = rental.album.stems as { name: string; r2Key: string }[];
 
     // Retornar URLs do proxy backend em vez de URLs assinadas do R2
-    // Isso evita CORS e nunca expõe URLs do R2 para o cliente
     const stemsWithUrls = stems.map((stem, i) => ({
       name: stem.name,
       url: `/api/multitracks/${albumId}/audio/${i}`,
