@@ -235,6 +235,14 @@ export default function MultitracksPage() {
         </div>
       )}
 
+      {/* Total de multitracks */}
+      {!loading && albums.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{albums.length}</span>
+          <span>{albums.length === 1 ? "multitrack disponível" : "multitracks disponíveis"}</span>
+        </div>
+      )}
+
       {/* Busca */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
