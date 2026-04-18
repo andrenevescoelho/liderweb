@@ -182,6 +182,7 @@ export default function PadsPage() {
   const [atmosphere, setAtmosphere] = useState(0.3);
   const [fadeIn, setFadeIn] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [fadeDuration, setFadeDuration] = useState(2);
   const [modeCulto, setModeCulto] = useState(false);
   const [midiDevice, setMidiDevice] = useState<string|null>(null);
@@ -622,6 +623,47 @@ export default function PadsPage() {
   );
 
   if(loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
+
+  // Tela de desbloqueio de áudio — browser exige interação antes de tocar
+  if(!audioUnlocked) return (
+    <div className="fixed inset-0 bg-gray-950 flex flex-col items-center justify-center gap-6 z-50">
+      <div className="flex flex-col items-center gap-4 text-center px-6">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/20 border border-primary/30">
+          <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-white text-xl font-semibold mb-2">Worship Pads</p>
+          <p className="text-gray-400 text-sm max-w-xs leading-relaxed">
+            Toque aqui para ativar o áudio e começar a usar os pads ao vivo.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            // Desbloquear AudioContext — requer gesto do usuário
+            if(audioCtxRef.current?.state === "suspended") {
+              audioCtxRef.current.resume().catch(()=>{});
+            } else if(!audioCtxRef.current) {
+              const ctx = new AudioContext();
+              audioCtxRef.current = ctx;
+              ctx.resume().catch(()=>{});
+            }
+            setAudioUnlocked(true);
+          }}
+          className="mt-2 flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-semibold text-white hover:bg-primary/90 transition-all active:scale-95 shadow-lg shadow-primary/30"
+        >
+          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          Toque para começar
+        </button>
+        <p className="text-gray-600 text-xs mt-2">
+          Necessário para reprodução de áudio no navegador
+        </p>
+      </div>
+    </div>
+  );
 
   const pads=activeBoard?.pads.filter(p=>p.audioUrl)||[];
   padsRef.current=pads; // manter ref atualizada para o listener MIDI
