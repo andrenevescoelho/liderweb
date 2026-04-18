@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useI18n } from "@/lib/i18n";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
 import {
@@ -241,6 +242,7 @@ function JobCard({ job, onRefresh, onOpen, onDelete }: { job: SplitJob; onRefres
 
 export default function SplitsPage() {
   const { data: session } = useSession() || {};
+  const { t } = useI18n();
   const user = session?.user as SessionUser | undefined;
 
   const router = useRouter();
@@ -449,11 +451,11 @@ export default function SplitsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Nome da música *</label>
-              <Input value={songName} onChange={e => setSongName(e.target.value)} placeholder="Ex: Oceanos" />
+              <Input value={songName} onChange={e => setSongName(e.target.value)} placeholder={t("splits.songNamePlaceholder")} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Artista</label>
-              <Input value={artistName} onChange={e => setArtistName(e.target.value)} placeholder="Ex: Hillsong" />
+              <Input value={artistName} onChange={e => setArtistName(e.target.value)} placeholder={t("splits.artistPlaceholder")} />
             </div>
           </div>
 

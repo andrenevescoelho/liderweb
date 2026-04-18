@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useI18n } from "@/lib/i18n";
 import { useRouter } from "next/navigation";
 import { SessionUser } from "@/lib/types";
 import { ModuleAccessOverlay } from "@/components/module-access-overlay";
@@ -39,6 +40,7 @@ interface Usage {
 
 export default function MultitracksPage() {
   const { data: session, status } = useSession() || {};
+  const { t } = useI18n();
   const router = useRouter();
   const user = session?.user as SessionUser | undefined;
 
@@ -238,7 +240,7 @@ export default function MultitracksPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por título ou artista..."
+            placeholder={t("multitracks.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -282,11 +284,11 @@ export default function MultitracksPage() {
         <div className="flex items-center gap-1 flex-wrap">
           {([
             { key: "title",  label: "A–Z"        },
-            { key: "artist", label: "Artista"     },
-            { key: "recent", label: "Recentes"    },
+            { key: "artist", label: t("multitracks.sortArtist")     },
+            { key: "recent", label: t("multitracks.sortRecent")    },
             { key: "bpm",    label: "BPM"         },
             { key: "stems",  label: "Stems"       },
-            { key: "expiry", label: "Expira"      },
+            { key: "expiry", label: t("multitracks.sortExpiry")      },
           ] as const).map(opt => (
             <button
               key={opt.key}
@@ -414,7 +416,7 @@ export default function MultitracksPage() {
                 {album.rented && (
                   <div className="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-full bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                     <CheckCircle2 className="h-3 w-3" />
-                    {viewMode === "large" && "Alugada"}
+                    {viewMode === "large" && t("multitracks.rentedBadge")}
                   </div>
                 )}
                 {album.rented && album.expiresAt && viewMode === "large" && (
@@ -449,7 +451,7 @@ export default function MultitracksPage() {
                   <Button size="sm" variant="outline" className="w-full" onClick={() => handleRent(album.id)} disabled={renting === album.id || !canRent}>
                     {renting === album.id
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <><Lock className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? "Alugar (cota)" : "Alugar"}</>}
+                      : <><Lock className="mr-1.5 h-3.5 w-3.5" />{viewMode === "large" ? t("multitracks.rent") : "Alugar"}</>}
                   </Button>
                 )}
               </CardContent>
@@ -468,7 +470,7 @@ export default function MultitracksPage() {
       )}
       {blockedByPlan && (
         <ModuleAccessOverlay
-          moduleLabel="Multitracks"
+          moduleLabel={t("multitracks.title")}
           isAdmin={user?.role === "ADMIN" || user?.role === "SUPERADMIN"}
           onUpgrade={() => router.push("/planos")}
         />

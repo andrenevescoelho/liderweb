@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useI18n } from "@/lib/i18n";
 import {
   Users,
   Plus,
@@ -39,6 +40,7 @@ import { MEMBER_FUNCTION_OPTIONS } from "@/lib/member-profile";
 
 export default function MembersPage() {
   const { data: session } = useSession() || {};
+  const { t } = useI18n();
   const sessionUser = session?.user as SessionUser | undefined;
   const userRole = sessionUser?.role ?? "MEMBER";
   const userPermissions = sessionUser?.permissions ?? [];
@@ -282,7 +284,7 @@ export default function MembersPage() {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <Input
-            placeholder="Buscar por nome..."
+            placeholder={t("members.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e?.target?.value ?? '')}
             className="pl-10"
@@ -292,7 +294,7 @@ export default function MembersPage() {
           value={filterInstrument}
           onChange={(e) => setFilterInstrument(e?.target?.value ?? '')}
           options={[
-            { value: "", label: "Todas funções" },
+            { value: "", label: t("members.allFunctions") },
             ...(MEMBER_FUNCTION_OPTIONS?.map?.((o) => ({ value: o.value, label: o.label })) ?? []),
           ]}
           className="w-48"
@@ -301,7 +303,7 @@ export default function MembersPage() {
           value={filterVoice}
           onChange={(e) => setFilterVoice(e?.target?.value ?? '')}
           options={[
-            { value: "", label: "Todas vozes" },
+            { value: "", label: t("members.allVoices") },
             ...VOICE_TYPES?.map?.((v) => ({ value: v, label: v })) ?? [],
           ]}
           className="w-40"
@@ -457,7 +459,7 @@ export default function MembersPage() {
                   <Badge
                     variant={member?.profile?.active ? "success" : "danger"}
                   >
-                    {member?.profile?.active ? "Ativo" : "Inativo"}
+                    {member?.profile?.active ? t("members.active") : "Inativo"}
                   </Badge>
                 </div>
 
@@ -832,7 +834,7 @@ function MemberModal({
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
-      title={isCreateMode ? "Novo Membro" : "Editar Membro"}
+      title={isCreateMode ? t("members.newMember") : "Editar Membro"}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (

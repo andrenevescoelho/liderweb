@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +65,7 @@ const AVAILABILITY_DAY_OPTIONS = [
 
 export default function ProfilePage() {
   const { data: session } = useSession() || {};
+  const { t } = useI18n();
   const [form, setForm] = useState<ProfileForm>(initialForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -444,7 +446,7 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-password">Nova senha</Label>
-                <Input id="new-password" type="password" value={passwordForm.newPass} onChange={(e) => setPasswordForm(p => ({ ...p, newPass: e.target.value }))} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
+                <Input id="new-password" type="password" value={passwordForm.newPass} onChange={(e) => setPasswordForm(p => ({ ...p, newPass: e.target.value }))} placeholder={t("profile.minPassword")} autoComplete="new-password" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar nova senha</Label>
@@ -453,7 +455,7 @@ export default function ProfilePage() {
               {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
               {passwordSuccess && <p className="text-sm text-green-500">Senha alterada com sucesso!</p>}
               <Button type="submit" disabled={savingPassword || !passwordForm.current || !passwordForm.newPass || !passwordForm.confirm}>
-                {savingPassword ? "Alterando..." : "Alterar senha"}
+                {savingPassword ? "Alterando..." : t("profile.changePassword")}
               </Button>
             </form>
           </CardContent>

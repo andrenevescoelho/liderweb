@@ -11,6 +11,8 @@ import {
   GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy, Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
+import { LanguageSelector } from "@/components/language-selector";
 import { SessionUser } from "@/lib/types";
 import { useBadges, markAsSeen } from "@/hooks/use-badges";
 import { useEntitlements } from "@/hooks/use-entitlements";
@@ -41,6 +43,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: SidebarProps) {
   const { data: session } = useSession() || {};
   const pathname = usePathname();
+  const { t } = useI18n();
   const user = session?.user as SessionUser | undefined;
   const userRole = user?.role || "";
   const userPermissions = user?.permissions ?? [];
@@ -65,9 +68,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   };
 
   const roleLabel =
-    userRole === "SUPERADMIN" ? "Super Admin" :
-    userRole === "ADMIN" ? "Administrador" :
-    userRole === "LEADER" ? "Líder" : "Membro";
+    userRole === "SUPERADMIN" ? t("nav.superAdmin") :
+    userRole === "ADMIN" ? t("nav.administrator") :
+    userRole === "LEADER" ? t("nav.leader") : t("nav.member");
 
   const initials = (user?.name ?? "?")
     .split(" ")
@@ -79,59 +82,59 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
   const sections: MenuSection[] = [
     {
       items: [
-        { label: "Início", href: "/dashboard", icon: <LayoutDashboard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
+        { label: t("nav.home"), href: "/dashboard", icon: <LayoutDashboard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "LEADER", "MEMBER"] },
       ],
     },
     {
-      label: "Equipe",
+      label: t("nav.team"),
       items: [
-        { label: "Membros", href: "/members", icon: <Users className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
-        { label: "Escalas", href: "/schedules", icon: <Calendar className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.escalas > 0 ? String(badges.escalas) : undefined },
-        { label: "Ensaios", href: "/ensaios", icon: <NotebookPen className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.ensaios > 0 ? "!" : undefined },
-        { label: "Chat do Grupo", href: "/chat-grupo", icon: <MessageCircle className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.chat > 0 ? String(badges.chat) : undefined },
-        { label: "Aniversariantes", href: "/aniversariantes", icon: <Cake className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.aniversariantes > 0 ? String(badges.aniversariantes) : undefined },
+        { label: t("nav.members"), href: "/members", icon: <Users className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
+        { label: t("nav.schedules"), href: "/schedules", icon: <Calendar className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.escalas > 0 ? String(badges.escalas) : undefined },
+        { label: t("nav.rehearsals"), href: "/ensaios", icon: <NotebookPen className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.ensaios > 0 ? "!" : undefined },
+        { label: t("nav.groupChat"), href: "/chat-grupo", icon: <MessageCircle className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.chat > 0 ? String(badges.chat) : undefined },
+        { label: t("nav.birthdays"), href: "/aniversariantes", icon: <Cake className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.aniversariantes > 0 ? String(badges.aniversariantes) : undefined },
       ],
     },
     {
-      label: "Música",
+      label: t("nav.music"),
       items: [
-        { label: "Músicas", href: "/songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.musicas > 0 ? String(badges.musicas) : undefined },
-        { label: "Metrônomo", href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
-        { label: "Multitracks", href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
-        ...(musicCoachEnabled ? [{ label: "Professor", href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
-        { label: "Config. Professor", href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "MEMBER", "LEADER"], permissions: ["coach.config.manage"], tag: "IA" },
-        { label: "Pads & Loops", href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["pad.view"] },
-        { label: "Split de músicas", href: "/splits", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["split.view"], tag: "NOVO" },
-        { label: "Custom Mix", href: "/custom-mix", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["custom.mix.view"], tag: "NOVO" },
+        { label: t("nav.songs"), href: "/songs", icon: <Music className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.musicas > 0 ? String(badges.musicas) : undefined },
+        { label: t("nav.metronome"), href: "/metronomo", icon: <Timer className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"] },
+        { label: t("nav.multitracks"), href: "/multitracks", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["multitrack.view"], tag: "NOVO" },
+        ...(musicCoachEnabled ? [{ label: t("nav.professor"), href: "/professor", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], tag: "IA" }] : []),
+        { label: t("nav.professorConfig"), href: "/professor-config", icon: <ProfessorIcon className="h-[18px] w-[18px]" />, roles: ["ADMIN", "MEMBER", "LEADER"], permissions: ["coach.config.manage"], tag: "IA" },
+        { label: t("nav.pads"), href: "/pads", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["pad.view"] },
+        { label: t("nav.splits"), href: "/splits", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["split.view"], tag: "NOVO" },
+        { label: t("nav.customMix"), href: "/custom-mix", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], permissions: ["custom.mix.view"], tag: "NOVO" },
       ],
     },
     {
-      label: "Comunicação",
+      label: t("nav.communication"),
       items: [
-        { label: "Comunicados", href: "/comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.comunicados > 0 ? String(badges.comunicados) : undefined },
-        { label: "FAQ", href: "/faq", icon: <CircleHelp className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
-        { label: "Suporte", href: "/dashboard/suporte", icon: <LifeBuoy className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
+        { label: t("nav.announcements"), href: "/comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.comunicados > 0 ? String(badges.comunicados) : undefined },
+        { label: t("nav.faq"), href: "/faq", icon: <CircleHelp className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"] },
+        { label: t("nav.support"), href: "/dashboard/suporte", icon: <LifeBuoy className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER", "SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
       ],
     },
     {
-      label: "Gestão",
+      label: t("nav.management"),
       items: [
-        { label: "Administração", href: "/dashboard/admin", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
-        { label: "Analytics Musicais", href: "/dashboard/analytics-musicais", icon: <BarChart2 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "SUPERADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"], tag: "NOVO" },
-        { label: "Meu Plano", href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
-        { label: "Multitracks Admin", href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Split Admin", href: "/split-admin", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Custom Mix Admin", href: "/custom-mix-admin", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Pads Admin", href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Importação CSV", href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["member.manage"] },
-        { label: "Auditoria", href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"] },
-        { label: "Grupos", href: "/admin?tab=groups", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Membros", href: "/admin?tab=users", icon: <Users className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Assinaturas", href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Cupons", href: "/cupons", icon: <TicketPercent className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
-        { label: "Planos Billing", href: "/billing-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], tag: "NOVO" },
-        { label: "Atendimento", href: "/support-admin", icon: <Headphones className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
-        { label: "Produtos Avulsos", href: "/products-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.administration"), href: "/dashboard/admin", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["report.group.access"] },
+        { label: t("nav.musicalAnalytics"), href: "/dashboard/analytics-musicais", icon: <BarChart2 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "SUPERADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"], tag: "NOVO" },
+        { label: t("nav.myPlan"), href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
+        { label: t("nav.multitracksAdmin"), href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.splitAdmin"), href: "/split-admin", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.customMixAdmin"), href: "/custom-mix-admin", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.padsAdmin"), href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.csvImport"), href: "/importacao-csv", icon: <Upload className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["member.manage"] },
+        { label: t("nav.audit"), href: "/auditoria", icon: <ClipboardList className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN", "ADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"] },
+        { label: t("nav.groups"), href: "/admin?tab=groups", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.members"), href: "/admin?tab=users", icon: <Users className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.subscriptions"), href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.coupons"), href: "/cupons", icon: <TicketPercent className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: t("nav.billingPlans"), href: "/billing-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], tag: "NOVO" },
+        { label: t("nav.attendance"), href: "/support-admin", icon: <Headphones className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
+        { label: t("nav.singleProducts"), href: "/products-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
       ],
     },
   ];
@@ -175,7 +178,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-foreground leading-tight">Líder Web</span>
-              <span className="text-[10px] text-muted-foreground leading-tight">by multitrackgospel.com</span>
+              <span className="text-[10px] text-muted-foreground leading-tight">{t("nav.byMinistry")}</span>
             </div>
           </Link>
         ) : (
@@ -258,6 +261,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
 
       {/* Footer — perfil */}
       <div className="border-t border-white/10 p-2">
+        <div className="px-2 pb-1">
+          <LanguageSelector variant="sidebar" collapsed={collapsed} />
+        </div>
         <Link
           href="/profile"
           onClick={handleLinkClick()}
