@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { getGroupEntitlements } from "@/lib/billing/entitlements";
-import { enqueueDownload, processNextDownloadJob } from "@/lib/multitracks-download";
+import { enqueueDownload } from "@/lib/multitracks-download";
 
 export async function POST(req: NextRequest) {
   try {
@@ -74,10 +74,17 @@ export async function POST(req: NextRequest) {
 
       const { jobId, isNew, status } = await enqueueDownload(albumId, user.groupId);
 
-      // Disparar worker em background se job novo
+      // Disparar worker via fetch interno (evita problema de background process no standalone)
       if (isNew) {
-        processNextDownloadJob().catch((err) => {
-          console.error("[rent] worker background error:", err);
+        const workerUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/api/multitracks/worker`;
+        fetch(workerUrl, {
+          method: "POST",
+          headers: {
+            "x-worker-secret": process.env.WORKER_SECRET ?? "liderweb-worker-internal",
+            "Content-Type": "application/json",
+          },
+        }).catch((err) => {
+          console.error("[rent] worker fetch error:", err);
         });
       }
 
