@@ -1482,16 +1482,23 @@ enum SupportPriority {
 }
 
 model MultitracksDownloadJob {
-  id          String   @id @default(cuid())
-  albumId     String   @unique
-  album       MultitracksAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  status      String   @default("PENDING") // PENDING, DOWNLOADING, DONE, ERROR
-  requestedBy String[] @default([])
+  id          String                       @id @default(cuid())
+  albumId     String                       @unique
+  album       MultitracksAlbum             @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  status      MultitracksDownloadJobStatus @default(PENDING)
+  requestedBy String[]                     @default([])
   startedAt   DateTime?
   completedAt DateTime?
   errorMsg    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
 
   @@index([status, createdAt])
 }
+enum MultitracksDownloadJobStatus {
+  PENDING
+  DOWNLOADING
+  DONE
+  ERROR
+}
+
