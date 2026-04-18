@@ -6,6 +6,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { sendSmtpMail } from "@/lib/smtp";
+import { presenceResponseEmail } from "@/lib/email-templates";
 import { AuditEntityType } from "@prisma/client";
 
 export async function POST(
@@ -75,6 +77,53 @@ export async function POST(
       userAgent: context.userAgent,
       metadata: { roleId, status },
     });
+
+    // ── Notificar admin sobre a resposta ────────────────────────────────
+    try {
+      const fromEmail = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
+
+      // Buscar dados completos da escala e do admin
+      const schedule = await prisma.schedule.findUnique({
+        where: { id: params?.id },
+        include: {
+          group: {
+            include: {
+              users: {
+                where: { role: { in: ["ADMIN", "LEADER"] } },
+                select: { name: true, email: true, role: true },
+                take: 3,
+              },
+            },
+          },
+        },
+      });
+
+      if (schedule?.group) {
+        const groupName = schedule.group.name ?? "Ministério";
+        const memberName = user.name ?? "Membro";
+        const roleLabel = scheduleRole.role ?? "Membro";
+
+        for (const admin of schedule.group.users) {
+          if (!admin.email || admin.email === user.email) continue;
+          const { subject, html } = presenceResponseEmail({
+            adminName: admin.name ?? "Líder",
+            adminEmail: admin.email,
+            groupName,
+            memberName,
+            scheduleName: schedule.name ?? "Escala",
+            scheduleDate: schedule.date,
+            memberRole: roleLabel,
+            status: status as "ACCEPTED" | "DECLINED",
+            scheduleId: params?.id,
+          });
+          await sendSmtpMail({ to: admin.email, subject, html, fromEmail, fromName: "Líder Web" })
+            .catch(err => console.warn(`[respond] email para ${admin.email} falhou:`, err));
+        }
+      }
+    } catch (emailErr) {
+      console.warn("[respond] Erro ao enviar email:", emailErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(updatedRole);
   } catch (error) {

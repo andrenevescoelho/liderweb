@@ -6,6 +6,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
+import { sendSmtpMail } from "@/lib/smtp";
+import { scheduleCreatedEmail } from "@/lib/email-templates";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
 
@@ -205,6 +207,43 @@ export async function POST(req: NextRequest) {
         setlistItemsCount: (setlistItems ?? []).length,
       },
     });
+
+    // ── Enviar email para cada membro escalado ──────────────────────────
+    try {
+      const fromEmail = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
+      const group = await prisma.group.findUnique({
+        where: { id: user.groupId ?? "" },
+        select: { name: true },
+      });
+      const groupName = group?.name ?? "Ministério";
+      const songs = schedule.setlist?.items?.map((i: any) => ({
+        title: i.song?.title ?? i.title ?? "",
+        artist: i.song?.artist ?? null,
+      })) ?? [];
+      const allMembers = schedule.roles
+        .filter((r: any) => r.member?.name)
+        .map((r: any) => ({ name: r.member.name, role: r.role ?? "" }));
+
+      for (const roleEntry of schedule.roles) {
+        if (!roleEntry.member?.email) continue;
+        const { subject, html } = scheduleCreatedEmail({
+          memberName: roleEntry.member.name ?? "Membro",
+          groupName,
+          scheduleName: schedule.name ?? setlistName ?? "Escala",
+          scheduleDate: schedule.date,
+          scheduleTime: time ?? null,
+          memberRole: roleEntry.role ?? "Membro",
+          songs,
+          otherMembers: allMembers.filter((m: any) => m.name !== roleEntry.member.name),
+          scheduleId: schedule.id,
+        });
+        await sendSmtpMail({ to: roleEntry.member.email, subject, html, fromEmail, fromName: "Líder Web" })
+          .catch(err => console.warn(`[schedule] email para ${roleEntry.member.email} falhou:`, err));
+      }
+    } catch (emailErr) {
+      console.warn("[schedule] Erro ao enviar emails:", emailErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(schedule);
   } catch (error) {
