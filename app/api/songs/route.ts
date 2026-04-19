@@ -57,13 +57,35 @@ export async function GET(req: NextRequest) {
         ];
       }
 
-      const songs = await prisma.song.findMany({
-        where,
-        orderBy: { updatedAt: "desc" },
-        take: 20,
-      });
+      const page = parseInt(searchParams?.get?.("page") ?? "1") || 1;
+      const take = 30;
+      const skip = (page - 1) * take;
 
-      return NextResponse.json(songs ?? []);
+      const [songs, total] = await Promise.all([
+        prisma.song.findMany({
+          where,
+          orderBy: { title: "asc" },
+          take,
+          skip,
+          select: {
+            id: true,
+            title: true,
+            artist: true,
+            bpm: true,
+            originalKey: true,
+            timeSignature: true,
+            tags: true,
+          },
+        }),
+        prisma.song.count({ where }),
+      ]);
+
+      return NextResponse.json({
+        songs: songs ?? [],
+        total,
+        page,
+        pages: Math.ceil(total / take),
+      });
     }
 
     if (user.role !== "SUPERADMIN") {
