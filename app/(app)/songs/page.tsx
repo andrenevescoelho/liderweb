@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -666,6 +666,9 @@ function SongModal({
   const [uploadProgress, setUploadProgress] = useState("");
   const [saving, setSaving] = useState(false);
   const [communitySongs, setCommunitySongs] = useState<any[]>([]);
+  const [communityTotal, setCommunityTotal] = useState(0);
+  const [communityPage, setCommunityPage] = useState(1);
+  const [communityPages, setCommunityPages] = useState(1);
   const [loadingCommunitySongs, setLoadingCommunitySongs] = useState(false);
   const [addingSongId, setAddingSongId] = useState("");
   const [showCommunityModal, setShowCommunityModal] = useState(false);
@@ -706,24 +709,40 @@ function SongModal({
     setUploadProgress("");
   }, [song, isOpen]);
 
+  const fetchCommunitySongs = useCallback(async (search = "", page = 1) => {
+    setLoadingCommunitySongs(true);
+    try {
+      let url = `/api/songs?library=community&page=${page}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setCommunitySongs(data?.songs ?? []);
+      setCommunityTotal(data?.total ?? 0);
+      setCommunityPage(data?.page ?? 1);
+      setCommunityPages(data?.pages ?? 1);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingCommunitySongs(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isOpen || song) return;
+    fetchCommunitySongs("", 1);
+    setCommunitySearch("");
+    setCommunityPage(1);
+  }, [isOpen, song, fetchCommunitySongs]);
 
-    const fetchCommunitySongs = async () => {
-      setLoadingCommunitySongs(true);
-      try {
-        const res = await fetch("/api/songs?library=community&limit=500");
-        const data = await res.json();
-        setCommunitySongs(Array.isArray(data) ? data : (data?.songs ?? []));
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoadingCommunitySongs(false);
-      }
-    };
-
-    fetchCommunitySongs();
-  }, [isOpen, song]);
+  // Debounce da busca no catálogo
+  useEffect(() => {
+    if (!showCommunityModal) return;
+    const timer = setTimeout(() => {
+      fetchCommunitySongs(communitySearch, 1);
+      setCommunityPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [communitySearch, showCommunityModal, fetchCommunitySongs]);
 
   const handleAddFromCommunity = async (sourceSongId: string) => {
     setAddingSongId(sourceSongId);
@@ -871,21 +890,8 @@ function SongModal({
     }
   };
 
-  // Lista filtrada e ordenada do catálogo comunitário
-  const filteredCommunity = communitySongs
-    .filter(s =>
-      !communitySearch ||
-      s.title?.toLowerCase().includes(communitySearch.toLowerCase()) ||
-      (s.artist ?? "").toLowerCase().includes(communitySearch.toLowerCase())
-    )
-    .sort((a, b) => {
-      let cmp = 0;
-      if (communitySort === "title")  cmp = (a.title ?? "").localeCompare(b.title ?? "", "pt");
-      if (communitySort === "artist") cmp = (a.artist ?? "").localeCompare(b.artist ?? "", "pt");
-      if (communitySort === "bpm")    cmp = (b.bpm ?? 0) - (a.bpm ?? 0);
-      if (communitySort === "recent") cmp = new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
-      return communitySortAsc ? cmp : -cmp;
-    });
+  // Busca server-side — communitySongs já vem filtrado e ordenado pela API
+  const filteredCommunity = communitySongs;
 
   return (
     <>
@@ -900,7 +906,7 @@ function SongModal({
               <Sparkles className="h-4 w-4 text-purple-500" />
               <h2 className="font-semibold text-base">Catálogo de músicas</h2>
               <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-                {filteredCommunity.length} de {communitySongs.length}
+                {communityTotal > 0 ? `${communitySongs.length} de ${communityTotal}` : ""}
               </span>
             </div>
             <button onClick={() => setShowCommunityModal(false)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
@@ -955,12 +961,18 @@ function SongModal({
 
           {/* Lista */}
           <div className="flex-1 overflow-y-auto divide-y divide-border">
-            {filteredCommunity.length === 0 ? (
+            {loadingCommunitySongs ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : (
+              <>
+              {filteredCommunity.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Music className="h-10 w-10 mb-3 opacity-20" />
                 <p className="text-sm">Nenhuma música encontrada.</p>
               </div>
-            ) : filteredCommunity.map(s => (
+              ) : filteredCommunity.map(s => (
               <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{s.title}</p>
@@ -986,7 +998,49 @@ function SongModal({
                 </Button>
               </div>
             ))}
+              </>
+            )}
           </div>
+
+          {/* Paginação */}
+          {communityPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-border flex-shrink-0">
+              <span className="text-xs text-muted-foreground">
+                Página {communityPage} de {communityPages} · {communityTotal} músicas
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { const p = communityPage - 1; fetchCommunitySongs(communitySearch, p); setCommunityPage(p); }}
+                  disabled={communityPage <= 1 || loadingCommunitySongs}
+                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-base">
+                  ‹
+                </button>
+                {Array.from({ length: Math.min(communityPages, 5) }, (_, i) => {
+                  const p = communityPage <= 3 ? i + 1 : communityPage - 2 + i;
+                  if (p < 1 || p > communityPages) return null;
+                  return (
+                    <button key={p}
+                      onClick={() => { fetchCommunitySongs(communitySearch, p); setCommunityPage(p); }}
+                      disabled={loadingCommunitySongs}
+                      className={cn(
+                        "h-7 w-7 flex items-center justify-center rounded-lg border text-xs font-medium transition-colors",
+                        p === communityPage
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/30"
+                      )}>
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => { const p = communityPage + 1; fetchCommunitySongs(communitySearch, p); setCommunityPage(p); }}
+                  disabled={communityPage >= communityPages || loadingCommunitySongs}
+                  className="h-7 w-7 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-base">
+                  ›
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )}
@@ -1006,7 +1060,7 @@ function SongModal({
                 <div>
                   <h4 className="font-medium text-sm">Adicionar música já cadastrada</h4>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {loadingCommunitySongs ? "Carregando..." : `${communitySongs.length} músicas disponíveis`}
+                    {loadingCommunitySongs ? "Carregando..." : communityTotal > 0 ? `${communityTotal} músicas disponíveis` : "Buscar no catálogo"}
                   </p>
                 </div>
               </div>
@@ -1015,7 +1069,7 @@ function SongModal({
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCommunityModal(true)}
-                disabled={loadingCommunitySongs || communitySongs.length === 0}
+                disabled={loadingCommunitySongs}
                 className="flex items-center gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300"
               >
                 {loadingCommunitySongs
