@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export default function ReativarAssinaturaPage() {
+  // Liberar scroll desta página (html/body têm overflow:hidden no app)
+  useEffect(() => {
+    document.documentElement.classList.add("page-scrollable");
+    return () => document.documentElement.classList.remove("page-scrollable");
+  }, []);
+
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);

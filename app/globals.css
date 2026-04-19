@@ -72,6 +72,13 @@
     height: 100%;
     overflow: hidden;
   }
+
+  /* Páginas fora do app (planos, login, etc) precisam de scroll normal */
+  html.page-scrollable,
+  html.page-scrollable body {
+    overflow: auto;
+    height: auto;
+  }
 }
 
 /* Hide hydration errors */

@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export default function SemAssinaturaPage() {
+  // Liberar scroll desta página (html/body têm overflow:hidden no app)
+  useEffect(() => {
+    document.documentElement.classList.add("page-scrollable");
+    return () => document.documentElement.classList.remove("page-scrollable");
+  }, []);
+
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' });
   };
