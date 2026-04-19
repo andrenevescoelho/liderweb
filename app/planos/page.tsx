@@ -39,6 +39,12 @@ const EXTRAS = [
 ];
 
 export default function PlanosPage() {
+  // Liberar scroll desta página (html/body têm overflow:hidden no app)
+  useEffect(() => {
+    document.documentElement.classList.add("page-scrollable");
+    return () => document.documentElement.classList.remove("page-scrollable");
+  }, []);
+
   const router = useRouter();
   const { data: session } = useSession();
   const [plans, setPlans] = useState<BillingPlan[]>([]);
