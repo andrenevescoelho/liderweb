@@ -95,18 +95,6 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { title: "asc" },
       include: {
-        multitracksAlbums: {
-          where: { isActive: true, status: { in: ["READY", "CATALOGED", "DOWNLOADING"] } },
-          select: {
-            id: true,
-            rentals: user.groupId ? {
-              where: { groupId: user.groupId, status: "ACTIVE" },
-              select: { id: true },
-              take: 1,
-            } : false,
-          },
-          take: 1,
-        },
         padBoards: {
           where: { isActive: true },
           select: { id: true },
@@ -115,9 +103,61 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Buscar multitracks por título (case-insensitive) OU por songId
+    // Isso garante que todos os grupos veem multitracks mesmo que a música
+    // tenha sido criada por outro grupo e vinculada por título
+    let multitracksMap: Record<string, { id: string; rentals?: any[] }> = {};
+    if (canViewMultitrack && songs.length > 0) {
+      const titles = [...new Set(songs.map((s: any) => s.title))];
+      const songIds = songs.map((s: any) => s.id);
+      const albums = await (prisma as any).multitracksAlbum.findMany({
+        where: {
+          isActive: true,
+          status: { in: ["READY", "CATALOGED", "DOWNLOADING"] },
+          OR: [
+            { songId: { in: songIds } },
+            { title: { in: titles } },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          songId: true,
+          rentals: user.groupId ? {
+            where: { groupId: user.groupId, status: "ACTIVE" },
+            select: { id: true },
+            take: 1,
+          } : false,
+        },
+      });
+
+      // Mapear por songId primeiro, depois por título normalizado
+      const normalizeTitle = (t: string) =>
+        t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+      for (const album of albums) {
+        // Índice por songId
+        if (album.songId) {
+          multitracksMap[album.songId] = album;
+        }
+        // Índice por título normalizado
+        const key = `title:${normalizeTitle(album.title)}`;
+        if (!multitracksMap[key]) {
+          multitracksMap[key] = album;
+        }
+      }
+    }
+
     const songsWithResources = songs.map((song: any) => {
-      const hasMultitrack = canViewMultitrack && song.multitracksAlbums.length > 0;
-      const multitrackRented = hasMultitrack && (song.multitracksAlbums[0].rentals?.length ?? 0) > 0;
+      // Tentar encontrar multitrack pelo songId ou pelo título
+      const normalizeTitle = (t: string) =>
+        t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+      const album = multitracksMap[song.id] ||
+        multitracksMap[`title:${normalizeTitle(song.title)}`];
+
+      const hasMultitrack = canViewMultitrack && Boolean(album);
+      const multitrackRented = hasMultitrack && (album?.rentals?.length ?? 0) > 0;
       return {
         ...song,
         resources: {
@@ -125,7 +165,7 @@ export async function GET(req: NextRequest) {
           youtube: Boolean(song.youtubeUrl),
           audio: Boolean(song.audioUrl),
           multitrack: hasMultitrack,
-          multitrackAlbumId: hasMultitrack ? (song.multitracksAlbums[0]?.id ?? null) : null,
+          multitrackAlbumId: hasMultitrack ? (album?.id ?? null) : null,
           multitrackRented,
           pad: song.padBoards.length > 0,
           padBoardId: song.padBoards[0]?.id ?? null,
