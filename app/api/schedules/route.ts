@@ -8,7 +8,6 @@ import { hasPermission } from "@/lib/authorization";
 import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
 import { sendSmtpMail } from "@/lib/smtp";
 import { isEmailEnabled } from "@/lib/email-config";
-import { isEmailEnabled } from "@/lib/email-config";
 import { scheduleCreatedEmail } from "@/lib/email-templates";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
