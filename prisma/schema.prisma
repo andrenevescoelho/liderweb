@@ -1502,3 +1502,17 @@ enum MultitracksDownloadJobStatus {
   ERROR
 }
 
+
+// ─── Configurações de Email ───────────────────────────────────────────────────
+
+model EmailConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique // ex: "new_account", "new_subscription", "payment_received"
+  label     String   // ex: "Nova conta criada"
+  category  String   // ex: "Contas", "Assinaturas", "Pagamentos"
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  updatedBy String?  // userId do superadmin que alterou
+
+  @@index([category])
+}

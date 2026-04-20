@@ -91,7 +91,8 @@
     "smartAlerts": "Alertas Inteligentes",
     "systemHealth": "Saúde do Sistema",
     "pushAnnouncements": "Push Comunicados",
-    "adminDashboard": "Dashboard Admin"
+    "adminDashboard": "Dashboard Admin",
+    "emailConfig": "Config. de Emails"
   },
   "auth": {
     "login": "Entrar",
