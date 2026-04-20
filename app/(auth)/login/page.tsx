@@ -72,7 +72,7 @@ export default function LoginPage() {
         if (result.error.includes("Muitas tentativas") || result.error.includes("tentativas")) {
           setError(result.error);
         } else {
-          setError("Credenciais inválidas");
+          setError("Email ou senha incorretos. Se você entrou com Google anteriormente, use o botão 'Entrar com Google'.");
         }
         return;
       }
@@ -92,7 +92,7 @@ export default function LoginPage() {
       }
       router.replace("/");
     } catch {
-      setError("Erro ao fazer login");
+      setError("Erro ao fazer login. Tente usar o botão 'Entrar com Google' se sua conta foi criada por ele.");
     } finally {
       setCredentialsLoading(false);
     }

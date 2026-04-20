@@ -121,36 +121,36 @@ export const authOptions: NextAuthOptions = {
         });
         
         if (!user) {
-          await logUserAction({
+          logUserAction({
             action: AUDIT_ACTIONS.LOGIN_FAILED,
             entityType: AuditEntityType.AUTH,
             description: `Tentativa de login inválida para ${normalizedEmail}`,
             metadata: { email: normalizedEmail, reason: "user_not_found" },
-          });
+          }).catch(() => {});
           return null;
         }
         
         const isValid = await verifyPassword(credentials.password, user.password, user.id);
         if (!isValid) {
-          await logUserAction({
+          logUserAction({
             userId: user.id,
             groupId: user.groupId,
             action: AUDIT_ACTIONS.LOGIN_FAILED,
             entityType: AuditEntityType.AUTH,
             description: `Tentativa de login inválida para ${user.email}`,
             metadata: { email: user.email, reason: "invalid_password" },
-          });
+          }).catch(() => {});
           return null;
         }
 
-        await logUserAction({
+        logUserAction({
           userId: user.id,
           groupId: user.groupId,
           action: AUDIT_ACTIONS.LOGIN_SUCCESS,
           entityType: AuditEntityType.AUTH,
           description: `Login realizado com sucesso por ${user.name}`,
           metadata: { provider: "credentials" },
-        });
+        }).catch(() => {});
         
         // Verificar status da assinatura do grupo
         let subscriptionStatus = null;
@@ -289,7 +289,8 @@ export const authOptions: NextAuthOptions = {
         }).catch(() => {}); // silencioso — não bloquear login
       }
 
-      await logUserAction({
+      // Fire-and-forget — nunca bloquear o login por falha de auditoria
+      logUserAction({
         userId: existingUser?.id ?? user.id ?? null,
         groupId: existingUser?.groupId ?? null,
         action: AUDIT_ACTIONS.LOGIN_SUCCESS,
@@ -301,7 +302,7 @@ export const authOptions: NextAuthOptions = {
           providerAccountId: account.providerAccountId,
           matchedExistingUser: Boolean(existingUser),
         },
-      });
+      }).catch(() => {}); // nunca propagar erro de auditoria
 
       return true;
     },
