@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
+import { sendSmtpMail } from "@/lib/smtp";
+import { isEmailEnabled } from "@/lib/email-config";
 import { AuditEntityType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +122,39 @@ export async function POST(req: NextRequest) {
     userAgent: context.userAgent,
     newValues: { name: group.name, description: group.description, active: group.active },
   });
+
+  // ── Email de novo grupo criado ──────────────────────────────────────
+  try {
+    const emailEnabled = await isEmailEnabled("new_account").catch(() => true);
+    if (emailEnabled) {
+      const fromEmail = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
+      const adminInfo = body.adminEmail ? `\n\nAdmin: ${body.adminName} (${body.adminEmail})` : "";
+      await sendSmtpMail({
+        to: fromEmail, // envia para o próprio SMTP (superadmin)
+        subject: `🏛️ Novo ministério cadastrado: ${group.name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:28px;border-radius:12px 12px 0 0;text-align:center;">
+              <p style="margin:0;color:#fff;font-size:20px;font-weight:700;">🏛️ Novo Ministério</p>
+            </div>
+            <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
+              <p style="margin:0 0 16px;color:#1e293b;">Um novo ministério foi cadastrado na plataforma:</p>
+              <table cellpadding="0" cellspacing="0">
+                <tr><td style="padding:4px 0;color:#64748b;width:100px;">Nome</td><td style="padding:4px 0;font-weight:600;color:#1e293b;">${group.name}</td></tr>
+                ${body.description ? `<tr><td style="padding:4px 0;color:#64748b;">Descrição</td><td style="padding:4px 0;color:#1e293b;">${body.description}</td></tr>` : ""}
+                ${body.adminName ? `<tr><td style="padding:4px 0;color:#64748b;">Admin</td><td style="padding:4px 0;color:#1e293b;">${body.adminName}</td></tr>` : ""}
+                ${body.adminEmail ? `<tr><td style="padding:4px 0;color:#64748b;">Email</td><td style="padding:4px 0;color:#1e293b;">${body.adminEmail}</td></tr>` : ""}
+                <tr><td style="padding:4px 0;color:#64748b;">Data</td><td style="padding:4px 0;color:#1e293b;">${new Date().toLocaleString("pt-BR")}</td></tr>
+              </table>
+            </div>
+          </div>`,
+        fromEmail,
+        fromName: "Líder Web",
+      }).catch(err => console.warn("[groups] email falhou:", err));
+    }
+  } catch (emailErr) {
+    console.warn("[groups] erro ao enviar email:", emailErr);
+  }
 
   return NextResponse.json(group, { status: 201 });
 }

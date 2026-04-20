@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/authorization";
 import { findScheduleAvailabilityConflicts } from "@/lib/schedule-availability";
 import { sendSmtpMail } from "@/lib/smtp";
 import { isEmailEnabled } from "@/lib/email-config";
+import { isEmailEnabled } from "@/lib/email-config";
 import { scheduleCreatedEmail } from "@/lib/email-templates";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
@@ -211,7 +212,8 @@ export async function POST(req: NextRequest) {
 
     // ── Enviar email para cada membro escalado ──────────────────────────
     try {
-      if (!(await isEmailEnabled("schedule_created"))) {
+      const emailEnabled = await isEmailEnabled("schedule_created").catch(() => true);
+      if (!emailEnabled) {
         return NextResponse.json(schedule);
       }
       const fromEmail = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
