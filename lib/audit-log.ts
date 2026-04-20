@@ -109,10 +109,24 @@ export interface LogUserActionInput {
 
 export async function logUserAction(input: LogUserActionInput) {
   try {
+    // Validar FKs antes de salvar — evita constraint violations quando
+    // userId/groupId são passados mas ainda não existem no banco
+    let safeUserId = input.userId ?? null;
+    let safeGroupId = input.groupId ?? null;
+
+    if (safeUserId) {
+      const exists = await prisma.user.findUnique({ where: { id: safeUserId }, select: { id: true } }).catch(() => null);
+      if (!exists) safeUserId = null;
+    }
+    if (safeGroupId) {
+      const exists = await prisma.group.findUnique({ where: { id: safeGroupId }, select: { id: true } }).catch(() => null);
+      if (!exists) safeGroupId = null;
+    }
+
     await prisma.auditLog.create({
       data: {
-        userId: input.userId ?? null,
-        groupId: input.groupId ?? null,
+        userId: safeUserId,
+        groupId: safeGroupId,
         action: input.action,
         entityType: input.entityType ?? AuditEntityType.OTHER,
         entityId: input.entityId ?? null,
