@@ -407,7 +407,7 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
 
   useEffect(() => {
     fetch("/api/songs").then((r) => r.json())
-      .then((s) => setSongs(Array.isArray(s) ? s : []))
+      .then((s) => setSongs(Array.isArray(s) ? s : (s?.songs ?? [])))
       .catch(console.error);
 
     fetch("/api/members").then((r) => r.json())

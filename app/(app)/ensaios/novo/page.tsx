@@ -45,7 +45,7 @@ export default function NovoEnsaioPage() {
 
     fetch("/api/songs")
       .then((res) => res.json())
-      .then((data) => setSongsCatalog(data ?? []))
+      .then((data) => setSongsCatalog(Array.isArray(data) ? data : (data?.songs ?? [])))
       .catch(() => setSongsCatalog([]));
   }, [canManage]);
 

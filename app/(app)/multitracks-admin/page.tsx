@@ -154,7 +154,7 @@ export default function MultitracksAdminPage() {
     try {
       const res = await fetch(`/api/songs?search=${encodeURIComponent(q)}`);
       const data = await res.json();
-      setSongResults((data ?? []).slice(0, 8).map((s: any) => ({ id: s.id, title: s.title, artist: s.artist })));
+      setSongResults((Array.isArray(data) ? data : (data?.songs ?? [])).slice(0, 8).map((s: any) => ({ id: s.id, title: s.title, artist: s.artist })));
     } catch { setSongResults([]); }
     finally { setSearchingSong(false); }
   };
