@@ -1378,6 +1378,15 @@ model SplitJob {
   sections      Json?         // [{label: "Intro", startSec: 0, endSec: 8}, ...]
 
   createdAt     DateTime      @default(now())
+  isPublic      Boolean       @default(false)
+  priceInCents  Int?          @default(490)
+  purchasedFrom String?
+  isPublic      Boolean       @default(false)
+  priceInCents  Int?          @default(490)
+  purchasedFrom String?
+  isPublic      Boolean       @default(false)
+  priceInCents  Int?          @default(490)
+  purchasedFrom String?
   updatedAt     DateTime      @updatedAt
 
   group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
