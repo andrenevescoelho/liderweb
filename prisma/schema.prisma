@@ -243,6 +243,7 @@ model Group {
   carts               Cart[]
   supportTickets      SupportTicket[]
   splitJobs           SplitJob[]
+  scheduleTemplates   ScheduleTemplate[]
   orders              Order[]
 }
 
@@ -1518,4 +1519,23 @@ model EmailConfig {
   updatedBy String?  // userId do superadmin que alterou
 
   @@index([category])
+}
+
+// ─── Templates de Escala ──────────────────────────────────────────────────────
+
+model ScheduleTemplate {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name        String   // ex: "Culto Domingo Manhã"
+  dayOfWeek   Int?     // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb (null = qualquer)
+  defaultTime String?  // ex: "09:00"
+  songCount   Int      @default(5) // quantidade de músicas a sugerir
+  bandType    String   @default("full") // "full" | "reduced" | "vocals_only"
+  roles       Json     @default("[]") // [{ role: "Ministro", count: 1 }, { role: "Vocal", count: 2 }]
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([groupId])
 }
