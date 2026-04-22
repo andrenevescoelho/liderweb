@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
+import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -98,6 +100,14 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
+    logUserAction({
+      userId: user.id, groupId: null,
+      action: AUDIT_ACTIONS.SPLIT_MARKED_PUBLIC,
+      entityType: AuditEntityType.OTHER,
+      entityId: jobId, entityName: job.songName,
+      description: `Split ${isPublic ? 'marcado como público' : 'removido do acervo'}: ${job.songName}`,
+      metadata: { jobId, isPublic, priceInCents },
+    }).catch(() => {});
     return NextResponse.json({ ok: true, job });
   } catch (err: any) {
     console.error("[splits/admin] PATCH error:", err);

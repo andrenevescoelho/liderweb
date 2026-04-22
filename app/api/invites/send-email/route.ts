@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { randomBytes } from "crypto";
 import type { SessionUser } from "@/lib/types";
 import { sendSmtpMail } from "@/lib/smtp";
+import { logUserAction, AUDIT_ACTIONS, extractRequestContext } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -161,6 +163,14 @@ export async function POST(req: NextRequest) {
       // Continue mesmo se o email falhar
     }
     
+    logUserAction({
+      userId: user.id, groupId: user.groupId ?? group.id,
+      action: AUDIT_ACTIONS.INVITE_SENT,
+      entityType: AuditEntityType.USER,
+      entityId: invite.id, entityName: invite.email,
+      description: `Convite enviado para ${invite.email} no grupo ${group.name}`,
+      metadata: { email: invite.email, groupId: group.id, expiresAt: invite.expiresAt },
+    }).catch(() => {});
     return NextResponse.json({ 
       success: true, 
       message: "Convite enviado por email!",

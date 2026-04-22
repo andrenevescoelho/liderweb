@@ -7,6 +7,10 @@ import { prisma } from "@/lib/db";
 import { SessionUser } from "@/lib/types";
 import { getGroupEntitlements } from "@/lib/billing/entitlements";
 import { enqueueDownload } from "@/lib/multitracks-download";
+import { logUserAction, AUDIT_ACTIONS, extractRequestContext } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
+import { logUserAction, AUDIT_ACTIONS, extractRequestContext } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -117,6 +121,14 @@ export async function POST(req: NextRequest) {
       });
 
       // Retornar 202 — cliente deve fazer polling em /api/multitracks/rent/status
+      logUserAction({
+        userId: user.id, groupId: user.groupId,
+        action: AUDIT_ACTIONS.MULTITRACK_RENTED,
+        entityType: AuditEntityType.MULTITRACK,
+        entityId: albumId, entityName: album?.title ?? albumId,
+        description: `${user.name ?? user.email} alugou multitrack (download pendente)`,
+        metadata: { albumId, status: "DOWNLOADING", jobId },
+      }).catch(() => {});
       return NextResponse.json({
         downloading: true,
         jobId,
@@ -153,6 +165,14 @@ export async function POST(req: NextRequest) {
       update: { count: { increment: 1 } },
     });
 
+    logUserAction({
+      userId: user.id, groupId: user.groupId,
+      action: AUDIT_ACTIONS.MULTITRACK_RENTED,
+      entityType: AuditEntityType.MULTITRACK,
+      entityId: albumId, entityName: album?.title ?? albumId,
+      description: `${user.name ?? user.email} alugou multitrack`,
+      metadata: { albumId, expiresAt, quota: { used: currentCount + 1, limit } },
+    }).catch(() => {});
     return NextResponse.json({ rental, usage: { count: currentCount + 1, limit } });
 
   } catch (err) {

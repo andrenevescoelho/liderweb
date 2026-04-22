@@ -66,6 +66,14 @@ export async function POST(req: NextRequest) {
       `,
     });
 
+    logUserAction({
+      userId: user.id, groupId: null,
+      action: AUDIT_ACTIONS.PASSWORD_RESET_REQUESTED,
+      entityType: AuditEntityType.AUTH,
+      entityId: user.id, entityName: user.email,
+      description: `Solicitação de redefinição de senha para ${user.email}`,
+      metadata: { email: user.email },
+    }).catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Forgot password error:", error);

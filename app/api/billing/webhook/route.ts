@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import Stripe from "stripe";
+import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 import { SubscriptionStatus } from "@prisma/client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -373,6 +375,16 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   });
 
   console.log(`[webhook] Subscription updated: ${subscription.id} → ${status} cancelAtPeriodEnd=${cancelAtPeriodEnd} cancelAt=${cancelAt}`);
+  
+  const action = status === "CANCELED" ? AUDIT_ACTIONS.SUBSCRIPTION_CANCELLED : AUDIT_ACTIONS.SUBSCRIPTION_ACTIVATED;
+  logUserAction({
+    userId: null, groupId: existing.groupId,
+    action,
+    entityType: AuditEntityType.SUBSCRIPTION,
+    entityId: existing.id,
+    description: `Assinatura ${status === "CANCELED" ? "cancelada" : "atualizada"} via Stripe (${status})`,
+    metadata: { stripeSubscriptionId: subscription.id, status, cancelAtPeriodEnd, cancelAt },
+  }).catch(() => {});
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
@@ -391,6 +403,14 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   });
 
   console.log(`[webhook] Subscription canceled: ${subscription.id}`);
+  logUserAction({
+    userId: null, groupId: existing.groupId,
+    action: AUDIT_ACTIONS.SUBSCRIPTION_CANCELLED,
+    entityType: AuditEntityType.SUBSCRIPTION,
+    entityId: existing.id,
+    description: "Assinatura cancelada via Stripe",
+    metadata: { stripeSubscriptionId: subscription.id },
+  }).catch(() => {});
 }
 
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
@@ -438,6 +458,16 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   }
 
   console.log(`[webhook] Payment succeeded: ${inv.id} (${inv.amount_paid / 100} BRL)`);
+  if (existing) {
+    logUserAction({
+      userId: null, groupId: existing.groupId,
+      action: AUDIT_ACTIONS.PAYMENT_RECEIVED,
+      entityType: AuditEntityType.SUBSCRIPTION,
+      entityId: inv.id,
+      description: `Pagamento recebido: R$ ${(inv.amount_paid / 100).toFixed(2)}`,
+      metadata: { invoiceId: inv.id, amount: inv.amount_paid / 100, currency: inv.currency },
+    }).catch(() => {});
+  }
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {

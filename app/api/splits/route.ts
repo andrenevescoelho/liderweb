@@ -8,6 +8,8 @@ import { SessionUser } from "@/lib/types";
 import { canAccessFeature, getQuota } from "@/lib/billing/entitlements";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { createS3Client, getBucketConfig } from "@/lib/aws-config";
+import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 import { hasPermission } from "@/lib/authorization";
 
@@ -163,6 +165,14 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ jobId: job.id }),
     }).catch(err => console.error("[splits] dispatch error:", err));
 
+    logUserAction({
+      userId: user.id, groupId: user.groupId,
+      action: AUDIT_ACTIONS.SPLIT_CREATED,
+      entityType: AuditEntityType.OTHER,
+      entityId: job.id, entityName: job.songName,
+      description: `Split iniciado: ${job.songName}${job.artistName ? ' - ' + job.artistName : ''}`,
+      metadata: { jobId: job.id, fileName: job.fileName, fileSizeBytes: job.fileSizeBytes },
+    }).catch(() => {});
     return NextResponse.json({ job }, { status: 201 });
   } catch (error: any) {
     console.error("[splits/POST]", error);

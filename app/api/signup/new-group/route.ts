@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { sendSmtpMail } from "@/lib/smtp";
 import { isEmailEnabled } from "@/lib/email-config";
+import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
+import { AuditEntityType } from "@prisma/client";
 
 // Domínios descartáveis/teste bloqueados
 const BLOCKED_DOMAINS = [
@@ -127,6 +129,16 @@ export async function POST(req: NextRequest) {
 
       return { group, user };
     });
+
+    // ── Audit log ──────────────────────────────────────────────────────
+    logUserAction({
+      userId: result.user.id, groupId: result.group.id,
+      action: AUDIT_ACTIONS.ACCOUNT_CREATED,
+      entityType: AuditEntityType.USER,
+      entityId: result.user.id, entityName: result.user.name,
+      description: `Novo ministério criado: ${result.group.name} (admin: ${result.user.email})`,
+      metadata: { groupName: result.group.name, email: result.user.email },
+    }).catch(() => {});
 
     // ── Email de novo grupo criado ──────────────────────────────────────
     try {
