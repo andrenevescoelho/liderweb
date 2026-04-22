@@ -112,9 +112,15 @@ function SignupContent() {
 
   useEffect(() => {
     if (!inviteToken && status === "authenticated") {
-      router.replace("/dashboard");
+      const user = session?.user as any;
+      if (!user?.groupId && user?.role !== "SUPERADMIN") {
+        // Usuário autenticado mas sem grupo — mostrar tela de sem grupo
+        router.replace("/sem-grupo");
+      } else {
+        router.replace("/dashboard");
+      }
     }
-  }, [inviteToken, router, status]);
+  }, [inviteToken, router, status, session]);
 
   // Cadastro com convite
   const handleInviteSignup = async (e: React.FormEvent) => {

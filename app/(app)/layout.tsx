@@ -9,10 +9,15 @@ export default async function AppLayoutWrapper({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
-  const user = session?.user as { role?: string; hasActiveSubscription?: boolean } | undefined;
+  const user = session?.user as { role?: string; hasActiveSubscription?: boolean; groupId?: string } | undefined;
 
   if (!session) {
     redirect("/login");
+  }
+
+  // Usuário autenticado mas sem grupo — limbo do Google login
+  if (user?.role !== "SUPERADMIN" && !user?.groupId) {
+    redirect("/sem-grupo");
   }
 
   if (user?.role !== "SUPERADMIN" && user?.hasActiveSubscription === false) {
