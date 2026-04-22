@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { format, addDays, nextSunday, startOfMonth, endOfMonth, eachWeekOfInterval, nextDay } from "date-fns";
+import { useState, useEffect, useCallback } from "react";
+import { format, addDays, nextSunday, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, Sparkles, ChevronRight, ChevronLeft, Check, Calendar, Clock, Music, Users, AlertCircle } from "lucide-react";
+import {
+  Loader2, Sparkles, ChevronRight, ChevronLeft, Check, Calendar, Clock,
+  Music, Users, AlertCircle, BookTemplate, Plus, Settings, Star,
+} from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +36,17 @@ interface AiSchedule {
   aiNotes?: string;
 }
 
+interface ScheduleTemplate {
+  id: string;
+  name: string;
+  dayOfWeek: number | null;
+  defaultTime: string | null;
+  songCount: number;
+  bandType: string;
+  roles: { role: string; count: number }[];
+  isDefault: boolean;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -43,54 +58,296 @@ interface Member {
   name: string;
 }
 
+const DAY_NAMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DAY_NAMES_FULL = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+const BAND_TYPE_LABELS: Record<string, string> = {
+  full: "Banda completa",
+  reduced: "Banda reduzida",
+  vocals_only: "Somente vozes",
+};
+
 // ── Helpers de data ──────────────────────────────────────────────────────────
 
-function getNextSundays(n: number): string[] {
-  const dates: string[] = [];
-  let d = nextSunday(new Date());
-  for (let i = 0; i < n; i++) {
-    dates.push(format(d, "yyyy-MM-dd"));
-    d = addDays(d, 7);
-  }
-  return dates;
+function getDayOccurrences(dayOfWeek: number, monthOffset: number): string[] {
+  const base = new Date();
+  const start = startOfMonth(addMonths(base, monthOffset));
+  const end = endOfMonth(start);
+  return eachDayOfInterval({ start, end })
+    .filter((d) => getDay(d) === dayOfWeek)
+    .map((d) => format(d, "yyyy-MM-dd"));
 }
 
-function getSundaysOfMonth(monthOffset: number): string[] {
-  const base = new Date();
-  const target = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
-  const start = startOfMonth(target);
-  const end = endOfMonth(target);
-  const weeks = eachWeekOfInterval({ start, end }, { weekStartsOn: 0 });
-  return weeks
-    .map((w) => nextDay(w, 0))
-    .filter((d) => d >= start && d <= end)
-    .map((d) => format(d, "yyyy-MM-dd"));
+function getNextOccurrences(dayOfWeek: number, count: number): string[] {
+  const dates: string[] = [];
+  let d = new Date();
+  d = addDays(d, 1);
+  while (dates.length < count) {
+    if (getDay(d) === dayOfWeek) dates.push(format(d, "yyyy-MM-dd"));
+    d = addDays(d, 1);
+  }
+  return dates;
 }
 
 function formatDateLabel(dateStr: string): string {
   return format(new Date(dateStr + "T12:00:00"), "EEE, dd 'de' MMM", { locale: ptBR });
 }
 
-// ── Componente ───────────────────────────────────────────────────────────────
+// ── Componente de gerenciamento de templates ─────────────────────────────────
+
+function TemplateManager({ onClose }: { onClose: () => void }) {
+  const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<ScheduleTemplate | null>(null);
+  const [form, setForm] = useState({
+    name: "", dayOfWeek: "" as string | number, defaultTime: "",
+    songCount: 5, bandType: "full",
+    roles: [
+      { role: "Ministro", count: 1 },
+      { role: "Vocal", count: 1 },
+      { role: "Backing Vocal", count: 2 },
+      { role: "Teclado", count: 1 },
+      { role: "Violão", count: 1 },
+    ] as { role: string; count: number }[],
+    isDefault: false,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const fetchTemplates = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/schedule-templates");
+      if (res.ok) setTemplates(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+
+  function startEdit(t: ScheduleTemplate) {
+    setEditing(t);
+    setForm({
+      name: t.name,
+      dayOfWeek: t.dayOfWeek ?? "",
+      defaultTime: t.defaultTime ?? "",
+      songCount: t.songCount,
+      bandType: t.bandType,
+      roles: Array.isArray(t.roles) ? t.roles : [],
+      isDefault: t.isDefault,
+    });
+  }
+
+  function startNew() {
+    setEditing({ id: "", name: "", dayOfWeek: null, defaultTime: null, songCount: 5, bandType: "full", roles: [], isDefault: false });
+    setForm({ name: "", dayOfWeek: "", defaultTime: "", songCount: 5, bandType: "full", roles: [{ role: "Ministro", count: 1 }, { role: "Vocal", count: 1 }, { role: "Backing Vocal", count: 2 }], isDefault: false });
+  }
+
+  async function saveTemplate() {
+    if (!form.name.trim()) { toast.error("Nome é obrigatório"); return; }
+    setSaving(true);
+    try {
+      const payload = { ...form, dayOfWeek: form.dayOfWeek === "" ? null : Number(form.dayOfWeek) };
+      const isNew = !editing?.id;
+      const res = await fetch("/api/schedule-templates", {
+        method: isNew ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isNew ? payload : { id: editing?.id, ...payload }),
+      });
+      if (res.ok) {
+        toast.success(isNew ? "Template criado!" : "Template atualizado!");
+        setEditing(null);
+        fetchTemplates();
+      } else {
+        toast.error("Erro ao salvar template");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteTemplate(id: string) {
+    if (!confirm("Remover este template?")) return;
+    const res = await fetch("/api/schedule-templates", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) { toast.success("Removido!"); fetchTemplates(); }
+  }
+
+  if (editing !== null) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setEditing(null)} className="text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <h3 className="font-semibold text-sm">{editing.id ? "Editar template" : "Novo template"}</h3>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-muted-foreground">Nome do template</label>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Ex: Culto Domingo Manhã"
+              className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Dia da semana</label>
+            <select value={form.dayOfWeek} onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
+              className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+              <option value="">Qualquer dia</option>
+              {DAY_NAMES_FULL.map((d, i) => <option key={i} value={i}>{d}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Horário padrão</label>
+            <input type="time" value={form.defaultTime} onChange={(e) => setForm({ ...form, defaultTime: e.target.value })}
+              className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Músicas a sugerir</label>
+            <input type="number" min={1} max={15} value={form.songCount} onChange={(e) => setForm({ ...form, songCount: Number(e.target.value) })}
+              className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Tipo de banda</label>
+            <select value={form.bandType} onChange={(e) => setForm({ ...form, bandType: e.target.value })}
+              className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+              {Object.entries(BAND_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Funções */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-muted-foreground">Funções na escala</label>
+            <button onClick={() => setForm({ ...form, roles: [...form.roles, { role: "", count: 1 }] })}
+              className="text-xs text-primary hover:underline flex items-center gap-1">
+              <Plus className="h-3 w-3" />Adicionar
+            </button>
+          </div>
+          <div className="space-y-2">
+            {form.roles.map((r, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <input value={r.role} onChange={(e) => { const roles = [...form.roles]; roles[i] = { ...roles[i], role: e.target.value }; setForm({ ...form, roles }); }}
+                  placeholder="Ex: Backing Vocal"
+                  className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none" />
+                <input type="number" min={1} max={10} value={r.count} onChange={(e) => { const roles = [...form.roles]; roles[i] = { ...roles[i], count: Number(e.target.value) }; setForm({ ...form, roles }); }}
+                  className="w-14 h-8 rounded-md border border-input bg-background px-2 text-sm text-center focus:outline-none" />
+                <button onClick={() => setForm({ ...form, roles: form.roles.filter((_, j) => j !== i) })}
+                  className="text-muted-foreground hover:text-red-500 text-xs">✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+            className="rounded" />
+          <span>Usar como template padrão</span>
+        </label>
+
+        <div className="flex gap-2 justify-end pt-2">
+          <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>Cancelar</Button>
+          <Button size="sm" onClick={saveTemplate} disabled={saving}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Salvar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <h3 className="font-semibold text-sm">Templates de culto</h3>
+        </div>
+        <Button size="sm" onClick={startNew} className="gap-1">
+          <Plus className="h-3.5 w-3.5" />Novo
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      ) : templates.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground text-sm">
+          <BookTemplate className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          Nenhum template criado ainda.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {templates.map((t) => (
+            <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/30 transition-colors">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{t.name}</span>
+                  {t.isDefault && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {t.dayOfWeek !== null && <span className="text-xs text-muted-foreground">{DAY_NAMES_FULL[t.dayOfWeek]}</span>}
+                  {t.defaultTime && <span className="text-xs text-muted-foreground">{t.defaultTime}</span>}
+                  <span className="text-xs text-muted-foreground">{BAND_TYPE_LABELS[t.bandType]}</span>
+                  <span className="text-xs text-muted-foreground">{t.songCount} músicas</span>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => startEdit(t)} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted">Editar</button>
+                <button onClick={() => deleteTemplate(t.id)} className="text-xs text-muted-foreground hover:text-red-500 px-2 py-1 rounded hover:bg-muted">Remover</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Wizard principal ─────────────────────────────────────────────────────────
 
 export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
-  const [step, setStep] = useState<"config" | "loading" | "draft">("config");
+  const [step, setStep] = useState<"config" | "loading" | "draft" | "templates">("config");
 
-  // Config
-  const [period, setPeriod] = useState<"next_sunday" | "next_2" | "next_4" | "this_month" | "next_month" | "custom">("next_sunday");
-  const [numServices, setNumServices] = useState(1);
-  const [observation, setObservation] = useState("");
+  // Templates
+  const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+
+  // Config de período
+  const [periodMode, setPeriodMode] = useState<"preset" | "custom">("preset");
+  const [preset, setPreset] = useState<"next_1" | "next_2" | "next_4" | "this_month" | "next_month" | "two_months">("next_4");
   const [customDates, setCustomDates] = useState<string[]>([]);
   const [customDateInput, setCustomDateInput] = useState("");
+
+  // Observação
+  const [observation, setObservation] = useState("");
 
   // Draft
   const [draft, setDraft] = useState<AiSchedule[]>([]);
   const [error, setError] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState("");
 
-  // Buscar membros ao abrir o wizard
+  const fetchTemplates = useCallback(async () => {
+    const res = await fetch("/api/schedule-templates").catch(() => null);
+    if (res?.ok) {
+      const data = await res.json();
+      setTemplates(data);
+      // Selecionar padrão automaticamente
+      const def = data.find((t: ScheduleTemplate) => t.isDefault);
+      if (def) setSelectedTemplate(def.id);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
+    fetchTemplates();
     fetch("/api/members?limit=100")
       .then((r) => r.json())
       .then((data) => {
@@ -98,16 +355,20 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
         setMembers(list.map((m: any) => ({ id: m.id, name: m.name })));
       })
       .catch(() => {});
-  }, [isOpen]);
+  }, [isOpen, fetchTemplates]);
+
+  const template = templates.find((t) => t.id === selectedTemplate) ?? null;
 
   function getDates(): string[] {
-    switch (period) {
-      case "next_sunday": return getNextSundays(1);
-      case "next_2": return getNextSundays(2);
-      case "next_4": return getNextSundays(4);
-      case "this_month": return getSundaysOfMonth(0);
-      case "next_month": return getSundaysOfMonth(1);
-      case "custom": return customDates;
+    if (periodMode === "custom") return customDates;
+    const dow = template?.dayOfWeek ?? 0; // padrão domingo
+    switch (preset) {
+      case "next_1": return getNextOccurrences(dow, 1);
+      case "next_2": return getNextOccurrences(dow, 2);
+      case "next_4": return getNextOccurrences(dow, 4);
+      case "this_month": return getDayOccurrences(dow, 0);
+      case "next_month": return getDayOccurrences(dow, 1);
+      case "two_months": return [...getDayOccurrences(dow, 1), ...getDayOccurrences(dow, 2)];
     }
   }
 
@@ -117,23 +378,33 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
     if (dates.length === 0) { setError("Selecione ao menos uma data."); return; }
     setError("");
     setStep("loading");
+    setLoadingProgress(`Gerando 0/${dates.length} escalas...`);
+
+    const results: AiSchedule[] = [];
 
     try {
-      const res = await fetch("/api/ai/suggest-schedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period, dates, numServices, observation }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? "Erro ao gerar escala.");
-        setStep("config");
-        return;
+      // Gerar uma escala por vez — evita truncamento da resposta da IA
+      for (let i = 0; i < dates.length; i++) {
+        setLoadingProgress(`Gerando escala ${i + 1} de ${dates.length}...`);
+        const res = await fetch("/api/ai/suggest-schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dates: [dates[i]],
+            templateId: selectedTemplate || null,
+            observation,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "Erro ao gerar escala.");
+          setStep("config");
+          return;
+        }
+        results.push(...(data.schedules ?? []));
       }
 
-      setDraft(data.schedules ?? []);
+      setDraft(results);
       setStep("draft");
     } catch {
       setError("Erro de conexão. Tente novamente.");
@@ -149,135 +420,145 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   function resetWizard() {
     setStep("config");
-    setPeriod("next_sunday");
-    setNumServices(1);
+    setPreset("next_4");
+    setPeriodMode("preset");
     setObservation("");
     setCustomDates([]);
     setCustomDateInput("");
     setDraft([]);
     setError("");
+    setLoadingProgress("");
   }
 
-  function handleClose() {
-    onClose();
-    resetWizard();
-  }
-
+  function handleClose() { onClose(); resetWizard(); }
   function addCustomDate() {
-    if (!customDateInput) return;
-    if (customDates.includes(customDateInput)) return;
+    if (!customDateInput || customDates.includes(customDateInput)) return;
     setCustomDates([...customDates, customDateInput].sort());
     setCustomDateInput("");
   }
-
-  function removeCustomDate(d: string) {
-    setCustomDates(customDates.filter((x) => x !== d));
-  }
-
+  function removeCustomDate(d: string) { setCustomDates(customDates.filter((x) => x !== d)); }
   function updateDraftRole(schedIdx: number, roleIdx: number, memberId: string, memberName: string) {
-    setDraft((prev) => prev.map((s, si) =>
-      si !== schedIdx ? s : {
-        ...s,
-        roles: s.roles.map((r, ri) =>
-          ri !== roleIdx ? r : { ...r, memberId: memberId || null, memberName: memberName || null }
-        ),
-      }
-    ));
+    setDraft((prev) => prev.map((s, si) => si !== schedIdx ? s : { ...s, roles: s.roles.map((r, ri) => ri !== roleIdx ? r : { ...r, memberId: memberId || null, memberName: memberName || null }) }));
   }
-
   function updateDraftName(schedIdx: number, value: string) {
     setDraft((prev) => prev.map((s, si) => si !== schedIdx ? s : { ...s, name: value || null }));
   }
-
   function updateDraftTime(schedIdx: number, value: string) {
     setDraft((prev) => prev.map((s, si) => si !== schedIdx ? s : { ...s, time: value || null }));
   }
-
   function removeDraftSong(schedIdx: number, songIdx: number) {
-    setDraft((prev) => prev.map((s, si) =>
-      si !== schedIdx ? s : { ...s, songs: s.songs.filter((_, i) => i !== songIdx) }
-    ));
+    setDraft((prev) => prev.map((s, si) => si !== schedIdx ? s : { ...s, songs: s.songs.filter((_, i) => i !== songIdx) }));
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const modalTitle =
+    step === "templates" ? "Templates de culto" :
+    step === "loading" ? "Gerando escalas..." :
+    step === "draft" ? "Rascunho gerado pela IA" :
+    "Gerar escala com IA";
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title={
-        step === "loading" ? "Gerando escala..." :
-        step === "draft" ? "Rascunho gerado pela IA" :
-        "Gerar escala com IA"
-      }
-      className="max-w-2xl"
-    >
-      {/* ── Step: Config ── */}
+    <Modal isOpen={isOpen} onClose={handleClose} title={modalTitle} className="max-w-2xl">
+
+      {/* ── Templates Manager ── */}
+      {step === "templates" && (
+        <TemplateManager onClose={() => { setStep("config"); fetchTemplates(); }} />
+      )}
+
+      {/* ── Config ── */}
       {step === "config" && (
         <div className="space-y-5">
           <p className="text-sm text-muted-foreground">
-            Escolha o período e a IA vai sugerir uma escala com base nos membros e repertório do seu ministério.
+            Escolha um template de culto e o período. A IA vai sugerir escalas com base nos membros e repertório.
           </p>
 
           {error && (
             <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-600 dark:text-red-400">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {error}
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
             </div>
           )}
 
+          {/* Template */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Template de culto</label>
+              <button onClick={() => setStep("templates")} className="text-xs text-primary hover:underline flex items-center gap-1">
+                <Settings className="h-3 w-3" />Gerenciar templates
+              </button>
+            </div>
+            {templates.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                <BookTemplate className="h-6 w-6 mx-auto mb-1 opacity-40" />
+                Nenhum template criado.{" "}
+                <button onClick={() => setStep("templates")} className="text-primary hover:underline">Criar agora</button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <button
+                  onClick={() => setSelectedTemplate("")}
+                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${!selectedTemplate ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
+                >
+                  <div className="font-medium">Sem template</div>
+                  <div className="text-xs opacity-70">IA decide tudo</div>
+                </button>
+                {templates.map((t) => (
+                  <button key={t.id} onClick={() => setSelectedTemplate(t.id)}
+                    className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${selectedTemplate === t.id ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
+                  >
+                    <div className="font-medium flex items-center gap-1">
+                      {t.name}
+                      {t.isDefault && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />}
+                    </div>
+                    <div className="text-xs opacity-70">
+                      {t.dayOfWeek !== null ? DAY_NAMES[t.dayOfWeek] : "Qualquer dia"}
+                      {t.defaultTime ? ` · ${t.defaultTime}` : ""}
+                      {` · ${t.songCount} músicas`}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Período */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Período</label>
+            <label className="text-sm font-medium">Período</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {[
-                { key: "next_sunday", label: "Próximo domingo" },
-                { key: "next_2", label: "Próximos 2 domingos" },
-                { key: "next_4", label: "Próximos 4 domingos" },
+                { key: "next_1", label: `Próximo ${template?.dayOfWeek !== null ? DAY_NAMES_FULL[template?.dayOfWeek ?? 0] : "culto"}` },
+                { key: "next_2", label: "Próximos 2" },
+                { key: "next_4", label: "Próximos 4" },
                 { key: "this_month", label: "Este mês" },
                 { key: "next_month", label: "Próximo mês" },
-                { key: "custom", label: "Datas específicas" },
+                { key: "two_months", label: "2 meses" },
               ].map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setPeriod(opt.key as any)}
-                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${
-                    period === opt.key
-                      ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400"
-                      : "border-border bg-background hover:border-purple-400 text-muted-foreground"
-                  }`}
+                <button key={opt.key} type="button"
+                  onClick={() => { setPeriodMode("preset"); setPreset(opt.key as any); }}
+                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${periodMode === "preset" && preset === opt.key ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
                 >
                   {opt.label}
                 </button>
               ))}
+              <button type="button"
+                onClick={() => setPeriodMode("custom")}
+                className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${periodMode === "custom" ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
+              >
+                Datas específicas
+              </button>
             </div>
           </div>
 
           {/* Datas customizadas */}
-          {period === "custom" && (
+          {periodMode === "custom" && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Selecionar datas</label>
               <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={customDateInput}
-                  onChange={(e) => setCustomDateInput(e.target.value)}
-                  className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
-                />
-                <Button type="button" size="sm" onClick={addCustomDate} disabled={!customDateInput}>
-                  Adicionar
-                </Button>
+                <input type="date" value={customDateInput} onChange={(e) => setCustomDateInput(e.target.value)}
+                  className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm" />
+                <Button type="button" size="sm" onClick={addCustomDate} disabled={!customDateInput}>Adicionar</Button>
               </div>
               {customDates.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {customDates.map((d) => (
-                    <Badge
-                      key={d}
-                      variant="info"
-                      className="cursor-pointer"
-                      onClick={() => removeCustomDate(d)}
-                    >
+                    <Badge key={d} variant="info" className="cursor-pointer" onClick={() => removeCustomDate(d)}>
                       {formatDateLabel(d)} ×
                     </Badge>
                   ))}
@@ -286,72 +567,41 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
             </div>
           )}
 
-          {/* Preview das datas */}
-          {dates.length > 0 && period !== "custom" && (
+          {/* Preview datas */}
+          {dates.length > 0 && (
             <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Datas selecionadas</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                {dates.length} culto{dates.length !== 1 ? "s" : ""} selecionado{dates.length !== 1 ? "s" : ""}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {dates.map((d) => (
-                  <Badge key={d} variant="default" className="text-xs">{formatDateLabel(d)}</Badge>
-                ))}
+                {dates.map((d) => <Badge key={d} variant="default" className="text-xs">{formatDateLabel(d)}</Badge>)}
               </div>
             </div>
           )}
 
-          {/* Cultos por data */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Cultos por data
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setNumServices(n)}
-                  className={`w-12 h-10 rounded-lg border text-sm font-medium transition-colors ${
-                    numServices === n
-                      ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400"
-                      : "border-border bg-background text-muted-foreground hover:border-purple-400"
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Observação */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="text-sm font-medium">
               Observação para a IA <span className="text-muted-foreground font-normal">(opcional)</span>
             </label>
-            <textarea
-              value={observation}
-              onChange={(e) => setObservation(e.target.value)}
-              placeholder="Ex: Evitar colocar João e Maria juntos, priorizar músicas de adoração, o culto das 19h é mais jovem..."
-              className="w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
-              maxLength={500}
-            />
+            <textarea value={observation} onChange={(e) => setObservation(e.target.value)}
+              placeholder="Ex: Evitar colocar João e Maria juntos, priorizar músicas de adoração..."
+              className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+              maxLength={500} />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={handleClose}>Cancelar</Button>
-            <Button
-              type="button"
-              onClick={handleGenerate}
-              disabled={dates.length === 0}
-              className="gap-2"
-            >
+            <Button type="button" onClick={handleGenerate} disabled={dates.length === 0} className="gap-2">
               <Sparkles className="w-4 h-4" />
-              Gerar escala
+              Gerar {dates.length > 0 ? `${dates.length} escala${dates.length !== 1 ? "s" : ""}` : "escala"}
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* ── Step: Loading ── */}
+      {/* ── Loading ── */}
       {step === "loading" && (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
           <div className="relative">
@@ -361,73 +611,44 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
             <Loader2 className="w-5 h-5 text-purple-500 animate-spin absolute -top-1 -right-1" />
           </div>
           <div className="text-center space-y-1">
-            <p className="font-medium">Consultando membros e repertório...</p>
+            <p className="font-medium">{loadingProgress || "Consultando membros e repertório..."}</p>
             <p className="text-sm text-muted-foreground">A IA está montando o melhor rascunho para você</p>
           </div>
         </div>
       )}
 
-      {/* ── Step: Draft ── */}
+      {/* ── Draft ── */}
       {step === "draft" && (
         <div className="space-y-5">
           <p className="text-sm text-muted-foreground">
-            Revise o rascunho abaixo. Você pode editar qualquer campo antes de aceitar.
+            Revise o rascunho. Você pode editar qualquer campo antes de aceitar.
           </p>
 
           <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
             {draft.map((sched, si) => (
               <div key={si} className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                {/* Header da escala */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <Calendar className="w-4 h-4 text-purple-500 flex-shrink-0" />
-                  <span className="font-semibold text-sm">
-                    {formatDateLabel(sched.date)}
-                  </span>
-                  {sched.time && (
-                    <Badge variant="info" className="text-xs">
-                      <Clock className="w-3 h-3 mr-1" />{sched.time}
-                    </Badge>
-                  )}
+                  <span className="font-semibold text-sm">{formatDateLabel(sched.date)}</span>
+                  {sched.time && <Badge variant="info" className="text-xs"><Clock className="w-3 h-3 mr-1" />{sched.time}</Badge>}
                 </div>
 
-                {/* Editar nome e horário */}
                 <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    label="Nome do culto"
-                    value={sched.name ?? ""}
-                    onChange={(e) => updateDraftName(si, e.target.value)}
-                    placeholder="Ex: Culto da Manhã"
-                  />
-                  <Input
-                    label="Horário"
-                    type="time"
-                    value={sched.time ?? ""}
-                    onChange={(e) => updateDraftTime(si, e.target.value)}
-                  />
+                  <Input label="Nome do culto" value={sched.name ?? ""} onChange={(e) => updateDraftName(si, e.target.value)} placeholder="Ex: Culto da Manhã" />
+                  <Input label="Horário" type="time" value={sched.time ?? ""} onChange={(e) => updateDraftTime(si, e.target.value)} />
                 </div>
 
-                {/* Roles */}
                 {sched.roles.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <Users className="w-3 h-3" /> Equipe sugerida
-                    </p>
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Equipe</p>
                     <div className="space-y-2">
                       {sched.roles.map((r, ri) => (
                         <div key={ri} className="flex items-center gap-2 text-sm">
                           <span className="w-28 flex-shrink-0 text-muted-foreground truncate text-xs">{r.role}</span>
-                          <select
-                            value={r.memberId ?? ""}
-                            onChange={(e) => {
-                              const selected = members.find((m) => m.id === e.target.value);
-                              updateDraftRole(si, ri, e.target.value, selected?.name ?? "");
-                            }}
-                            className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                          >
+                          <select value={r.memberId ?? ""} onChange={(e) => { const m = members.find((x) => x.id === e.target.value); updateDraftRole(si, ri, e.target.value, m?.name ?? ""); }}
+                            className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
                             <option value="">— Não atribuído —</option>
-                            {members.map((m) => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
+                            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                           </select>
                         </div>
                       ))}
@@ -435,25 +656,16 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
                   </div>
                 )}
 
-                {/* Músicas */}
                 {sched.songs.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <Music className="w-3 h-3" /> Músicas sugeridas
-                    </p>
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Music className="w-3 h-3" /> Músicas sugeridas</p>
                     <div className="space-y-1">
                       {sched.songs.map((s, si2) => (
                         <div key={si2} className="flex items-center justify-between text-sm">
                           <span className="truncate">{s.title}</span>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             {s.key && <Badge variant="default" className="text-xs">{s.key}</Badge>}
-                            <button
-                              type="button"
-                              onClick={() => removeDraftSong(si, si2)}
-                              className="text-muted-foreground hover:text-red-500 text-xs"
-                            >
-                              remover
-                            </button>
+                            <button type="button" onClick={() => removeDraftSong(si, si2)} className="text-muted-foreground hover:text-red-500 text-xs">remover</button>
                           </div>
                         </div>
                       ))}
@@ -461,12 +673,10 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
                   </div>
                 )}
 
-                {/* Notas da IA */}
                 {sched.aiNotes && (
                   <div className="rounded-md bg-purple-500/5 border border-purple-500/20 px-3 py-2">
                     <p className="text-xs text-purple-600 dark:text-purple-400">
-                      <Sparkles className="w-3 h-3 inline mr-1" />
-                      {sched.aiNotes}
+                      <Sparkles className="w-3 h-3 inline mr-1" />{sched.aiNotes}
                     </p>
                   </div>
                 )}
@@ -475,22 +685,11 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
           </div>
 
           <div className="flex justify-between gap-2 pt-2 border-t">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setStep("config")}
-              className="gap-2"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Refazer
+            <Button type="button" variant="secondary" onClick={() => setStep("config")} className="gap-2">
+              <ChevronLeft className="w-4 h-4" />Refazer
             </Button>
-            <Button
-              type="button"
-              onClick={handleAccept}
-              className="gap-2"
-            >
-              <Check className="w-4 h-4" />
-              Aceitar e criar escalas
+            <Button type="button" onClick={handleAccept} className="gap-2">
+              <Check className="w-4 h-4" />Aceitar e criar escalas
             </Button>
           </div>
         </div>
