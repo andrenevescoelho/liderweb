@@ -27,7 +27,21 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY não configurada" }, { status: 500 });
 
     const body = await req.json();
-    const { period, dates, numServices, observation } = body ?? {};
+    const { dates, templateId, observation } = body ?? {};
+
+    // Carregar template se fornecido
+    let template: any = null;
+    if (templateId) {
+      template = await (prisma as any).scheduleTemplate.findFirst({
+        where: { id: templateId, groupId: user.groupId },
+      });
+    }
+
+    const songCount = template?.songCount ?? 5;
+    const bandType = template?.bandType ?? "full";
+    const templateRoles: { role: string; count: number }[] = Array.isArray(template?.roles) ? template.roles : [];
+    const defaultTime = template?.defaultTime ?? null;
+    const templateName = template?.name ?? null;
 
     if (!dates || !Array.isArray(dates) || dates.length === 0) {
       return NextResponse.json({ error: "Datas são obrigatórias" }, { status: 400 });
@@ -84,9 +98,18 @@ export async function POST(req: NextRequest) {
     const datesText = dates.join(", ");
     const obsText = observation?.trim() ? `\nObservação do líder: ${observation}` : "";
 
+    // Funções esperadas pelo template
+    const rolesText = templateRoles.length > 0
+      ? "\n## Funções esperadas na escala:\n" + templateRoles.map((r) => `- ${r.role}: ${r.count} pessoa(s)`).join("\n")
+      : "";
+
+    const bandText = bandType === "full" ? "banda completa (todos os instrumentos)"
+      : bandType === "reduced" ? "banda reduzida (instrumentos essenciais)"
+      : "somente vozes (sem instrumentos)";
+
     const prompt = `Você é um assistente especializado em gestão de ministérios de louvor evangélicos brasileiros.
 
-Seu trabalho é sugerir escalas de culto com base nos membros disponíveis e no repertório da igreja.
+Seu trabalho é sugerir uma escala de culto com base nos membros disponíveis e no repertório da igreja.
 
 ## Membros do ministério:
 ${membersText}
@@ -95,14 +118,17 @@ ${membersText}
 ${songsText}
 
 ## Pedido:
-O líder quer criar escalas para as seguintes datas: ${datesText}
-Número de cultos por data: ${numServices ?? 1}${obsText}
+O líder quer criar uma escala para a data: ${datesText}
+${templateName ? `Nome do culto: ${templateName}` : ""}
+${defaultTime ? `Horário: ${defaultTime}` : ""}
+Tipo de banda: ${bandText}
+Quantidade de músicas a sugerir: ${songCount}${obsText}${rolesText}
 
 ## Instruções:
-- Para cada data (e culto, se houver mais de um), sugira quem deve ministrar em cada função
+- Preencha exatamente as funções listadas acima (se houver), respeitando a quantidade de cada uma
 - Priorize membros com a função correspondente cadastrada
 - Tente equilibrar a participação (não sobrecarregar sempre os mesmos)
-- Sugira entre 3 e 6 músicas por culto, variando estilos quando possível
+- Sugira exatamente ${songCount} músicas, variando estilos quando possível
 - Se não houver músicas ou membros suficientes, preencha o que for possível e deixe o resto em branco
 - Se um membro não tiver função definida mas o nome sugerir a função (ex: "João Guitarrista"), use o bom senso
 
@@ -114,8 +140,8 @@ O JSON deve seguir exatamente esta estrutura:
   "schedules": [
     {
       "date": "YYYY-MM-DD",
-      "time": "HH:MM ou null",
-      "name": "nome do culto ou null",
+      "time": "${defaultTime ?? "HH:MM ou null"}",
+      "name": "${templateName ?? "nome do culto ou null"}",
       "roles": [
         { "role": "nome da função", "memberId": "id do membro ou null", "memberName": "nome do membro ou null" }
       ],
