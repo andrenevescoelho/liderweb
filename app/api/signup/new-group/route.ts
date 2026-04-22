@@ -6,6 +6,36 @@ import bcrypt from "bcryptjs";
 import { sendSmtpMail } from "@/lib/smtp";
 import { isEmailEnabled } from "@/lib/email-config";
 
+// Domínios descartáveis/teste bloqueados
+const BLOCKED_DOMAINS = [
+  "teste.com", "test.com", "fake.com", "temp.com", "tempmail.com",
+  "mailinator.com", "guerrillamail.com", "yopmail.com", "sharklasers.com",
+  "guerrillamailblock.com", "grr.la", "guerrillamail.info", "spam4.me",
+  "trashmail.com", "trashmail.me", "trashmail.net", "dispostable.com",
+  "maildrop.cc", "throwam.com", "spamgourmet.com", "spamgourmet.net",
+  "mailnull.com", "spamcorpse.com", "deadaddress.com", "spamfree24.org",
+  "throwam.com", "fakeinbox.com", "mailnew.com", "spam.la",
+];
+
+function isValidEmail(email: string): boolean {
+  // Formato básico de email
+  const regex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+  if (!regex.test(email)) return false;
+  
+  const domain = email.split("@")[1].toLowerCase();
+  
+  // Bloquear domínios descartáveis
+  if (BLOCKED_DOMAINS.includes(domain)) return false;
+  
+  // Bloquear domínios sem TLD real (ex: teste@teste, user@test)
+  const parts = domain.split(".");
+  if (parts.length < 2) return false;
+  const tld = parts[parts.length - 1];
+  if (tld.length < 2) return false;
+  
+  return true;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -19,8 +49,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verificar se já existe usuário com este email
+    // Validar formato e domínio do email
     const normalizedEmail = userEmail.trim().toLowerCase();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { error: "Por favor, use um endereço de email válido e permanente." },
+        { status: 400 }
+      );
+    }
 
     const existingUser = await prisma.user.findFirst({
       where: {

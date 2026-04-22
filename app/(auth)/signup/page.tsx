@@ -172,6 +172,14 @@ function SignupContent() {
     setLoading(true);
 
     try {
+      // Validação básica de email no frontend
+      const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(email)) {
+        setError("Por favor, insira um endereço de email válido.");
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/signup/new-group", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
