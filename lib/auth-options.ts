@@ -307,6 +307,10 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async redirect({ url, baseUrl }) {
+      // Se callback é /signup e não tem token, verificar se tem grupo
+      if (url === `${baseUrl}/signup` || url === "/signup") {
+        return `${baseUrl}/signup`;
+      }
       if (url.startsWith("/")) {
         return `${baseUrl}${url}`;
       }
