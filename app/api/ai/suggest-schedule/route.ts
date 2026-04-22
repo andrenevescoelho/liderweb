@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
         roles: m.memberFunctions.map((mf) => mf.roleFunction.name),
         availability: m.profile?.availability ?? [],
         voiceType: m.profile?.voiceType ?? null,
-      }));
+      }))
+      .slice(0, 40); // Limitar a 40 membros para não exceder tokens do prompt
 
     // Músicas do repertório (top 30 mais recentes)
     const songs = await prisma.song.findMany({
@@ -142,7 +143,7 @@ ${songs.map((s) => `${s.title}: "${s.id}"`).join(", ")}`;
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 4096,
+            maxOutputTokens: 8192,
             responseMimeType: "application/json",
           },
         }),
@@ -172,17 +173,37 @@ ${songs.map((s) => `${s.title}: "${s.id}"`).join(", ")}`;
         .trim();
       parsed = JSON.parse(clean);
     } catch {
-      // Tenta extrair JSON com regex
+      // Tenta extrair JSON com regex — buscar a estrutura schedules
+      let jsonStr = rawText;
       const match = rawText.match(/\{[\s\S]*\}/);
-      if (match) {
-        try { parsed = JSON.parse(match[0]); }
-        catch {
-          console.error("[suggest-schedule] Parse falhou. rawText:", rawText.slice(0, 500));
-          return NextResponse.json({ error: "IA retornou formato inválido" }, { status: 500 });
+      if (match) jsonStr = match[0];
+
+      // Se o JSON foi truncado, tentar fechar manualmente
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        // Tentar reparar JSON truncado — fechar arrays/objetos abertos
+        try {
+          let repaired = jsonStr.trim();
+          // Contar chaves/colchetes abertos
+          let opens = 0, closeNeeded = "";
+          for (const ch of repaired) {
+            if (ch === "{") opens++;
+            else if (ch === "}") opens--;
+            else if (ch === "[") closeNeeded = "]" + closeNeeded;
+            else if (ch === "]") closeNeeded = closeNeeded.slice(1);
+          }
+          // Fechar JSON truncado
+          while (closeNeeded.length > 0) { repaired += closeNeeded[0]; closeNeeded = closeNeeded.slice(1); }
+          while (opens > 0) { repaired += "}"; opens--; }
+          // Remover vírgula antes de fechar
+          repaired = repaired.replace(/,\s*([}\]])/g, "$1");
+          parsed = JSON.parse(repaired);
+          console.warn("[suggest-schedule] JSON reparado com sucesso");
+        } catch {
+          console.error("[suggest-schedule] Parse falhou mesmo após reparo. rawText:", rawText.slice(0, 500));
+          return NextResponse.json({ error: "IA retornou formato inválido — tente novamente com menos datas" }, { status: 500 });
         }
-      } else {
-        console.error("[suggest-schedule] Sem JSON no rawText:", rawText.slice(0, 500));
-        return NextResponse.json({ error: "IA retornou formato inválido" }, { status: 500 });
       }
     }
 
