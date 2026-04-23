@@ -9,6 +9,7 @@ import { getGroupEntitlements } from "@/lib/billing/entitlements";
 import { enqueueDownload } from "@/lib/multitracks-download";
 import { logUserAction, AUDIT_ACTIONS, extractRequestContext } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
+import { hasPermission } from "@/lib/authorization";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,17 @@ export async function POST(req: NextRequest) {
     const user = session.user as SessionUser;
 
     if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
+
+    // Verificar permissão RBAC granular para MEMBER e LEADER
+    if (user.role === "MEMBER" || user.role === "LEADER") {
+      const profile = await prisma.memberProfile.findUnique({
+        where: { userId: user.id },
+        select: { permissions: true },
+      });
+      if (!hasPermission(user.role as any, "multitrack.rent", profile?.permissions)) {
+        return NextResponse.json({ error: "Sem permissão para alugar multitracks" }, { status: 403 });
+      }
+    }
 
     const { albumId } = await req.json();
     if (!albumId) return NextResponse.json({ error: "albumId obrigatorio" }, { status: 400 });
