@@ -23,7 +23,11 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const inviteToken = searchParams?.get('token');
 
-  const [mode, setMode] = useState<SignupMode>('choose');
+  // Inicializar mode a partir do query param ?mode=new-group (ex: vindo da página /sem-grupo)
+  const modeParam = searchParams?.get('mode');
+  const [mode, setMode] = useState<SignupMode>(
+    modeParam === 'new-group' ? 'new-group' : 'choose'
+  );
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
 
   // Formulário comum
@@ -114,13 +118,15 @@ function SignupContent() {
     if (!inviteToken && status === "authenticated") {
       const user = session?.user as any;
       if (!user?.groupId && user?.role !== "SUPERADMIN") {
-        // Usuário autenticado mas sem grupo — mostrar tela de sem grupo
+        // Se já está no modo new-group (usuário Google sem grupo quer criar ministério),
+        // não redirecionar — deixar o formulário de criação de grupo funcionar.
+        if (mode === "new-group") return;
         router.replace("/sem-grupo");
       } else {
         router.replace("/dashboard");
       }
     }
-  }, [inviteToken, router, status, session]);
+  }, [inviteToken, router, status, session, mode]);
 
   // Cadastro com convite
   const handleInviteSignup = async (e: React.FormEvent) => {
@@ -178,7 +184,26 @@ function SignupContent() {
     setLoading(true);
 
     try {
-      // Validação básica de email no frontend
+      // Usuário já autenticado via Google (sem grupo) — usar rota de attach
+      if (status === "authenticated") {
+        const res = await fetch("/api/signup/attach-group", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ groupName, keyword }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data?.error ?? "Erro ao criar ministério");
+          return;
+        }
+
+        // Forçar reload da sessão para atualizar groupId/role
+        router.replace("/planos");
+        return;
+      }
+
+      // Usuário não autenticado — fluxo normal com email + senha
       const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
       if (!emailRegex.test(email)) {
         setError("Por favor, insira um endereço de email válido.");
@@ -213,7 +238,6 @@ function SignupContent() {
       });
 
       if (loginResult?.ok) {
-        // Redirecionar para escolher plano
         router.replace("/planos");
       } else {
         setMode('success');
@@ -368,10 +392,20 @@ function SignupContent() {
 
         {mode === 'new-group' && (
           <form onSubmit={handleNewGroupRequest} className="space-y-4">
-            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>
-              Continuar com Google
-            </Button>
-            <p className="text-xs text-center text-gray-500">Ou crie com email e senha</p>
+            {/* Se já autenticado via Google, mostrar conta identificada */}
+            {status === "authenticated" ? (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                <Mail className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm">Criando como <strong>{(session?.user as any)?.email}</strong></span>
+              </div>
+            ) : (
+              <>
+                <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin}>
+                  Continuar com Google
+                </Button>
+                <p className="text-xs text-center text-gray-500">Ou crie com email e senha</p>
+              </>
+            )}
 
             <div className="relative">
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -384,22 +418,27 @@ function SignupContent() {
               <p className="text-xs text-gray-500 mt-1 ml-1">Uma palavra que identifica seu grupo</p>
             </div>
 
-            <hr className="border-gray-200 dark:border-gray-700" />
+            {/* Campos de conta só para usuários não autenticados */}
+            {status !== "authenticated" && (
+              <>
+                <hr className="border-gray-200 dark:border-gray-700" />
 
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <Input type="text" placeholder="Seu nome" value={name} onChange={(e) => setName(e?.target?.value ?? '')} className="pl-10" required />
-            </div>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input type="text" placeholder="Seu nome" value={name} onChange={(e) => setName(e?.target?.value ?? '')} className="pl-10" required />
+                </div>
 
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <Input type="email" placeholder="Seu email" value={email} onChange={(e) => setEmail(e?.target?.value ?? '')} className="pl-10" required />
-            </div>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input type="email" placeholder="Seu email" value={email} onChange={(e) => setEmail(e?.target?.value ?? '')} className="pl-10" required />
+                </div>
 
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <Input type="password" placeholder="Criar senha" value={password} onChange={(e) => setPassword(e?.target?.value ?? '')} className="pl-10" required minLength={6} />
-            </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input type="password" placeholder="Criar senha" value={password} onChange={(e) => setPassword(e?.target?.value ?? '')} className="pl-10" required minLength={6} />
+                </div>
+              </>
+            )}
 
             <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
               <p className="text-sm text-purple-700 dark:text-purple-400 flex items-center gap-2">
