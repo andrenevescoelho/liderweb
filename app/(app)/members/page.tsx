@@ -247,7 +247,7 @@ export default function MembersPage() {
 
   const copyInviteLink = () => {
     if (inviteSuccess?.link) {
-      const fullLink = window.location.origin + inviteSuccess.link;
+      const fullLink = inviteSuccess.link.startsWith('http') ? inviteSuccess.link : window.location.origin + inviteSuccess.link;
       navigator.clipboard.writeText(fullLink);
     }
   };
@@ -561,7 +561,7 @@ export default function MembersPage() {
               <p className="text-sm text-gray-500 mb-2">Link de convite (válido por 7 dias):</p>
               <div className="flex items-center gap-2">
                 <code className="text-xs flex-1 overflow-auto p-2 bg-white dark:bg-gray-900 rounded">
-                  {typeof window !== 'undefined' ? window.location.origin : ''}{inviteSuccess.link}
+                  {inviteSuccess.link.startsWith('http') ? inviteSuccess.link : (typeof window !== 'undefined' ? window.location.origin : '') + inviteSuccess.link}
                 </code>
                 <Button size="sm" variant="outline" onClick={copyInviteLink}>
                   <Copy className="w-4 h-4" />
