@@ -86,8 +86,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Verificar permissão granular RBAC — só após confirmar acesso do plano
-    if (canRent && (user.role === "MEMBER" || user.role === "LEADER")) {
+    // Verificar permissão granular RBAC — independente do plano
+    if (user.role === "MEMBER" || user.role === "LEADER") {
       const profile = await prisma.memberProfile.findUnique({
         where: { userId: user.id },
         select: { permissions: true },
