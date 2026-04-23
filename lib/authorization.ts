@@ -11,33 +11,84 @@ const REHEARSAL_MANAGE_IMPLIED_PERMISSIONS = [
 
 const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, string[]> = {
   SUPERADMIN: ["*"],
+
   ADMIN: [
+    // Administrativo
     "member.manage",
+    "member.view",
     "permission.manage",
     "leadership.manage",
+    "subscription.manage",
+    "song.delete",
+    "report.group.access",
+    "report.minister.stats",
+
+    // Musical
+    "music.rehearsal.send",
+    "music.manage",
+    "music.view",
+
+    // Escalas
     "schedule.presence.confirm.self",
     "schedule.create",
     "schedule.edit",
     "schedule.delete",
-    "song.delete",
-    "report.group.access",
-    "subscription.manage",
+    "schedule.view.all",
+
+    // Ensaios
     "rehearsal.view",
     "rehearsal.manage",
     "rehearsal.attendance",
+
+    // Comunicação
+    "communication.schedule.announce",
+
+    // Técnico / Premium
     "multitrack.view",
     "multitrack.rent",
+    "split.view",
+    "pad.view",
+    "custom.mix.view",
   ],
+
   LEADER: [
+    // Administrativo
     "member.manage",
+    "member.view",
+    "report.group.access",
+
+    // Musical
+    "music.rehearsal.send",
+    "music.view",
+
+    // Escalas
     "schedule.presence.confirm.self",
     "schedule.create",
     "schedule.edit",
-    "report.group.access",
+    "schedule.view.all",
+
+    // Ensaios
+    "rehearsal.view",
+    "rehearsal.attendance",
+
+    // Comunicação
+    "communication.schedule.announce",
+
+    // Técnico / Premium
+    "multitrack.view",
+    "multitrack.rent",
+    "split.view",
+    "pad.view",
+    "custom.mix.view",
+  ],
+
+  MEMBER: [
+    "profile.self.edit",
+    "schedule.future.view",
+    "schedule.presence.confirm.self",
     "rehearsal.view",
     "rehearsal.attendance",
   ],
-  MEMBER: ["profile.self.edit", "schedule.future.view", "schedule.presence.confirm.self", "rehearsal.view", "rehearsal.attendance"],
 };
 
 const hasWildcard = (permissions: string[]) => permissions.includes("*");
