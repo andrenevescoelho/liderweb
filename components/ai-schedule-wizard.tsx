@@ -453,7 +453,11 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Erro ao gerar escala.");
+          if (data.error === "SEM_REPERTORIO") {
+            setError("⚠️ Seu ministério não tem músicas cadastradas no repertório. Acesse a seção Músicas e cadastre seu repertório antes de usar o wizard de IA.");
+          } else {
+            setError(data.error ?? "Erro ao gerar escala.");
+          }
           setStep(songStrategy === "minister_history" ? "ministers" : "config");
           return;
         }
