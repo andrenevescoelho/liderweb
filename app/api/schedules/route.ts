@@ -192,6 +192,37 @@ export async function POST(req: NextRequest) {
 
     const displayName = scheduleName ?? setlistName;
 
+    // ── Gravar histórico de músicas por escala (ScheduleSong) ─────────────
+    // Alimenta as estratégias de sugestão de IA ao longo do tempo.
+    try {
+      console.log("[schedule] setlistItems recebidos:", JSON.stringify(setlistItems ?? []));
+      console.log("[schedule] roles recebidos:", JSON.stringify(roles ?? []));
+      if ((setlistItems ?? []).length > 0) {
+        // Identificar o ministro: primeiro role cujo nome contenha "ministro" (case-insensitive)
+        // Se não encontrar, usa o primeiro membro escalado como fallback
+        const ministerRole = (roles ?? []).find((r: any) =>
+          r?.memberId && /ministro/i.test(r?.role ?? "")
+        ) ?? (roles ?? []).find((r: any) => r?.memberId);
+
+        const ministerId = ministerRole?.memberId ?? null;
+
+        await (prisma as any).scheduleSong.createMany({
+          data: (setlistItems ?? []).map((item: any, index: number) => ({
+            scheduleId: schedule.id,
+            songId: item.songId,
+            ministerId,
+            keyUsed: item.selectedKey ?? null,
+            position: index,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    } catch (histErr) {
+      // Nunca bloquear a criação da escala por falha no histórico
+      console.warn("[schedule] Falha ao gravar ScheduleSong:", histErr);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     await logUserAction({
       userId: user.id,
       groupId: user.groupId ?? null,
