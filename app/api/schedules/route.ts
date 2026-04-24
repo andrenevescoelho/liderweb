@@ -149,6 +149,9 @@ export async function POST(req: NextRequest) {
     const scheduleName = name?.trim() || null;
     const setlistName = scheduleName ?? (time ? `Escala ${date} ${time}` : `Escala ${date}`);
 
+    // Log temporário — debug songIds em prod
+    console.log("[schedules] setlistItems recebidos:", JSON.stringify(setlistItems ?? []));
+
     const createdSetlist = await prisma.setlist.create({
       data: {
         name: setlistName,
