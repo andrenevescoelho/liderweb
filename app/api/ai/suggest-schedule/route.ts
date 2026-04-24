@@ -209,6 +209,15 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY não configurada" }, { status: 500 });
 
+    // Verificar se o grupo tem músicas cadastradas
+    const songCount = await prisma.song.count({ where: { groupId: user.groupId } });
+    if (songCount === 0) {
+      return NextResponse.json(
+        { error: "SEM_REPERTORIO", message: "Seu ministério não tem músicas cadastradas no repertório. Adicione músicas antes de usar o wizard de IA." },
+        { status: 400 }
+      );
+    }
+
     const body = await req.json();
     const {
       dates,
@@ -410,6 +419,9 @@ ${activeMembers.map((m) => `${m.name}: "${m.id}"`).join(", ")}`;
         }
       }
     }
+
+    // Log temporário para debug de songIds
+    console.log("[suggest-schedule] songs retornadas pela IA:", JSON.stringify((parsed.schedules ?? []).map((s: any) => ({ date: s.date, songs: s.songs }))));
 
     return NextResponse.json({
       schedules: parsed.schedules ?? [],
