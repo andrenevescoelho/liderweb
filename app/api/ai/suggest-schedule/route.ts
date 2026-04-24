@@ -210,8 +210,8 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY não configurada" }, { status: 500 });
 
     // Verificar se o grupo tem músicas cadastradas
-    const songCount = await prisma.song.count({ where: { groupId: user.groupId } });
-    if (songCount === 0) {
+    const repertorioCount = await prisma.song.count({ where: { groupId: user.groupId } });
+    if (repertorioCount === 0) {
       return NextResponse.json(
         { error: "SEM_REPERTORIO", message: "Seu ministério não tem músicas cadastradas no repertório. Adicione músicas antes de usar o wizard de IA." },
         { status: 400 }
