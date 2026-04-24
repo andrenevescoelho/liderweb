@@ -351,6 +351,7 @@ model User {
   approvedMemberFunctions MemberFunction[]      @relation("MemberFunctionApprovals")
   scheduleMemberRoles  ScaleMemberRole[]     @relation("ScaleMemberRolesByMember")
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
+  scheduleSongsMinistered ScheduleSong[]     @relation("ScheduleSongMinister")
   createdCoupons       Coupon[]              @relation("CouponCreator")
   redeemedCoupons      CouponRedemption[]    @relation("CouponRedeemer")
   avatarUrl            String?   // foto do perfil (upload ou Google)
@@ -688,6 +689,7 @@ model Song {
   setlistItems      SetlistItem[]
   attachments       Attachment[]
   rehearsalSongs    RehearsalSong[]
+  scheduleSongs     ScheduleSong[]
 }
 
 model Attachment {
@@ -733,8 +735,9 @@ model Schedule {
   group       Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
-  roles       ScheduleRole[]
-  memberRoles ScaleMemberRole[] @relation("ScaleMemberRolesBySchedule")
+  roles        ScheduleRole[]
+  memberRoles  ScaleMemberRole[] @relation("ScaleMemberRolesBySchedule")
+  scheduleSongs ScheduleSong[]
 }
 
 model ScheduleRole {
@@ -1519,6 +1522,29 @@ model EmailConfig {
   updatedBy String?  // userId do superadmin que alterou
 
   @@index([category])
+}
+
+// ─── Histórico de Músicas por Escala ─────────────────────────────────────────
+// Registra quais músicas foram usadas em cada escala e quem ministrou.
+// Alimenta as estratégias de sugestão de IA ao longo do tempo.
+
+model ScheduleSong {
+  id          String    @id @default(cuid())
+  scheduleId  String
+  schedule    Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  songId      String
+  song        Song      @relation(fields: [songId], references: [id], onDelete: Cascade)
+  ministerId  String?   // userId do ministro que liderou esta música (pode ser null)
+  minister    User?     @relation("ScheduleSongMinister", fields: [ministerId], references: [id], onDelete: SetNull)
+  keyUsed     String?   // tom que foi usado na escala (pode diferir do tom original)
+  position    Int       @default(0) // ordem na setlist (0 = primeira)
+  createdAt   DateTime  @default(now())
+
+  @@unique([scheduleId, songId])
+  @@index([scheduleId])
+  @@index([songId])
+  @@index([ministerId])
+  @@index([scheduleId, ministerId])
 }
 
 // ─── Templates de Escala ──────────────────────────────────────────────────────
