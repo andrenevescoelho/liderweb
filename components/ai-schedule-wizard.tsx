@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { format, addDays, nextSunday, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths } from "date-fns";
+import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Loader2, Sparkles, ChevronRight, ChevronLeft, Check, Calendar, Clock,
-  Music, Users, AlertCircle, BookTemplate, Plus, Settings, Star,
+  Music, Users, AlertCircle, BookTemplate, Plus, Settings, Star, History, TrendingUp, Shuffle, UserCheck,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
+
+type SongStrategy = "minister_history" | "group_top" | "exploration";
 
 interface AiRole {
   role: string;
@@ -25,6 +27,7 @@ interface AiSong {
   songId: string;
   title: string;
   key: string;
+  songReason?: string;
 }
 
 interface AiSchedule {
@@ -47,15 +50,21 @@ interface ScheduleTemplate {
   isDefault: boolean;
 }
 
+interface Member {
+  id: string;
+  name: string;
+}
+
+// Data com ministro atribuído
+interface DateMinister {
+  date: string;
+  ministerId: string | null;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onAccept: (schedules: AiSchedule[]) => void;
-}
-
-interface Member {
-  id: string;
-  name: string;
 }
 
 const DAY_NAMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -66,6 +75,32 @@ const BAND_TYPE_LABELS: Record<string, string> = {
   reduced: "Banda reduzida",
   vocals_only: "Somente vozes",
 };
+
+const SONG_STRATEGIES: {
+  key: SongStrategy;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    key: "group_top",
+    label: "Mais usadas",
+    description: "Músicas que o ministério mais usa no repertório",
+    icon: <TrendingUp className="h-4 w-4" />,
+  },
+  {
+    key: "minister_history",
+    label: "Perfil do ministro",
+    description: "IA usa o histórico de cada ministro por data",
+    icon: <History className="h-4 w-4" />,
+  },
+  {
+    key: "exploration",
+    label: "Exploração",
+    description: "Músicas esquecidas, não usadas há mais de 8 semanas",
+    icon: <Shuffle className="h-4 w-4" />,
+  },
+];
 
 // ── Helpers de data ──────────────────────────────────────────────────────────
 
@@ -80,8 +115,7 @@ function getDayOccurrences(dayOfWeek: number, monthOffset: number): string[] {
 
 function getNextOccurrences(dayOfWeek: number, count: number): string[] {
   const dates: string[] = [];
-  let d = new Date();
-  d = addDays(d, 1);
+  let d = addDays(new Date(), 1);
   while (dates.length < count) {
     if (getDay(d) === dayOfWeek) dates.push(format(d, "yyyy-MM-dd"));
     d = addDays(d, 1);
@@ -93,7 +127,7 @@ function formatDateLabel(dateStr: string): string {
   return format(new Date(dateStr + "T12:00:00"), "EEE, dd 'de' MMM", { locale: ptBR });
 }
 
-// ── Componente de gerenciamento de templates ─────────────────────────────────
+// ── Template Manager ─────────────────────────────────────────────────────────
 
 function TemplateManager({ onClose }: { onClose: () => void }) {
   const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
@@ -128,11 +162,8 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
   function startEdit(t: ScheduleTemplate) {
     setEditing(t);
     setForm({
-      name: t.name,
-      dayOfWeek: t.dayOfWeek ?? "",
-      defaultTime: t.defaultTime ?? "",
-      songCount: t.songCount,
-      bandType: t.bandType,
+      name: t.name, dayOfWeek: t.dayOfWeek ?? "", defaultTime: t.defaultTime ?? "",
+      songCount: t.songCount, bandType: t.bandType,
       roles: Array.isArray(t.roles) ? t.roles : [],
       isDefault: t.isDefault,
     });
@@ -185,7 +216,6 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
           </button>
           <h3 className="font-semibold text-sm">{editing.id ? "Editar template" : "Novo template"}</h3>
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="text-xs font-medium text-muted-foreground">Nome do template</label>
@@ -219,8 +249,6 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         </div>
-
-        {/* Funções */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-muted-foreground">Funções na escala</label>
@@ -243,13 +271,10 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </div>
-
         <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-            className="rounded" />
+          <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} className="rounded" />
           <span>Usar como template padrão</span>
         </label>
-
         <div className="flex gap-2 justify-end pt-2">
           <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>Cancelar</Button>
           <Button size="sm" onClick={saveTemplate} disabled={saving}>
@@ -274,7 +299,6 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
           <Plus className="h-3.5 w-3.5" />Novo
         </Button>
       </div>
-
       {loading ? (
         <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : templates.length === 0 ? (
@@ -313,17 +337,23 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
 // ── Wizard principal ─────────────────────────────────────────────────────────
 
 export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
-  const [step, setStep] = useState<"config" | "loading" | "draft" | "templates">("config");
+  const [step, setStep] = useState<"config" | "ministers" | "loading" | "draft" | "templates">("config");
 
   // Templates
   const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 
-  // Config de período
+  // Estratégia
+  const [songStrategy, setSongStrategy] = useState<SongStrategy>("group_top");
+
+  // Período
   const [periodMode, setPeriodMode] = useState<"preset" | "custom">("preset");
   const [preset, setPreset] = useState<"next_1" | "next_2" | "next_4" | "this_month" | "next_month" | "two_months">("next_4");
   const [customDates, setCustomDates] = useState<string[]>([]);
   const [customDateInput, setCustomDateInput] = useState("");
+
+  // Ministros por data (step 2)
+  const [datesMinisters, setDatesMinisters] = useState<DateMinister[]>([]);
 
   // Observação
   const [observation, setObservation] = useState("");
@@ -339,7 +369,6 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
     if (res?.ok) {
       const data = await res.json();
       setTemplates(data);
-      // Selecionar padrão automaticamente
       const def = data.find((t: ScheduleTemplate) => t.isDefault);
       if (def) setSelectedTemplate(def.id);
     }
@@ -361,7 +390,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   function getDates(): string[] {
     if (periodMode === "custom") return customDates;
-    const dow = template?.dayOfWeek ?? 0; // padrão domingo
+    const dow = template?.dayOfWeek ?? 0;
     switch (preset) {
       case "next_1": return getNextOccurrences(dow, 1);
       case "next_2": return getNextOccurrences(dow, 2);
@@ -374,31 +403,58 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   const dates = getDates();
 
-  async function handleGenerate() {
+  // Avançar do step config → ministers (se minister_history) ou → loading
+  function handleConfigNext() {
     if (dates.length === 0) { setError("Selecione ao menos uma data."); return; }
     setError("");
-    setStep("loading");
-    setLoadingProgress(`Gerando 0/${dates.length} escalas...`);
 
+    if (songStrategy === "minister_history") {
+      // Inicializar lista de datas com ministro null
+      setDatesMinisters(dates.map((date) => ({ date, ministerId: null })));
+      setStep("ministers");
+    } else {
+      handleGenerate(dates.map((date) => ({ date, ministerId: null })));
+    }
+  }
+
+  function updateMinister(date: string, ministerId: string) {
+    setDatesMinisters((prev) =>
+      prev.map((dm) => dm.date === date ? { ...dm, ministerId: ministerId || null } : dm)
+    );
+  }
+
+  async function handleGenerate(datesWithMinisters: DateMinister[]) {
+    setStep("loading");
+    setLoadingProgress(`Gerando 0/${datesWithMinisters.length} escalas...`);
     const results: AiSchedule[] = [];
 
     try {
-      // Gerar uma escala por vez — evita truncamento da resposta da IA
-      for (let i = 0; i < dates.length; i++) {
-        setLoadingProgress(`Gerando escala ${i + 1} de ${dates.length}...`);
+      for (let i = 0; i < datesWithMinisters.length; i++) {
+        const { date, ministerId } = datesWithMinisters[i];
+        const ministerName = ministerId
+          ? (members.find((m) => m.id === ministerId)?.name ?? null)
+          : null;
+
+        setLoadingProgress(
+          `Gerando escala ${i + 1} de ${datesWithMinisters.length}${ministerName ? ` — ${ministerName}` : ""}...`
+        );
+
         const res = await fetch("/api/ai/suggest-schedule", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            dates: [dates[i]],
+            dates: [date],
             templateId: selectedTemplate || null,
             observation,
+            songStrategy,
+            ministerId: ministerId || null,
           }),
         });
+
         const data = await res.json();
         if (!res.ok) {
           setError(data.error ?? "Erro ao gerar escala.");
-          setStep("config");
+          setStep(songStrategy === "minister_history" ? "ministers" : "config");
           return;
         }
         results.push(...(data.schedules ?? []));
@@ -408,7 +464,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
       setStep("draft");
     } catch {
       setError("Erro de conexão. Tente novamente.");
-      setStep("config");
+      setStep(songStrategy === "minister_history" ? "ministers" : "config");
     }
   }
 
@@ -428,9 +484,12 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
     setDraft([]);
     setError("");
     setLoadingProgress("");
+    setSongStrategy("group_top");
+    setDatesMinisters([]);
   }
 
   function handleClose() { onClose(); resetWizard(); }
+
   function addCustomDate() {
     if (!customDateInput || customDates.includes(customDateInput)) return;
     setCustomDates([...customDates, customDateInput].sort());
@@ -452,6 +511,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   const modalTitle =
     step === "templates" ? "Templates de culto" :
+    step === "ministers" ? "Quem ministra em cada data?" :
     step === "loading" ? "Gerando escalas..." :
     step === "draft" ? "Rascunho gerado pela IA" :
     "Gerar escala com IA";
@@ -468,7 +528,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
       {step === "config" && (
         <div className="space-y-5">
           <p className="text-sm text-muted-foreground">
-            Escolha um template de culto e o período. A IA vai sugerir escalas com base nos membros e repertório.
+            Configure o template, a estratégia de músicas e o período.
           </p>
 
           {error && (
@@ -493,17 +553,14 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <button
-                  onClick={() => setSelectedTemplate("")}
-                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${!selectedTemplate ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
-                >
+                <button onClick={() => setSelectedTemplate("")}
+                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${!selectedTemplate ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}>
                   <div className="font-medium">Sem template</div>
                   <div className="text-xs opacity-70">IA decide tudo</div>
                 </button>
                 {templates.map((t) => (
                   <button key={t.id} onClick={() => setSelectedTemplate(t.id)}
-                    className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${selectedTemplate === t.id ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
-                  >
+                    className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${selectedTemplate === t.id ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}>
                     <div className="font-medium flex items-center gap-1">
                       {t.name}
                       {t.isDefault && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />}
@@ -519,12 +576,35 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
             )}
           </div>
 
+          {/* Estratégia */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Como a IA deve escolher as músicas?</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {SONG_STRATEGIES.map((s) => (
+                <button key={s.key} type="button" onClick={() => setSongStrategy(s.key)}
+                  className={`rounded-lg border px-3 py-3 text-sm text-left transition-colors ${songStrategy === s.key ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}>
+                  <div className="flex items-center gap-2 font-medium mb-1">{s.icon}{s.label}</div>
+                  <div className="text-xs opacity-70 leading-snug">{s.description}</div>
+                </button>
+              ))}
+            </div>
+            {/* Hint quando minister_history selecionado */}
+            {songStrategy === "minister_history" && (
+              <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 flex items-start gap-2">
+                <UserCheck className="h-4 w-4 text-purple-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-purple-600 dark:text-purple-400">
+                  No próximo passo você vai definir qual ministro está em cada data. A IA vai buscar o histórico de cada um separadamente.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Período */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Período</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {[
-                { key: "next_1", label: `Próximo ${template?.dayOfWeek !== null ? DAY_NAMES_FULL[template?.dayOfWeek ?? 0] : "culto"}` },
+                { key: "next_1", label: `Próximo ${template?.dayOfWeek !== null && template?.dayOfWeek !== undefined ? DAY_NAMES_FULL[template.dayOfWeek] : "culto"}` },
                 { key: "next_2", label: "Próximos 2" },
                 { key: "next_4", label: "Próximos 4" },
                 { key: "this_month", label: "Este mês" },
@@ -533,15 +613,12 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
               ].map((opt) => (
                 <button key={opt.key} type="button"
                   onClick={() => { setPeriodMode("preset"); setPreset(opt.key as any); }}
-                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${periodMode === "preset" && preset === opt.key ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
-                >
+                  className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${periodMode === "preset" && preset === opt.key ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}>
                   {opt.label}
                 </button>
               ))}
-              <button type="button"
-                onClick={() => setPeriodMode("custom")}
-                className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${periodMode === "custom" ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}
-              >
+              <button type="button" onClick={() => setPeriodMode("custom")}
+                className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${periodMode === "custom" ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}>
                 Datas específicas
               </button>
             </div>
@@ -592,9 +669,78 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={handleClose}>Cancelar</Button>
-            <Button type="button" onClick={handleGenerate} disabled={dates.length === 0} className="gap-2">
+            <Button type="button" onClick={handleConfigNext} disabled={dates.length === 0} className="gap-2">
+              {songStrategy === "minister_history" ? (
+                <><UserCheck className="w-4 h-4" />Definir ministros<ChevronRight className="w-4 h-4" /></>
+              ) : (
+                <><Sparkles className="w-4 h-4" />Gerar {dates.length} escala{dates.length !== 1 ? "s" : ""}<ChevronRight className="w-4 h-4" /></>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ministers ── */}
+      {step === "ministers" && (
+        <div className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            Defina quem ministra em cada data. A IA vai buscar o histórico individual de cada ministro para sugerir as músicas certas.
+          </p>
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-600 dark:text-red-400">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {datesMinisters.map((dm) => {
+              const minister = members.find((m) => m.id === dm.ministerId);
+              return (
+                <div key={dm.date} className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-center gap-2 w-36 flex-shrink-0">
+                    <Calendar className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                    <span className="text-sm font-medium">{formatDateLabel(dm.date)}</span>
+                  </div>
+                  <select
+                    value={dm.ministerId ?? ""}
+                    onChange={(e) => updateMinister(dm.date, e.target.value)}
+                    className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">— Sem ministro definido —</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  {/* Indicador de histórico */}
+                  {minister && (
+                    <div className="flex-shrink-0">
+                      <Badge variant="info" className="text-xs gap-1">
+                        <History className="h-3 w-3" />histórico
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Aviso sobre datas sem ministro */}
+          {datesMinisters.some((dm) => !dm.ministerId) && (
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <p className="text-xs text-muted-foreground">
+                Datas sem ministro definido vão usar as músicas mais populares do ministério como base.
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-between gap-2 pt-2 border-t">
+            <Button type="button" variant="secondary" onClick={() => setStep("config")} className="gap-2">
+              <ChevronLeft className="w-4 h-4" />Voltar
+            </Button>
+            <Button type="button" onClick={() => handleGenerate(datesMinisters)} className="gap-2">
               <Sparkles className="w-4 h-4" />
-              Gerar {dates.length > 0 ? `${dates.length} escala${dates.length !== 1 ? "s" : ""}` : "escala"}
+              Gerar {datesMinisters.length} escala{datesMinisters.length !== 1 ? "s" : ""}
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -659,11 +805,16 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
                 {sched.songs.length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Music className="w-3 h-3" /> Músicas sugeridas</p>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {sched.songs.map((s, si2) => (
-                        <div key={si2} className="flex items-center justify-between text-sm">
-                          <span className="truncate">{s.title}</span>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                        <div key={si2} className="flex items-start justify-between text-sm gap-2">
+                          <div className="min-w-0">
+                            <span className="truncate block">{s.title}</span>
+                            {s.songReason && (
+                              <span className="text-xs text-muted-foreground italic">{s.songReason}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
                             {s.key && <Badge variant="default" className="text-xs">{s.key}</Badge>}
                             <button type="button" onClick={() => removeDraftSong(si, si2)} className="text-muted-foreground hover:text-red-500 text-xs">remover</button>
                           </div>
@@ -685,7 +836,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
           </div>
 
           <div className="flex justify-between gap-2 pt-2 border-t">
-            <Button type="button" variant="secondary" onClick={() => setStep("config")} className="gap-2">
+            <Button type="button" variant="secondary" onClick={() => setStep(songStrategy === "minister_history" ? "ministers" : "config")} className="gap-2">
               <ChevronLeft className="w-4 h-4" />Refazer
             </Button>
             <Button type="button" onClick={handleAccept} className="gap-2">
