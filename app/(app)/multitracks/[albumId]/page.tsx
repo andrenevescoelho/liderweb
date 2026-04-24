@@ -1111,7 +1111,7 @@ export default function MultitracksPlayerPage() {
             )}
           </div>
           {/* Controles de offset */}
-          <div className={isMobile ? "flex-shrink-0 w-24 flex items-center px-0.5 gap-0.5" : "flex-shrink-0 w-36 flex items-center px-1 gap-0.5"}>
+          <div className={isMobile ? "flex-shrink-0 w-24 flex items-center px-0.5 gap-0.5" : "flex-shrink-0 w-44 flex items-center px-1 gap-0.5"}>
             {showBpmGrid && (
               <>
                 <span className="text-[8px] text-muted-foreground/40 mr-0.5">offset</span>
@@ -1200,7 +1200,7 @@ export default function MultitracksPlayerPage() {
         {/* Barra de controles: zoom + shortcuts */}
         <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30">
           <div className={isMobile ? "flex-shrink-0 w-28" : "flex-shrink-0 w-44"} />
-          <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-36"} />
+          <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-44"} />
           <div className="flex-1 flex items-center gap-2">
             <span className="text-[9px] text-muted-foreground">Zoom:</span>
             <button onClick={() => setZoom((z) => Math.max(1, z / 1.5))} className="rounded px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground">−</button>
@@ -1240,7 +1240,7 @@ export default function MultitracksPlayerPage() {
           {showShortcutsPanel && (
             <div className="flex border-b border-border/30 bg-black/30 overflow-x-auto">
               <div className={isMobile ? "flex-shrink-0 w-28" : "flex-shrink-0 w-44"} />
-              <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-36"} />
+              <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-44"} />
               <div className="flex-1 flex gap-2 px-2 py-1.5 flex-wrap">
                 {markers.map((marker, i) => (
                   <div key={i} className="flex items-center gap-1 rounded border border-border/50 px-2 py-0.5 bg-card/50">
@@ -1273,7 +1273,7 @@ export default function MultitracksPlayerPage() {
           {/* Faixa dos markers com zoom */}
           <div className="flex h-8">
             <div className={isMobile ? "flex-shrink-0 w-28" : "flex-shrink-0 w-44"} />
-            <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-36"} />
+            <div className={isMobile ? "flex-shrink-0 w-24" : "flex-shrink-0 w-44"} />
             <div
               className={cn("flex-1 relative overflow-hidden pr-3", addingMarker && "cursor-crosshair")}
               ref={waveformAreaRef}
