@@ -67,12 +67,12 @@ async function buildSongContext(
 
       const rankedText = ranked
         .slice(0, 20)
-        .map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom preferido: ${s.lastKey ?? s.originalKey} | Usada ${s.count}x pelo ministro`)
+        .map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom preferido: ${s.lastKey ?? s.originalKey} | Usada ${s.count}x pelo ministro`)
         .join("\n");
 
       const unusedText = unused.length > 0
         ? "\n\nMúsicas do repertório que este ministro ainda não usou:\n" +
-          unused.map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`).join("\n")
+          unused.map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`).join("\n")
         : "";
 
       return {
@@ -117,12 +117,12 @@ async function buildSongContext(
 
       const rankedText = ranked
         .slice(0, 25)
-        .map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey} | Usada ${s.count}x no ministério`)
+        .map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey} | Usada ${s.count}x no ministério`)
         .join("\n");
 
       const noHistoryText = noHistory.length > 0
         ? "\n\nMúsicas sem histórico de uso ainda:\n" +
-          noHistory.map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`).join("\n")
+          noHistory.map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`).join("\n")
         : "";
 
       return {
@@ -134,7 +134,7 @@ async function buildSongContext(
     // Sem histórico nenhum ainda
     const songsText = allSongs
       .slice(0, 30)
-      .map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}${s.bpm ? ` | BPM: ${s.bpm}` : ""}`)
+      .map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}${s.bpm ? ` | BPM: ${s.bpm}` : ""}`)
       .join("\n");
 
     return {
@@ -161,11 +161,11 @@ async function buildSongContext(
     const forgottenText = forgotten.length > 0
       ? forgotten
           .slice(0, 25)
-          .map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey} | ⭐ Não usada há mais de 8 semanas`)
+          .map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey} | ⭐ Não usada há mais de 8 semanas`)
           .join("\n")
       : allSongs
           .slice(0, 20)
-          .map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`)
+          .map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`)
           .join("\n");
 
     const recentText = recent.length > 0
@@ -182,7 +182,7 @@ async function buildSongContext(
   // Fallback genérico
   const songsText = allSongs
     .slice(0, 30)
-    .map((s) => `- ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`)
+    .map((s) => `- [ID:${s.id}] ${s.title}${s.artist ? ` (${s.artist})` : ""} | Tom: ${s.originalKey}`)
     .join("\n");
 
   return { songsText, strategyNote: "" };
@@ -315,6 +315,7 @@ Tipo de banda: ${bandText}
 Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${rolesText}
 
 ## Instruções gerais:
+- Cada música no repertório está listada com seu ID no formato [ID:xxxxx]. Use EXATAMENTE esse ID no campo "songId" da resposta — nunca invente ou modifique IDs
 - Siga rigorosamente a instrução de estratégia acima para escolher as músicas
 - Para cada música sugerida, inclua uma justificativa curta em "songReason" (ex: "João usou 5 vezes", "Não é usada há 6 semanas", "Favorita do ministério")
 - Preencha exatamente as funções listadas acima (se houver), respeitando a quantidade de cada uma
