@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
+// Forçar Node.js runtime para o Map de rate limit persistir entre requests
+export const runtime = "nodejs";
+
 // ─── Rotas de API públicas ────────────────────────────────────────────────────
 // Qualquer rota NÃO listada aqui exige sessão autenticada.
 
