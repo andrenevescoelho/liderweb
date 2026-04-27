@@ -370,6 +370,8 @@ model User {
   supportTickets       SupportTicket[]
   supportReplies       SupportTicketReply[]
   splitJobs            SplitJob[]
+  maxSessions          Int                   @default(1) // máx sessões simultâneas (SUPERADMIN configura)
+  activeSessions       UserActiveSession[]
 }
 
 model CoachContentCache {
@@ -1545,6 +1547,24 @@ model ScheduleSong {
   @@index([songId])
   @@index([ministerId])
   @@index([scheduleId, ministerId])
+}
+
+// ─── Sessões Ativas ──────────────────────────────────────────────────────────
+// Controla quantas sessões simultâneas cada usuário pode ter.
+// SUPERADMIN configura maxSessions por usuário (default: 1).
+
+model UserActiveSession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId   String   @unique  // jti do JWT
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
 }
 
 // ─── Templates de Escala ──────────────────────────────────────────────────────

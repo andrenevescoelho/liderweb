@@ -340,9 +340,51 @@ export const authOptions: NextAuthOptions = {
         token.hasActiveSubscription = (user as any).hasActiveSubscription;
         token.subscriptionStatus = (user as any).subscriptionStatus;
         token.musicCoachEnabled = (user as any).musicCoachEnabled ?? false;
-        // Registrar último login
+
+        // Gerar sessionId único para esta sessão
+        const sessionId = `${user.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        token.sessionId = sessionId;
+
+        // Registrar sessão ativa e aplicar limite
         if (user.id) {
           prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
+
+          // Fire-and-forget: registrar sessão e limpar excedentes
+          (async () => {
+            try {
+              const dbUser = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { maxSessions: true },
+              });
+              const maxSessions = dbUser?.maxSessions ?? 1;
+
+              // Criar nova sessão ativa
+              await (prisma as any).userActiveSession.create({
+                data: {
+                  userId: user.id,
+                  sessionId,
+                  ip: null,
+                  userAgent: null,
+                },
+              });
+
+              // Buscar todas as sessões do usuário ordenadas por criação
+              const sessions = await (prisma as any).userActiveSession.findMany({
+                where: { userId: user.id },
+                orderBy: { createdAt: "asc" },
+              });
+
+              // Remover sessões mais antigas que excedem o limite
+              if (sessions.length > maxSessions) {
+                const toDelete = sessions.slice(0, sessions.length - maxSessions);
+                await (prisma as any).userActiveSession.deleteMany({
+                  where: { id: { in: toDelete.map((s: any) => s.id) } },
+                });
+              }
+            } catch (e) {
+              console.warn("[auth] Falha ao registrar sessão ativa:", e);
+            }
+          })();
         }
       }
 
