@@ -133,6 +133,37 @@ export async function middleware(req: NextRequest) {
     );
   }
 
+  // ── Verificar se sessionId ainda é válido (controle de sessões simultâneas) ─
+  // Só verifica em rotas que não sejam de auth para evitar loop
+  const sessionId = (token as any).sessionId;
+  if (sessionId && !pathname.startsWith("/api/auth/")) {
+    try {
+      // Importar prisma dinamicamente para não quebrar o edge runtime
+      const { prisma } = await import("@/lib/db");
+      const activeSession = await (prisma as any).userActiveSession.findUnique({
+        where: { sessionId },
+        select: { id: true },
+      });
+
+      if (!activeSession) {
+        // Sessão foi revogada (limite excedido ou revogação manual)
+        return NextResponse.json(
+          { error: "Sessão expirada. Faça login novamente.", code: "SESSION_REVOKED" },
+          { status: 401 }
+        );
+      }
+
+      // Atualizar lastSeenAt em background
+      (prisma as any).userActiveSession.update({
+        where: { sessionId },
+        data: { lastSeenAt: new Date() },
+      }).catch(() => {});
+
+    } catch {
+      // Nunca bloquear por falha na verificação de sessão
+    }
+  }
+
   // ── Cabeçalhos de segurança adicionais ─────────────────────────────────────
   const response = NextResponse.next();
   response.headers.set("X-Content-Type-Options", "nosniff");

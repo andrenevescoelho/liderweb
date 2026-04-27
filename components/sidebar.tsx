@@ -140,6 +140,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: t("nav.systemHealth"), href: "/dashboard/saude-sistema", icon: <Activity className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.pushAnnouncements"), href: "/push-comunicados", icon: <Megaphone className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.emailConfig"), href: "/admin/email-config", icon: <Mail className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Sessões", href: "/admin/sessions", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
       ],
     },
   ];
