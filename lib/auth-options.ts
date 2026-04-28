@@ -452,6 +452,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).subscriptionStatus = token.subscriptionStatus;
         (session.user as any).musicCoachEnabled = token.musicCoachEnabled ?? false;
         (session.user as any).avatarUrl = token.avatarUrl ?? null;
+        (session.user as any).sessionId = (token as any).sessionId ?? null;
       }
       return session;
     },

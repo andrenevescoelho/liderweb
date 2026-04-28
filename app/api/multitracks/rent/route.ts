@@ -1,3 +1,4 @@
+import { isSessionValid } from "@/lib/session-guard";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,6 +19,14 @@ export async function POST(req: NextRequest) {
     const user = session.user as SessionUser;
 
     if (!user.groupId) return NextResponse.json({ error: "Sem grupo" }, { status: 400 });
+    // ── Verificar sessão ativa ────────────────────────────────────────────────
+    if (!await isSessionValid((user as any).sessionId)) {
+      return NextResponse.json(
+        { error: "Sessão expirada. Faça login novamente.", code: "SESSION_REVOKED" },
+        { status: 401 }
+      );
+    }
+
 
     // Verificar permissão RBAC granular para MEMBER e LEADER
     if (user.role === "MEMBER" || user.role === "LEADER") {

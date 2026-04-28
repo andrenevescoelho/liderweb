@@ -1,3 +1,4 @@
+import { isSessionValid } from "@/lib/session-guard";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -234,6 +235,14 @@ export async function POST(req: NextRequest) {
     if (userRole !== "SUPERADMIN" && !user.groupId) {
       return NextResponse.json({ error: "Usuário não pertence a nenhum grupo" }, { status: 400 });
     }
+    // ── Verificar sessão ativa ────────────────────────────────────────────────
+    if (!await isSessionValid((user as any).sessionId)) {
+      return NextResponse.json(
+        { error: "Sessão expirada. Faça login novamente.", code: "SESSION_REVOKED" },
+        { status: 401 }
+      );
+    }
+
 
     const body = await req.json();
     const context = extractRequestContext(req);
