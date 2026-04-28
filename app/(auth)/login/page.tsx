@@ -22,6 +22,11 @@ export default function LoginPage() {
   const inviteToken = searchParams.get("token");
 
   const oauthErrorMessage = useMemo(() => {
+    const reasonParam = searchParams.get("reason");
+    if (reasonParam === "session_revoked") {
+      setError("Sua sessão foi encerrada porque você fez login em outro dispositivo.");
+    }
+
     const errorParam = searchParams.get("error");
     if (errorParam === "google_email_required") {
       return "Não foi possível entrar com Google sem email verificado.";
