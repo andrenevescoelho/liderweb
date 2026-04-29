@@ -37,3 +37,6 @@ Thumbs.db
 .vercel
 tsconfig.tsbuildinfo
 .DS_Store\n._*
+
+._*
+.DS_Store
