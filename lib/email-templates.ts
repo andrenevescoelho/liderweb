@@ -279,3 +279,121 @@ export function birthdayEmail(data: BirthdayEmailData): { subject: string; html:
 
   return { subject, html: baseLayout(content, data.groupName) };
 }
+
+// ─── Templates de Marketing / Automação ──────────────────────────────────────
+
+export function welcomeGroupEmail(data: {
+  adminName: string;
+  groupName: string;
+  appUrl: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">🎉 Bem-vindo ao Líder Web, ${data.adminName}!</p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">Seu ministério <strong>${data.groupName}</strong> está pronto. Veja o que você pode fazer:</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:20px;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid ${BORDER};">🎵 <strong>Repertório</strong> — Cadastre músicas com cifras e tons personalizados</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid ${BORDER};">📅 <strong>Escalas com IA</strong> — Gere escalas completas em segundos</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid ${BORDER};">🎧 <strong>Multitracks</strong> — Player profissional com stems separados</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid ${BORDER};">👥 <strong>Membros</strong> — Convide sua equipe e gerencie funções</td></tr>
+      <tr><td style="padding:8px 0;">🎼 <strong>Ensaios</strong> — Organize ensaios e acompanhe presença</td></tr>
+    </table>
+    ${btn("Acessar meu ministério", data.appUrl + "/dashboard")}
+  `;
+  return {
+    subject: `🎉 Bem-vindo ao Líder Web — ${data.groupName}`,
+    html: baseLayout(content, data.groupName),
+  };
+}
+
+export function inactiveGroupEmail(data: {
+  adminName: string;
+  groupName: string;
+  daysSinceLastActivity: number;
+  appUrl: string;
+}): { subject: string; html: string } {
+  const isLong = data.daysSinceLastActivity >= 15;
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">Olá, ${data.adminName} 👋</p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">
+      Notamos que o ministério <strong>${data.groupName}</strong> não acessa o Líder Web há 
+      <strong>${data.daysSinceLastActivity} dias</strong>.
+    </p>
+    ${isLong ? `
+    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:16px;margin-bottom:16px;">
+      <p style="margin:0;color:#92400e;font-size:14px;">
+        💡 <strong>Dica:</strong> Grupos inativos perdem o histórico de escalas e não recebem sugestões da IA. Volte a usar e aproveite ao máximo!
+      </p>
+    </div>` : ""}
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">Seu repertório, escalas e membros ainda estão lá esperando por você.</p>
+    ${btn("Voltar ao Líder Web", data.appUrl + "/dashboard")}
+  `;
+  return {
+    subject: `${isLong ? "⚠️" : "👋"} ${data.groupName}, sentimos sua falta no Líder Web`,
+    html: baseLayout(content, data.groupName),
+  };
+}
+
+export function noSubscriptionEmail(data: {
+  adminName: string;
+  groupName: string;
+  appUrl: string;
+  trialDaysLeft?: number;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">Olá, ${data.adminName}!</p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">
+      O ministério <strong>${data.groupName}</strong> está sem assinatura ativa.
+      ${data.trialDaysLeft ? `Você tem <strong>${data.trialDaysLeft} dias</strong> de acesso gratuito restantes.` : "Seu acesso pode estar limitado."}
+    </p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">Assine agora e continue usando escalas com IA, player de multitracks e muito mais:</p>
+    ${btn("Ver planos disponíveis", data.appUrl + "/planos")}
+  `;
+  return {
+    subject: `🔔 ${data.groupName} — Sua assinatura precisa de atenção`,
+    html: baseLayout(content, data.groupName),
+  };
+}
+
+export function noGroupUserEmail(data: {
+  userName: string;
+  email: string;
+  appUrl: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">Olá, ${data.userName}!</p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">
+      Você criou uma conta no Líder Web mas ainda não está vinculado a nenhum ministério.
+    </p>
+    <p style="margin:0 0 8px;color:${TEXT_MUTED};">Você tem duas opções:</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:20px;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid ${BORDER};">📩 <strong>Peça um convite</strong> ao líder do seu ministério para te adicionar</td></tr>
+      <tr><td style="padding:8px 0;">🏛️ <strong>Cadastre seu ministério</strong> e comece a usar gratuitamente</td></tr>
+    </table>
+    ${btn("Acessar minha conta", data.appUrl + "/sem-grupo")}
+  `;
+  return {
+    subject: `👋 ${data.userName}, complete seu cadastro no Líder Web`,
+    html: baseLayout(content, "Líder Web"),
+  };
+}
+
+export function campaignEmail(data: {
+  subject: string;
+  htmlBody: string;
+  groupName: string;
+  recipientName: string;
+  appUrl: string;
+}): { subject: string; html: string } {
+  // Substituir variáveis no corpo da campanha
+  const processedBody = data.htmlBody
+    .replace(/\{\{nome\}\}/gi, data.recipientName)
+    .replace(/\{\{ministerio\}\}/gi, data.groupName)
+    .replace(/\{\{app_url\}\}/gi, data.appUrl);
+
+  return {
+    subject: data.subject
+      .replace(/\{\{nome\}\}/gi, data.recipientName)
+      .replace(/\{\{ministerio\}\}/gi, data.groupName),
+    html: baseLayout(processedBody, data.groupName),
+  };
+}

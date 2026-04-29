@@ -30,6 +30,9 @@ const PUBLIC_API_PREFIXES = [
 
   // Workers e callbacks internos (protegidos por secret próprio)
   "/api/multitracks/worker",
+
+  // Rotas internas do n8n (protegidas por X-N8N-API-Key)
+  "/api/internal/",
   "/api/splits/process",
   "/api/songs/",  // analysis-result callback do serviço de áudio
 ];

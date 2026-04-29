@@ -1549,6 +1549,50 @@ model ScheduleSong {
   @@index([scheduleId, ministerId])
 }
 
+
+// ─── Sistema de E-mails de Marketing ─────────────────────────────────────────
+
+model EmailCampaign {
+  id          String               @id @default(cuid())
+  title       String               // nome interno da campanha
+  subject     String               // assunto do e-mail (suporta {{nome}}, {{ministerio}})
+  htmlBody    String               // corpo HTML (suporta {{nome}}, {{ministerio}}, {{app_url}})
+  segment     String               // ALL_ADMINS | NO_SUBSCRIPTION | INACTIVE_7D | INACTIVE_15D | NO_GROUP
+  status      String               @default("draft") // draft | scheduled | sending | sent | failed
+  scheduledAt DateTime?            // null = envio imediato
+  sentAt      DateTime?
+  sentCount   Int                  @default(0)
+  failCount   Int                  @default(0)
+  createdBy   String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  logs        EmailCampaignLog[]
+}
+
+model EmailCampaignLog {
+  id          String        @id @default(cuid())
+  campaignId  String
+  campaign    EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  email       String
+  recipientId String?       // userId ou groupId
+  status      String        // sent | failed
+  error       String?
+  sentAt      DateTime      @default(now())
+
+  @@index([campaignId])
+  @@index([email])
+}
+
+model AutoEmailLog {
+  id          String   @id @default(cuid())
+  type        String   // welcome_group | inactive_7d | inactive_15d | no_subscription | no_group_user
+  targetId    String   // userId ou groupId
+  sentAt      DateTime @default(now())
+
+  @@unique([type, targetId])
+  @@index([type, targetId])
+}
+
 // ─── Sessões Ativas ──────────────────────────────────────────────────────────
 // Controla quantas sessões simultâneas cada usuário pode ter.
 // SUPERADMIN configura maxSessions por usuário (default: 1).
