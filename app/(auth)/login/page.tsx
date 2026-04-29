@@ -28,6 +28,9 @@ export default function LoginPage() {
     }
 
     const errorParam = searchParams.get("error");
+    if (errorParam === "session_limit_reached") {
+      setError("Você já possui uma sessão ativa em outro dispositivo. Encerre a sessão anterior antes de fazer login aqui.");
+    }
     if (errorParam === "google_email_required") {
       return "Não foi possível entrar com Google sem email verificado.";
     }
@@ -72,10 +75,19 @@ export default function LoginPage() {
 
     try {
       const result = await signIn("credentials", { email, password, redirect: false });
+      console.log("[login] result:", JSON.stringify(result));
+
+      // Verificar redirect de erro antes de checar result.error
+      if (result?.url?.includes("session_limit_reached")) {
+        setError("Você já possui uma sessão ativa em outro dispositivo. Encerre a sessão anterior antes de fazer login aqui.");
+        return;
+      }
+
       if (result?.error) {
-        // Verificar se é erro de rate limit (mensagem começa com "Muitas tentativas")
         if (result.error.includes("Muitas tentativas") || result.error.includes("tentativas")) {
           setError(result.error);
+        } else if (result.error.includes("session_limit_reached")) {
+          setError("Você já possui uma sessão ativa em outro dispositivo. Encerre a sessão anterior antes de fazer login aqui.");
         } else {
           setError("Email ou senha incorretos. Se você entrou com Google anteriormente, use o botão 'Entrar com Google'.");
         }
