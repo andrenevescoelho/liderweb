@@ -219,6 +219,35 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async signIn({ user, account, profile }) {
+      // Verificar limite de sessões para TODOS os providers
+      if (user?.id) {
+        try {
+          // Limpar sessões expiradas antes de verificar o limite
+          const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+          const expiredBefore = new Date(Date.now() - SESSION_TTL_MS);
+          await (prisma as any).userActiveSession.deleteMany({
+            where: { userId: user.id, lastSeenAt: { lt: expiredBefore } },
+          }).catch(() => {});
+
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { maxSessions: true },
+          });
+          const maxSessions = dbUser?.maxSessions ?? 1;
+          const activeSessions = await (prisma as any).userActiveSession.findMany({
+            where: { userId: user.id },
+            orderBy: { createdAt: "asc" },
+          });
+
+          // Se já atingiu o limite, bloquear o login
+          if (activeSessions.length >= maxSessions) {
+            return "/login?error=session_limit_reached";
+          }
+        } catch {
+          // Fail open — nunca bloquear login por falha na verificação
+        }
+      }
+
       if (account?.provider !== "google") {
         return true;
       }
@@ -462,6 +491,14 @@ export const authOptions: NextAuthOptions = {
     async signOut({ token }) {
       const userId = typeof token?.id === "string" ? token.id : null;
       const groupId = typeof token?.groupId === "string" ? token.groupId : null;
+      const sessionId = typeof (token as any)?.sessionId === "string" ? (token as any).sessionId : null;
+
+      // Remover sessão ativa do banco ao fazer logout
+      if (sessionId) {
+        (prisma as any).userActiveSession.delete({
+          where: { sessionId },
+        }).catch(() => {});
+      }
 
       await logUserAction({
         userId,
