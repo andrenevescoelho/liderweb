@@ -60,7 +60,7 @@ export default function CampaignsAdminPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [triggerLoading, setTriggerLoading] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
-  const [dryRunResult, setDryRunResult] = useState<{ label: string; targets: string[]; sent: number } | null>(null);
+  const [dryRunResult, setDryRunResult] = useState<{ label: string; targets: string[]; sent: number; isReal?: boolean; skipped?: number; failed?: number } | null>(null);
   const [autoSentCount, setAutoSentCount] = useState(0);
 
   // Formulário
@@ -156,8 +156,15 @@ export default function CampaignsAdminPage() {
         if (dryRun) {
           setDryRunResult({ label, targets: data.targets ?? [], sent: data.sent ?? 0 });
         } else {
-          toast.success(data.message ?? `${data.sent} e-mail(s) enviado(s)`);
           setAutoSentCount(prev => prev + (data.sent ?? 0));
+          setDryRunResult({
+            label,
+            targets: data.targets ?? [],
+            sent: data.sent ?? 0,
+            isReal: true,
+            skipped: data.skipped ?? 0,
+            failed: data.failed ?? 0,
+          });
         }
       } else {
         toast.error(data.error ?? "Erro");
@@ -396,16 +403,29 @@ export default function CampaignsAdminPage() {
       {dryRunResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-xl border border-border p-6 max-w-md w-full space-y-4">
-            <h3 className="font-semibold text-lg">Simulação — {dryRunResult.label}</h3>
-            <p className="text-sm text-muted-foreground">
-              <strong>{dryRunResult.sent}</strong> destinatário(s) seriam afetados:
-            </p>
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              {dryRunResult.isReal ? (
+                <><CheckCircle className="h-5 w-5 text-green-500" />Envio concluído — {dryRunResult.label}</>
+              ) : (
+                <><Eye className="h-5 w-5 text-blue-500" />Simulação — {dryRunResult.label}</>
+              )}
+            </h3>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-green-500 font-medium">✓ {dryRunResult.sent} {dryRunResult.isReal ? "enviado(s)" : "seriam enviados"}</span>
+              {(dryRunResult.skipped ?? 0) > 0 && <span className="text-muted-foreground">⏭ {dryRunResult.skipped} ignorado(s)</span>}
+              {(dryRunResult.failed ?? 0) > 0 && <span className="text-red-500">✗ {dryRunResult.failed} falhou</span>}
+            </div>
             {dryRunResult.targets.length > 0 ? (
-              <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border border-border p-3 bg-muted/30">
-                {dryRunResult.targets.map((t, i) => (
-                  <div key={i} className="text-sm font-mono text-foreground">{t}</div>
-                ))}
-              </div>
+              <>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  {dryRunResult.isReal ? "E-mails enviados para:" : "Destinatários que seriam afetados:"}
+                </p>
+                <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border border-border p-3 bg-muted/30">
+                  {dryRunResult.targets.map((t, i) => (
+                    <div key={i} className="text-sm font-mono text-foreground">{t}</div>
+                  ))}
+                </div>
+              </>
             ) : (
               <p className="text-sm text-muted-foreground italic">Nenhum destinatário encontrado para este critério.</p>
             )}
@@ -414,7 +434,7 @@ export default function CampaignsAdminPage() {
                 className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted">
                 Fechar
               </button>
-              {dryRunResult.sent > 0 && (
+              {!dryRunResult.isReal && dryRunResult.sent > 0 && (
                 <button onClick={() => {
                   setDryRunResult(null);
                   const trigger = AUTO_TRIGGERS.find(t => t.label === dryRunResult.label);
