@@ -14,6 +14,26 @@ import {
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liderweb.multitrackgospel.com";
 const FROM_EMAIL = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
 
+// Buscar template personalizado do banco, ou usar o padrão da lib
+async function getTemplate(type: string, defaultFn: () => { subject: string; html: string }): Promise<{ subject: string; html: string }> {
+  try {
+    const saved = await (prisma as any).emailTemplate.findUnique({ where: { type } });
+    if (saved) {
+      return { subject: saved.subject, html: saved.htmlBody };
+    }
+  } catch {
+    // Usar padrão se falhar
+  }
+  return defaultFn();
+}
+
+function applyVars(text: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce(
+    (t, [k, v]) => t.replace(new RegExp(`\{\{${k}\}\}`, "gi"), v),
+    text
+  );
+}
+
 // POST /api/internal/email-trigger
 // Body: { type: "inactive_7d" | "inactive_15d" | "no_subscription" | "no_group_user" | "welcome_group", targetId?: string }
 // Chamado pelo n8n via cron ou manualmente
@@ -76,7 +96,11 @@ export async function POST(req: NextRequest) {
             });
 
             try {
-              await sendSmtpMail({ to: admin.email, subject, html, fromEmail: FROM_EMAIL, fromName: "Líder Web" });
+              const vars = { nome: admin.name ?? "Líder", ministerio: group.name, app_url: APP_URL };
+              const tmpl = await getTemplate(type, () => inactiveGroupEmail({ adminName: vars.nome, groupName: vars.ministerio, daysSinceLastActivity: days, appUrl: APP_URL }));
+              const finalSubject = applyVars(tmpl.subject, vars);
+              const finalHtml = applyVars(tmpl.html, vars);
+              await sendSmtpMail({ to: admin.email, subject: finalSubject, html: finalHtml, fromEmail: FROM_EMAIL, fromName: "Líder Web" });
               await (prisma as any).autoEmailLog.create({ data: { type, targetId: group.id } });
               results.sent++;
               results.targets.push(group.name);

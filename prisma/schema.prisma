@@ -1550,6 +1550,20 @@ model ScheduleSong {
 }
 
 
+
+// ─── Templates de E-mail Editáveis ───────────────────────────────────────────
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  type        String   @unique // welcome_group | inactive_7d | inactive_15d | no_subscription | no_group_user
+  label       String   // nome legível no painel
+  subject     String   // assunto (suporta {{nome}}, {{ministerio}})
+  htmlBody    String   // corpo HTML
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
 // ─── Sistema de E-mails de Marketing ─────────────────────────────────────────
 
 model EmailCampaign {
