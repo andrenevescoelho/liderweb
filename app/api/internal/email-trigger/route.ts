@@ -148,16 +148,17 @@ export async function POST(req: NextRequest) {
 
       // ── Usuários sem grupo ────────────────────────────────────────────────
       case "no_group_user": {
-        const users = await prisma.user.findMany({
+        const usersRaw = await prisma.user.findMany({
           where: {
             groupId: null,
             role: { not: "SUPERADMIN" },
-            email: { not: null },
-            createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // cadastro há mais de 24h
+            createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
             ...(targetId ? { id: targetId } : {}),
           },
           select: { id: true, name: true, email: true },
         });
+        // Filtrar usuários sem email após a query (evitar `not: null` que falha no Prisma 6)
+        const users = usersRaw.filter((u) => u.email && u.email.trim() !== "");
 
         for (const user of users) {
           if (!user.email) { results.skipped++; continue; }
