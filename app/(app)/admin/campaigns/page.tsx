@@ -38,10 +38,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 };
 
 const AUTO_TRIGGERS = [
-  { type: "inactive_7d",     label: "Grupos inativos 7 dias",    icon: "📅" },
-  { type: "inactive_15d",    label: "Grupos inativos 15 dias",   icon: "⚠️" },
-  { type: "no_subscription", label: "Grupos sem assinatura",     icon: "🔔" },
-  { type: "no_group_user",   label: "Usuários sem ministério",   icon: "👤" },
+  { type: "inactive_7d",     label: "Grupos inativos 7 dias",       icon: "📅" },
+  { type: "inactive_15d",    label: "Grupos inativos 15 dias",      icon: "⚠️" },
+  { type: "no_subscription", label: "Grupos sem assinatura",        icon: "🔔" },
+  { type: "no_group_user",   label: "Usuários sem ministério",      icon: "👤" },
+  { type: "trial_day1",      label: "Trial — Dia 1 (boas-vindas)",  icon: "🚀" },
+  { type: "trial_day3",      label: "Trial — Dia 3 (dica da IA)",   icon: "🤖" },
+  { type: "trial_day6",      label: "Trial — Dia 6 (expira amanhã)",icon: "⏰" },
 ];
 
 const VARS_HINT = "Variáveis: {{nome}}, {{ministerio}}, {{app_url}}";
