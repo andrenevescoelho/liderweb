@@ -46,6 +46,34 @@ const DEFAULT_TEMPLATES: Record<string, { label: string; subject: string; htmlBo
 <p>Assine agora e continue usando escalas com IA, player de multitracks e muito mais.</p>
 <p><a href="{{app_url}}/planos">Ver planos disponíveis →</a></p>`,
   },
+  trial_day1: {
+    label: "Trial — Dia 1: Boas-vindas e primeiros passos",
+    subject: "🚀 Seu trial começou! Primeiros passos no Líder Web",
+    htmlBody: `<p>Olá, {{nome}}!</p>
+<p>Seu trial de 7 dias do Líder Web começou. Veja o que fazer agora:</p>
+<ol>
+  <li><strong>Cadastre seu repertório</strong> — Adicione músicas com cifras e tons</li>
+  <li><strong>Convide sua equipe</strong> — Músicos, vocalistas e instrumentistas</li>
+  <li><strong>Gere sua primeira escala com IA</strong> — A IA monta escalas completas em segundos</li>
+</ol>
+<p><a href="{{app_url}}/dashboard">Começar agora →</a></p>`,
+  },
+  trial_day3: {
+    label: "Trial — Dia 3: Dica da IA",
+    subject: "🤖 Já gerou sua primeira escala com IA? (dia 3 do trial)",
+    htmlBody: `<p>Olá, {{nome}}!</p>
+<p>Você está no 3º dia do seu trial. Já testou o Wizard de Escalas com IA?</p>
+<p>Selecione o template do culto e a IA monta escalas completas com membros, funções e setlist em segundos.</p>
+<p><a href="{{app_url}}/schedules">Experimentar agora →</a></p>`,
+  },
+  trial_day6: {
+    label: "Trial — Dia 6: Aviso de expiração",
+    subject: "⏰ Seu trial termina amanhã — assine para continuar",
+    htmlBody: `<p>Olá, {{nome}}!</p>
+<p>⚠️ Seu trial termina amanhã!</p>
+<p>Não perca o acesso ao que você já configurou — repertório, membros, escalas e histórico ficam salvos quando você assinar.</p>
+<p><a href="{{app_url}}/planos">Assinar agora →</a></p>`,
+  },
   no_group_user: {
     label: "Usuário cadastrado sem ministério",
     subject: "👋 {{nome}}, complete seu cadastro no Líder Web",

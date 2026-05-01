@@ -9,6 +9,9 @@ import {
   inactiveGroupEmail,
   noSubscriptionEmail,
   noGroupUserEmail,
+  trialDay1Email,
+  trialDay3Email,
+  trialDay6Email,
 } from "@/lib/email-templates";
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://liderweb.multitrackgospel.com";
@@ -44,7 +47,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const { type, targetId, dryRun = false } = body;
 
-  const validTypes = ["inactive_7d", "inactive_15d", "no_subscription", "no_group_user", "welcome_group"];
+  const validTypes = ["inactive_7d", "inactive_15d", "no_subscription", "no_group_user", "welcome_group", "trial_day1", "trial_day3", "trial_day6"];
   if (!validTypes.includes(type)) {
     return NextResponse.json({ error: `Tipo inválido. Use: ${validTypes.join(", ")}` }, { status: 400 });
   }
@@ -248,6 +251,82 @@ export async function POST(req: NextRequest) {
         }
         results.sent++;
         results.targets.push(`${group.name} → ${admin.email}`);
+        break;
+      }
+
+      // ── Trial Dia 1 — Boas-vindas ────────────────────────────────────────────
+      case "trial_day1":
+      case "trial_day3":
+      case "trial_day6": {
+        const dayMap: Record<string, number> = { trial_day1: 1, trial_day3: 3, trial_day6: 6 };
+        const trialDay = dayMap[type];
+
+        // Grupos em TRIALING onde o dia do trial bate com o dia esperado
+        const allTrialing = await prisma.subscription.findMany({
+          where: { status: "TRIALING", trialEndsAt: { not: null } },
+          include: {
+            group: {
+              include: {
+                users: {
+                  where: { role: "ADMIN" },
+                  select: { id: true, name: true, email: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+          ...(targetId ? { where: { groupId: targetId } } : {}),
+        });
+
+        for (const sub of allTrialing) {
+          const group = sub.group;
+          const admin = group?.users?.[0];
+          if (!admin?.email || !sub.trialEndsAt) { results.skipped++; continue; }
+
+          // Calcular em qual dia do trial está
+          const trialEndMs = new Date(sub.trialEndsAt).getTime();
+          const now = Date.now();
+          const msLeft = trialEndMs - now;
+          const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+          const totalTrialDays = 7;
+          const currentDay = totalTrialDays - daysLeft + 1;
+
+          // Só envia se está no dia certo
+          if (currentDay !== trialDay) { results.skipped++; continue; }
+
+          const already = await (prisma as any).autoEmailLog.findUnique({
+            where: { type_targetId: { type, targetId: group.id } },
+          });
+          if (already) { results.skipped++; continue; }
+
+          if (!dryRun) {
+            const vars = { nome: admin.name ?? "Líder", ministerio: group.name, app_url: APP_URL, dias_restantes: String(daysLeft) };
+            const defaultFn = type === "trial_day1"
+              ? () => trialDay1Email({ adminName: vars.nome, groupName: vars.ministerio, appUrl: APP_URL })
+              : type === "trial_day3"
+              ? () => trialDay3Email({ adminName: vars.nome, groupName: vars.ministerio, appUrl: APP_URL })
+              : () => trialDay6Email({ adminName: vars.nome, groupName: vars.ministerio, appUrl: APP_URL, daysLeft });
+
+            try {
+              const tmpl = await getTemplate(type, defaultFn);
+              await sendSmtpMail({
+                to: admin.email!,
+                subject: applyVars(tmpl.subject, vars),
+                html: applyVars(tmpl.html, vars),
+                fromEmail: FROM_EMAIL,
+                fromName: "Líder Web",
+              });
+              await (prisma as any).autoEmailLog.create({ data: { type, targetId: group.id } });
+              results.sent++;
+              results.targets.push(`${group.name} → ${admin.email} (dia ${currentDay} de ${totalTrialDays})`);
+            } catch {
+              results.failed++;
+            }
+          } else {
+            results.targets.push(`${group.name} → ${admin.email} (dia ${currentDay} de ${totalTrialDays})`);
+            results.sent++;
+          }
+        }
         break;
       }
     }

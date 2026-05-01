@@ -397,3 +397,83 @@ export function campaignEmail(data: {
     html: baseLayout(processedBody, data.groupName),
   };
 }
+
+// ─── Templates de Trial ───────────────────────────────────────────────────────
+
+export function trialDay1Email(data: {
+  adminName: string;
+  groupName: string;
+  appUrl: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">Olá, ${data.adminName}! Vamos começar? 🚀</p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">Seu trial de 7 dias do <strong>Líder Web</strong> acabou de começar. Aqui está o que você pode fazer agora mesmo:</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:20px;">
+      <tr><td style="padding:10px 0;border-bottom:1px solid ${BORDER};">
+        <strong style="color:${TEXT};">1. Cadastre seu repertório</strong>
+        <p style="margin:4px 0 0;color:${TEXT_MUTED};font-size:14px;">Adicione músicas com cifras, tons e BPM. A IA vai usar isso para sugerir setlists.</p>
+      </td></tr>
+      <tr><td style="padding:10px 0;border-bottom:1px solid ${BORDER};">
+        <strong style="color:${TEXT};">2. Convide sua equipe</strong>
+        <p style="margin:4px 0 0;color:${TEXT_MUTED};font-size:14px;">Adicione músicos, vocalistas e instrumentistas com funções específicas.</p>
+      </td></tr>
+      <tr><td style="padding:10px 0;">
+        <strong style="color:${TEXT};">3. Gere sua primeira escala com IA</strong>
+        <p style="margin:4px 0 0;color:${TEXT_MUTED};font-size:14px;">Com repertório e membros cadastrados, a IA monta escalas completas em segundos.</p>
+      </td></tr>
+    </table>
+    ${btn("Começar agora", data.appUrl + "/dashboard")}
+  `;
+  return {
+    subject: `🚀 Seu trial começou! Primeiros passos no Líder Web`,
+    html: baseLayout(content, data.groupName),
+  };
+}
+
+export function trialDay3Email(data: {
+  adminName: string;
+  groupName: string;
+  appUrl: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">Olá, ${data.adminName}! Já testou a IA? 🤖</p>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">Você está no <strong>3º dia do seu trial</strong>. A funcionalidade que mais impressiona nossos clientes é a geração de escalas com IA.</p>
+    <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border-radius:12px;padding:20px;margin-bottom:20px;">
+      <p style="margin:0 0 8px;color:#fff;font-weight:700;font-size:15px;">✨ Wizard de Escalas com IA</p>
+      <p style="margin:0 0 12px;color:rgba(255,255,255,0.8);font-size:14px;">Selecione o template do culto, escolha a estratégia de músicas e a IA monta escalas completas com membros, funções e setlist — tudo de uma vez.</p>
+      <a href="${data.appUrl}/schedules" style="display:inline-block;background:#fff;color:#7c3aed;text-decoration:none;padding:8px 20px;border-radius:8px;font-size:14px;font-weight:700;">Experimentar agora →</a>
+    </div>
+    <p style="margin:0;color:${TEXT_MUTED};font-size:14px;">Restam ainda 4 dias de trial. Aproveite!</p>
+  `;
+  return {
+    subject: `🤖 Já gerou sua primeira escala com IA? (dia 3 do trial)`,
+    html: baseLayout(content, data.groupName),
+  };
+}
+
+export function trialDay6Email(data: {
+  adminName: string;
+  groupName: string;
+  appUrl: string;
+  daysLeft: number;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${TEXT};">Olá, ${data.adminName}!</p>
+    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:16px;margin-bottom:16px;">
+      <p style="margin:0;color:#92400e;font-weight:700;">⏰ Seu trial termina em ${data.daysLeft} dia${data.daysLeft !== 1 ? "s" : ""}!</p>
+    </div>
+    <p style="margin:0 0 16px;color:${TEXT_MUTED};">Não perca o acesso ao que você já configurou — repertório, membros, escalas e histórico ficam salvos quando você assinar.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:20px;">
+      <tr><td style="padding:6px 0;color:${TEXT_MUTED};font-size:14px;">✅ Escalas com IA ilimitadas</td></tr>
+      <tr><td style="padding:6px 0;color:${TEXT_MUTED};font-size:14px;">✅ Player de multitracks profissional</td></tr>
+      <tr><td style="padding:6px 0;color:${TEXT_MUTED};font-size:14px;">✅ Gestão completa de membros e funções</td></tr>
+      <tr><td style="padding:6px 0;color:${TEXT_MUTED};font-size:14px;">✅ Ensaios e presença online</td></tr>
+    </table>
+    ${btn("Assinar agora e continuar", data.appUrl + "/planos")}
+    <p style="margin:16px 0 0;color:${TEXT_MUTED};font-size:13px;text-align:center;">Cancele quando quiser. Sem fidelidade.</p>
+  `;
+  return {
+    subject: `⏰ Seu trial termina em ${data.daysLeft} dia${data.daysLeft !== 1 ? "s" : ""} — assine para continuar`,
+    html: baseLayout(content, data.groupName),
+  };
+}
