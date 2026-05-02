@@ -171,7 +171,6 @@ export async function PUT(
       where: { id: params?.id },
       data: {
         date: scheduleDate,
-        time: time ?? null,
         name: name?.trim() ?? null,
         setlistId,
         roles: {
