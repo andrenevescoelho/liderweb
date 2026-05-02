@@ -370,7 +370,8 @@ model User {
   supportTickets       SupportTicket[]
   supportReplies       SupportTicketReply[]
   splitJobs            SplitJob[]
-  maxSessions          Int                   @default(1) // máx sessões simultâneas (SUPERADMIN configura)
+  maxSessions          Int                   @default(1)    // máx sessões simultâneas (SUPERADMIN configura)
+  sessionTimeoutHours  Int?                                 // timeout por inatividade em horas (null = sem timeout)
   activeSessions       UserActiveSession[]
 }
 
@@ -1551,6 +1552,18 @@ model ScheduleSong {
 
 
 
+
+// ─── Configurações do Sistema ────────────────────────────────────────────────
+// Configurações globais editáveis pelo SUPERADMIN
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique  // ex: "session_timeout_hours", "max_sessions_default"
+  value     String            // valor como string
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
 
 // ─── Verificação de E-mail no Cadastro ───────────────────────────────────────
 
