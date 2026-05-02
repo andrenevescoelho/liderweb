@@ -243,8 +243,9 @@ model Group {
   carts               Cart[]
   supportTickets      SupportTicket[]
   splitJobs           SplitJob[]
-  scheduleTemplates   ScheduleTemplate[]
-  orders              Order[]
+  scheduleTemplates            ScheduleTemplate[]
+  orders                       Order[]
+  scheduleApprovalDeadlineDays Int?  // dias antes do culto para auto-publicar (default: 1)
 }
 
 model SubscriptionPlan {
