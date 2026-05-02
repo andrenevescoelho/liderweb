@@ -166,8 +166,50 @@ export async function POST(req: NextRequest) {
     const scheduleName = name?.trim() || null;
     const setlistName = scheduleName ?? (time ? `Escala ${date} ${time}` : `Escala ${date}`);
 
-    // Log temporário — debug songIds em prod
-    console.log("[schedules] setlistItems recebidos:", JSON.stringify(setlistItems ?? []));
+    // Garantir que todas as músicas pertencem ao grupo
+    // Se uma música é do catálogo comunitário, copiar para o repertório do grupo
+    const resolvedItems: { songId: string; selectedKey: string }[] = [];
+    for (const item of (setlistItems ?? [])) {
+      if (!item?.songId) continue;
+      const song = await prisma.song.findUnique({
+        where: { id: item.songId },
+        select: { id: true, groupId: true, title: true, artist: true, bpm: true, originalKey: true, youtubeUrl: true, tags: true, timeSignature: true },
+      });
+      if (!song) continue;
+
+      // Se a música já pertence ao grupo, usar direto
+      if (song.groupId === user.groupId) {
+        resolvedItems.push({ songId: song.id, selectedKey: item.selectedKey ?? song.originalKey ?? "C" });
+      } else {
+        // Música de outro grupo (catálogo) — verificar se o grupo já tem uma cópia
+        const existing = await prisma.song.findFirst({
+          where: {
+            groupId: user.groupId,
+            title: { equals: song.title, mode: "insensitive" },
+          },
+          select: { id: true },
+        });
+        if (existing) {
+          resolvedItems.push({ songId: existing.id, selectedKey: item.selectedKey ?? "C" });
+        } else {
+          // Copiar música para o repertório do grupo
+          const copied = await prisma.song.create({
+            data: {
+              title: song.title,
+              artist: song.artist,
+              bpm: song.bpm,
+              originalKey: song.originalKey,
+              youtubeUrl: song.youtubeUrl,
+              tags: song.tags,
+              timeSignature: song.timeSignature,
+              groupId: user.groupId ?? null,
+            },
+            select: { id: true },
+          });
+          resolvedItems.push({ songId: copied.id, selectedKey: item.selectedKey ?? song.originalKey ?? "C" });
+        }
+      }
+    }
 
     const createdSetlist = await prisma.setlist.create({
       data: {
@@ -175,9 +217,9 @@ export async function POST(req: NextRequest) {
         date: scheduleDate,
         groupId: user.groupId ?? null,
         items: {
-          create: (setlistItems ?? []).map((item: any, index: number) => ({
-            songId: item?.songId,
-            selectedKey: item?.selectedKey ?? "C",
+          create: resolvedItems.map((item, index) => ({
+            songId: item.songId,
+            selectedKey: item.selectedKey,
             order: index,
           })),
         },
