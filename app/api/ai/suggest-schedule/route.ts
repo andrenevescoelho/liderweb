@@ -225,6 +225,7 @@ export async function POST(req: NextRequest) {
       observation,
       songStrategy = "group_top",
       ministerId = null,
+      previousAssignments = [], // membros já escalados em datas anteriores desta sessão
     } = body ?? {};
 
     const validStrategies: SongStrategy[] = ["minister_history", "group_top", "exploration"];
@@ -293,6 +294,12 @@ export async function POST(req: NextRequest) {
 
     const datesText = dates.join(", ");
     const obsText = observation?.trim() ? `\nObservação do líder: ${observation}` : "";
+
+    // Contexto de quem já foi escalado em datas anteriores desta sessão
+    const previousContext = previousAssignments.length > 0
+      ? `\n## Escalas já geradas nesta sessão (evite repetir os mesmos membros nas funções principais):\n` +
+        previousAssignments.map((p: any) => `- ${p.date}: ${p.roles.map((r: any) => `${r.role} → ${r.memberName ?? "vago"}`).join(", ")}`).join("\n")
+      : "";
     const rolesText = templateRoles.length > 0
       ? "\n## Funções esperadas na escala:\n" + templateRoles.map((r) => `- ${r.role}: ${r.count} pessoa(s)`).join("\n")
       : "";
@@ -321,7 +328,7 @@ O líder quer criar uma escala para a data: ${datesText}
 ${templateName ? `Nome do culto: ${templateName}` : ""}
 ${defaultTime ? `Horário: ${defaultTime}` : ""}
 Tipo de banda: ${bandText}
-Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${rolesText}
+Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${previousContext}${rolesText}
 
 ## Instruções gerais:
 - Cada música no repertório está listada com seu ID no formato [ID:xxxxx]. Use EXATAMENTE esse ID no campo "songId" da resposta — nunca invente ou modifique IDs
@@ -329,7 +336,8 @@ Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${role
 - Para cada música sugerida, inclua uma justificativa curta em "songReason" (ex: "João usou 5 vezes", "Não é usada há 6 semanas", "Favorita do ministério")
 - Preencha exatamente as funções listadas acima (se houver), respeitando a quantidade de cada uma
 - Priorize membros com a função correspondente cadastrada
-- Tente equilibrar a participação (não sobrecarregar sempre os mesmos)
+- Tente equilibrar a participação — evite repetir os mesmos membros nas funções de destaque (Ministro, Vocal principal) em datas consecutivas
+- Se houver "Escalas já geradas nesta sessão", use como referência para variar os membros
 - Sugira exatamente ${songCount} músicas
 - Se não houver músicas ou membros suficientes, preencha o que for possível e deixe o resto em branco
 

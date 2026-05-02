@@ -429,6 +429,8 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
     const results: AiSchedule[] = [];
 
     try {
+      const previousAssignments: { date: string; roles: { role: string; memberName: string | null }[] }[] = [];
+
       for (let i = 0; i < datesWithMinisters.length; i++) {
         const { date, ministerId } = datesWithMinisters[i];
         const ministerName = ministerId
@@ -448,6 +450,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
             observation,
             songStrategy,
             ministerId: ministerId || null,
+            previousAssignments, // passa histórico das escalas já geradas
           }),
         });
 
@@ -461,7 +464,16 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
           setStep(songStrategy === "minister_history" ? "ministers" : "config");
           return;
         }
-        results.push(...(data.schedules ?? []));
+        const newSchedules = data.schedules ?? [];
+        results.push(...newSchedules);
+
+        // Acumular histórico de quem foi escalado para informar a próxima chamada
+        for (const sched of newSchedules) {
+          previousAssignments.push({
+            date: sched.date,
+            roles: (sched.roles ?? []).map((r: any) => ({ role: r.role, memberName: r.memberName })),
+          });
+        }
       }
 
       setDraft(results);
