@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 
-type SignupMode = 'choose' | 'invite' | 'new-group' | 'success';
+type SignupMode = 'choose' | 'invite' | 'new-group' | 'verify-email' | 'success';
 
 interface InviteData {
   email: string;
@@ -41,6 +41,9 @@ function SignupContent() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [verifyToken, setVerifyToken] = useState("");
+  const [sendingToken, setSendingToken] = useState(false);
   const [validatingToken, setValidatingToken] = useState(false);
   const [acceptingInvite, setAcceptingInvite] = useState(false);
 
@@ -175,6 +178,61 @@ function SignupContent() {
   const handleGoogleLogin = async () => {
     setError("");
     await signIn("google", { callbackUrl: googleCallbackUrl });
+  };
+
+  // Enviar token de verificação de email
+  const handleSendVerifyToken = async () => {
+    if (!email || !email.includes("@")) {
+      setError("Digite um e-mail válido antes de solicitar o código.");
+      return;
+    }
+    setSendingToken(true);
+    setError("");
+    try {
+      const res = await fetch("/api/signup/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMode("verify-email");
+      } else {
+        setError(data.error ?? "Erro ao enviar código");
+      }
+    } catch {
+      setError("Erro ao enviar código. Tente novamente.");
+    } finally {
+      setSendingToken(false);
+    }
+  };
+
+  // Verificar token digitado
+  const handleVerifyToken = async () => {
+    if (!verifyToken || verifyToken.length !== 6) {
+      setError("Digite o código de 6 dígitos recebido no seu e-mail.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/signup/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify", email, token: verifyToken }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEmailVerified(true);
+        setMode("new-group");
+      } else {
+        setError(data.error ?? "Código inválido");
+      }
+    } catch {
+      setError("Erro ao verificar código.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Criar novo grupo diretamente
@@ -390,6 +448,47 @@ function SignupContent() {
           </form>
         )}
 
+        {mode === 'verify-email' && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground text-center">
+              Enviamos um código de 6 dígitos para <strong>{email}</strong>. Digite-o abaixo para confirmar seu e-mail.
+            </p>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="000000"
+                maxLength={6}
+                value={verifyToken}
+                onChange={(e) => setVerifyToken(e.target.value.replace(/\D/g, ""))}
+                className="w-full h-14 text-center text-2xl font-mono tracking-widest rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleVerifyToken}
+              disabled={loading || verifyToken.length !== 6}
+            >
+              {loading ? "Verificando..." : "Confirmar código"}
+            </Button>
+            <button
+              type="button"
+              className="w-full text-sm text-muted-foreground hover:text-foreground"
+              onClick={handleSendVerifyToken}
+              disabled={sendingToken}
+            >
+              {sendingToken ? "Reenviando..." : "Reenviar código"}
+            </button>
+            <button
+              type="button"
+              className="w-full text-sm text-muted-foreground hover:text-foreground"
+              onClick={() => setMode("new-group")}
+            >
+              ← Voltar
+            </button>
+          </div>
+        )}
+
         {mode === 'new-group' && (
           <form onSubmit={handleNewGroupRequest} className="space-y-4">
             {/* Se já autenticado via Google, mostrar conta identificada */}
@@ -428,9 +527,32 @@ function SignupContent() {
                   <Input type="text" placeholder="Seu nome" value={name} onChange={(e) => setName(e?.target?.value ?? '')} className="pl-10" required />
                 </div>
 
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input type="email" placeholder="Seu email" value={email} onChange={(e) => setEmail(e?.target?.value ?? '')} className="pl-10" required />
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Input
+                      type="email"
+                      placeholder="Seu email"
+                      value={email}
+                      onChange={(e) => { setEmail(e?.target?.value ?? ''); setEmailVerified(false); }}
+                      className={`pl-10 ${emailVerified ? "border-green-500 pr-10" : ""}`}
+                      required
+                    />
+                    {emailVerified && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 text-xs font-medium">✓ Verificado</span>
+                    )}
+                  </div>
+                  {!emailVerified && email && email.includes("@") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full text-sm"
+                      onClick={handleSendVerifyToken}
+                      disabled={sendingToken}
+                    >
+                      {sendingToken ? "Enviando código..." : "Verificar e-mail"}
+                    </Button>
+                  )}
                 </div>
 
                 <div className="relative">

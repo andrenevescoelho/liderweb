@@ -61,6 +61,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Verificar se o email foi confirmado via token
+    const emailVerification = await (prisma as any).emailVerificationToken.findFirst({
+      where: {
+        email: normalizedEmail,
+        verified: true,
+        expiresAt: { gt: new Date(Date.now() - 30 * 60 * 1000) }, // válido por até 30min após verificação
+      },
+    });
+
+    if (!emailVerification) {
+      return NextResponse.json(
+        { error: "E-mail não verificado. Por favor, confirme seu e-mail antes de continuar." },
+        { status: 400 }
+      );
+    }
+
     const existingUser = await prisma.user.findFirst({
       where: {
         email: {
@@ -174,26 +190,27 @@ export async function POST(req: NextRequest) {
         }).catch(err => console.warn("[signup] email superadmin falhou:", err));
 
         // Email de boas-vindas para o admin do novo grupo
-        await sendSmtpMail({
-          to: result.user.email,
-          subject: `🎉 Bem-vindo ao Líder Web, ${result.user.name}!`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-              <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:28px;border-radius:12px 12px 0 0;text-align:center;">
-                <p style="margin:0;color:#fff;font-size:20px;font-weight:700;">Bem-vindo ao Líder Web! 🎉</p>
-              </div>
-              <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
-                <p style="margin:0 0 12px;color:#1e293b;">Olá, <strong>${result.user.name}</strong>!</p>
-                <p style="margin:0 0 16px;color:#64748b;">Seu ministério <strong>${result.group.name}</strong> foi criado com sucesso. Agora escolha um plano para começar a usar a plataforma.</p>
-                <div style="text-align:center;margin:24px 0;">
-                  <a href="${appUrl}/planos" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Escolher plano</a>
-                </div>
-                <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">Líder Web · by multitrackgospel.com</p>
-              </div>
-            </div>`,
-          fromEmail,
-          fromName: "Líder Web",
-        }).catch(err => console.warn("[signup] email boas-vindas falhou:", err));
+        // Usa o template editável do banco se disponível
+        try {
+          const { welcomeGroupEmail } = await import("@/lib/email-templates");
+          const savedTmpl = await (prisma as any).emailTemplate.findUnique({ where: { type: "welcome_group" } }).catch(() => null);
+          const vars = { nome: result.user.name ?? "Líder", ministerio: result.group.name, app_url: appUrl };
+          const applyVars = (text: string) => Object.entries(vars).reduce((t, [k, v]) => t.replace(new RegExp(`\{\{${k}\}\}`, "gi"), v), text);
+
+          const subject = savedTmpl ? applyVars(savedTmpl.subject) : `🎉 Bem-vindo ao Líder Web, ${result.user.name}!`;
+          const html = savedTmpl
+            ? applyVars(savedTmpl.htmlBody)
+            : welcomeGroupEmail({ adminName: vars.nome, groupName: vars.ministerio, appUrl }).html;
+
+          await sendSmtpMail({ to: result.user.email, subject, html, fromEmail, fromName: "Líder Web" });
+        } catch (err) {
+          console.warn("[signup] email boas-vindas falhou:", err);
+        }
+
+        // Registrar no AutoEmailLog para não reenviar via n8n
+        (prisma as any).autoEmailLog.create({
+          data: { type: "welcome_group", targetId: result.group.id },
+        }).catch(() => {});
       }
     } catch (emailErr) {
       console.warn("[signup] erro ao enviar emails:", emailErr);
