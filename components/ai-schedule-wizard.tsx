@@ -382,7 +382,11 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : (data.members ?? data.users ?? []);
-        setMembers(list.map((m: any) => ({ id: m.id, name: m.name })));
+        setMembers(list.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          functions: (m.memberFunctions ?? []).map((mf: any) => mf?.roleFunction?.name?.toLowerCase() ?? ""),
+        })));
       })
       .catch(() => {});
   }, [isOpen, fetchTemplates]);
