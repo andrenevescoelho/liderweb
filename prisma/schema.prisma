@@ -1551,6 +1551,21 @@ model ScheduleSong {
 
 
 
+
+// ─── Verificação de E-mail no Cadastro ───────────────────────────────────────
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   // 6 dígitos
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+}
+
 // ─── Templates de E-mail Editáveis ───────────────────────────────────────────
 
 model EmailTemplate {
