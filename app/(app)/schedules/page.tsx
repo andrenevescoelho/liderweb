@@ -556,7 +556,31 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
               {roles.map((role, idx) => (
                 <div key={role.role ?? idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
                   <span className="w-32 text-sm font-medium text-gray-700 dark:text-gray-300">{role.role ?? ""}</span>
-                  <Select value={role.memberId ?? ""} onChange={(e) => updateRole(idx, e.target.value)} options={[{ value: "", label: "Não atribuído" }, ...members.filter((m) => m?.profile?.active).map((m) => ({ value: m.id ?? "", label: m.name ?? "" }))]} className="flex-1" />
+                  <Select
+                    value={role.memberId ?? ""}
+                    onChange={(e) => updateRole(idx, e.target.value)}
+                    options={[
+                      { value: "", label: "Não atribuído" },
+                      ...members
+                        .filter((m) => {
+                          if (!m?.profile?.active) return false;
+                          // Mostrar membros que têm a função correspondente cadastrada
+                          // Se nenhum membro tem essa função, mostra todos como fallback
+                          const roleName = role.role?.toLowerCase() ?? "";
+                          const hasFunction = members.some((mb) =>
+                            mb?.memberFunctions?.some((mf: any) =>
+                              mf?.roleFunction?.name?.toLowerCase() === roleName
+                            )
+                          );
+                          if (!hasFunction) return true; // fallback: todos
+                          return m?.memberFunctions?.some((mf: any) =>
+                            mf?.roleFunction?.name?.toLowerCase() === roleName
+                          );
+                        })
+                        .map((m) => ({ value: m.id ?? "", label: m.name ?? "" })),
+                    ]}
+                    className="flex-1"
+                  />
                   <button type="button" onClick={() => removeRole(idx)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-800"><X className="w-4 h-4" /></button>
                 </div>
               ))}
