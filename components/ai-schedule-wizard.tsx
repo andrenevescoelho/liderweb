@@ -53,6 +53,7 @@ interface ScheduleTemplate {
 interface Member {
   id: string;
   name: string;
+  functions?: string[]; // nomes das funções cadastradas
 }
 
 // Data com ministro atribuído
@@ -810,7 +811,14 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
                           <select value={r.memberId ?? ""} onChange={(e) => { const m = members.find((x) => x.id === e.target.value); updateDraftRole(si, ri, e.target.value, m?.name ?? ""); }}
                             className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
                             <option value="">— Não atribuído —</option>
-                            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            {(() => {
+                              const roleName = r.role?.toLowerCase() ?? "";
+                              const hasMatch = members.some((m) => m.functions?.includes(roleName));
+                              const filtered = hasMatch
+                                ? members.filter((m) => m.functions?.includes(roleName))
+                                : members;
+                              return filtered.map((m) => <option key={m.id} value={m.id}>{m.name}</option>);
+                            })()}
                           </select>
                         </div>
                       ))}
