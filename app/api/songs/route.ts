@@ -51,6 +51,28 @@ export async function GET(req: NextRequest) {
 
       where.groupId = user.role === "SUPERADMIN" ? { not: null } : { not: user.groupId };
 
+      // Excluir músicas que o grupo já tem no repertório (por título + artista)
+      if (user.groupId && user.role !== "SUPERADMIN") {
+        const groupSongs = await prisma.song.findMany({
+          where: { groupId: user.groupId },
+          select: { title: true, artist: true },
+        });
+
+        if (groupSongs.length > 0) {
+          // Criar filtro NOT para cada combinação título+artista
+          const notConditions = groupSongs.map((s) => ({
+            AND: [
+              { title: { equals: s.title, mode: "insensitive" as const } },
+              s.artist
+                ? { artist: { equals: s.artist, mode: "insensitive" as const } }
+                : { artist: null },
+            ],
+          }));
+
+          where.NOT = notConditions;
+        }
+      }
+
       if (search) {
         where.OR = [
           { title: { contains: search, mode: "insensitive" } },
