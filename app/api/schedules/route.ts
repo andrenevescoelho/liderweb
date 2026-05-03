@@ -18,12 +18,9 @@ import { AuditEntityType } from "@prisma/client";
  * Se time não vier, usa 12:00 como fallback (compatibilidade com dados antigos).
  */
 function buildScheduleDate(date: string, time?: string | null): Date {
-  const [year, month, day] = date.split("-").map(Number);
-  if (time && /^\d{2}:\d{2}$/.test(time)) {
-    const [hours, minutes] = time.split(":").map(Number);
-    return new Date(year, month - 1, day, hours, minutes, 0);
-  }
-  return new Date(year, month - 1, day, 12, 0, 0);
+  // Salvar como UTC puro — exibição usa getUTC* para evitar conversão de timezone
+  const timeStr = (time && /^\d{2}:\d{2}$/.test(time)) ? time : "12:00";
+  return new Date(`${date}T${timeStr}:00Z`);
 }
 
 export async function GET(req: NextRequest) {

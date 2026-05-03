@@ -25,7 +25,7 @@ const MEMBER_ROLE_HINTS: Record<string, string[]> = {
 
 function formatTime(dateStr: string): string {
   const d = new Date(dateStr);
-  const h = d.getHours(), m = d.getMinutes();
+  const h = d.getUTCHours(), m = d.getUTCMinutes();
   if (h === 12 && m === 0) return "";
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
@@ -418,8 +418,8 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
   useEffect(() => {
     if (schedule) {
       const d = schedule?.date ? new Date(schedule.date) : null;
-      setDate(d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "");
-      const h = d?.getHours() ?? 12, m = d?.getMinutes() ?? 0;
+      setDate(d ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}` : "");
+      const h = d?.getUTCHours() ?? 12, m = d?.getUTCMinutes() ?? 0;
       setTime((h === 12 && m === 0) ? "" : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
       setName(schedule?.name ?? "");
       setSetlistItems(schedule?.setlist?.items?.map?.((i: any) => ({ songId: i?.songId, songTitle: i?.song?.title, selectedKey: i?.selectedKey ?? i?.song?.originalKey ?? "C" })) ?? []);

@@ -83,6 +83,7 @@ export async function PUT(
     }
 
     const { date, time, name, roles, setlistItems } = body ?? {};
+    console.log("[schedules PUT] date:", date, "time:", time);
 
     await prisma.scheduleRole.deleteMany({ where: { scheduleId: params?.id } });
 
