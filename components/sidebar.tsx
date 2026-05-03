@@ -9,7 +9,7 @@ import {
   CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
   GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy, Headphones,
-  Bell, Activity, Mail} from "lucide-react";
+  Bell, Activity, Mail, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { LanguageSelector } from "@/components/language-selector";
@@ -123,6 +123,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: t("nav.musicalAnalytics"), href: "/dashboard/analytics-musicais", icon: <BarChart2 className="h-[18px] w-[18px]" />, roles: ["ADMIN", "SUPERADMIN", "MEMBER", "LEADER"], permissions: ["report.group.access"] },
         { label: t("nav.myPlan"), href: "/meu-plano", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["ADMIN"], permissions: ["subscription.manage"] },
         { label: t("nav.multitracksAdmin"), href: "/multitracks-admin", icon: <Disc3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Analytics Multitracks", href: "/multitrack-analytics", icon: <TrendingUp className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.splitAdmin"), href: "/split-admin", icon: <Scissors className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.customMixAdmin"), href: "/custom-mix-admin", icon: <Sliders className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.padsAdmin"), href: "/pads-admin", icon: <Grid3x3 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
