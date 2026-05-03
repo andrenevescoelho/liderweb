@@ -53,7 +53,11 @@ export async function GET(req: NextRequest) {
     let rentals: { albumId: string; expiresAt: Date; status: string }[] = [];
     if (user.groupId) {
       rentals = await prisma.multitracksRental.findMany({
-        where: { groupId: user.groupId, status: "ACTIVE" },
+        where: {
+          groupId: user.groupId,
+          status: "ACTIVE",
+          expiresAt: { gt: new Date() }, // só aluguéis não expirados
+        },
         select: { albumId: true, expiresAt: true, status: true },
       });
     }
