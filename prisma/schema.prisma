@@ -246,6 +246,12 @@ model Group {
   scheduleTemplates            ScheduleTemplate[]
   orders                       Order[]
   scheduleApprovalDeadlineDays Int?  // dias antes do culto para auto-publicar (default: 1)
+  ownerDocument                String?   @unique // CPF ou CNPJ sem máscara
+  ownerPhone                   String?
+  ownerCity                    String?
+  ownerState                   String?
+  denomination                 String?
+  termsAcceptedAt              DateTime?
 }
 
 model SubscriptionPlan {

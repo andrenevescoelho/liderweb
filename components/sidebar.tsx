@@ -132,6 +132,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: t("nav.groups"), href: "/admin?tab=groups", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.members"), href: "/admin?tab=users", icon: <Users className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.subscriptions"), href: "/admin?tab=subscriptions", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Ministérios", href: "/admin?tab=ministerios", icon: <Building2 className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.coupons"), href: "/cupons", icon: <TicketPercent className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.billingPlans"), href: "/billing-admin", icon: <CreditCard className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: t("nav.attendance"), href: "/support-admin", icon: <Headphones className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"], badge: badges.tickets > 0 ? String(badges.tickets) : undefined },
