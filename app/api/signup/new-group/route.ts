@@ -7,6 +7,7 @@ import { sendSmtpMail } from "@/lib/smtp";
 import { isEmailEnabled } from "@/lib/email-config";
 import { logUserAction, AUDIT_ACTIONS } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
+import { validateDocument, onlyDigits } from "@/lib/document-validation";
 
 // Domínios descartáveis/teste bloqueados
 const BLOCKED_DOMAINS = [
@@ -41,12 +42,34 @@ function isValidEmail(email: string): boolean {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { groupName, keyword, userName, userEmail, userPassword, planId } = body;
+    const { groupName, keyword, userName, userEmail, userPassword, planId, ownerDocument, ownerPhone, ownerCity, ownerState, denomination } = body;
 
     // Validar campos obrigatórios
-    if (!groupName || !keyword || !userName || !userEmail || !userPassword) {
+    if (!groupName || !keyword || !userName || !userEmail || !userPassword || !ownerDocument || !ownerPhone) {
       return NextResponse.json(
         { error: "Todos os campos são obrigatórios" },
+        { status: 400 }
+      );
+    }
+
+    // Validar CPF ou CNPJ
+    const rawDocument = onlyDigits(ownerDocument);
+    const docValidation = validateDocument(rawDocument);
+    if (!docValidation.valid) {
+      return NextResponse.json(
+        { error: `${docValidation.type === "CNPJ" ? "CNPJ" : docValidation.type === "CPF" ? "CPF" : "CPF/CNPJ"} inválido. Verifique os dígitos e tente novamente.` },
+        { status: 400 }
+      );
+    }
+
+    // Verificar duplicata de CPF/CNPJ
+    const existingDocument = await (prisma.group as any).findFirst({
+      where: { ownerDocument: rawDocument },
+      select: { id: true },
+    });
+    if (existingDocument) {
+      return NextResponse.json(
+        { error: `Já existe um ministério cadastrado com este ${docValidation.type}. Se você já possui uma conta, acesse o login.` },
         { status: 400 }
       );
     }
@@ -119,8 +142,14 @@ export async function POST(req: NextRequest) {
       const group = await tx.group.create({
         data: {
           name: groupName,
-          description: keyword, // Usar keyword como descrição
+          description: keyword,
           active: true,
+          ownerDocument: rawDocument,
+          ownerPhone: ownerPhone?.trim() ?? null,
+          ownerCity: ownerCity?.trim() ?? null,
+          ownerState: ownerState?.trim() ?? null,
+          denomination: denomination?.trim() ?? null,
+          termsAcceptedAt: new Date(),
         },
       });
 
@@ -175,9 +204,13 @@ export async function POST(req: NextRequest) {
               <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
                 <p style="margin:0 0 16px;color:#1e293b;">Um novo ministério se cadastrou na plataforma:</p>
                 <table cellpadding="0" cellspacing="0">
-                  <tr><td style="padding:4px 0;color:#64748b;width:120px;">Ministério</td><td style="padding:4px 0;font-weight:600;color:#1e293b;">${result.group.name}</td></tr>
-                  <tr><td style="padding:4px 0;color:#64748b;">Admin</td><td style="padding:4px 0;color:#1e293b;">${result.user.name}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b;width:140px;">Ministério</td><td style="padding:4px 0;font-weight:600;color:#1e293b;">${result.group.name}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b;">Responsável</td><td style="padding:4px 0;color:#1e293b;">${result.user.name}</td></tr>
                   <tr><td style="padding:4px 0;color:#64748b;">Email</td><td style="padding:4px 0;color:#1e293b;">${result.user.email}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b;">Telefone</td><td style="padding:4px 0;color:#1e293b;">${ownerPhone ?? "—"}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b;">CPF/CNPJ</td><td style="padding:4px 0;color:#1e293b;font-family:monospace;">${rawDocument}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b;">Localização</td><td style="padding:4px 0;color:#1e293b;">${[ownerCity, ownerState].filter(Boolean).join(", ") || "—"}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b;">Denominação</td><td style="padding:4px 0;color:#1e293b;">${denomination ?? "—"}</td></tr>
                   <tr><td style="padding:4px 0;color:#64748b;">Data</td><td style="padding:4px 0;color:#1e293b;">${new Date().toLocaleString("pt-BR")}</td></tr>
                 </table>
                 <div style="margin-top:20px;text-align:center;">

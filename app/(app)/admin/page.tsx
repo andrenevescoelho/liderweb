@@ -96,7 +96,7 @@ function formatLastLogin(date: string | null): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-type TabType = "groups" | "users" | "subscriptions" | "songs";
+type TabType = "groups" | "users" | "subscriptions" | "songs" | "ministerios";
 
 interface SongAdmin {
   id: string;
@@ -148,6 +148,23 @@ interface SubscriptionsResponse {
   };
 }
 
+
+interface MinisterioAdmin {
+  id: string;
+  name: string;
+  ownerDocument: string | null;
+  ownerPhone: string | null;
+  ownerCity: string | null;
+  ownerState: string | null;
+  denomination: string | null;
+  termsAcceptedAt: string | null;
+  createdAt: string;
+  active: boolean;
+  subscription: { status: string; plan: { name: string; price: number } | null } | null;
+  _count: { users: number };
+  users: { name: string | null; email: string | null; role: string }[];
+}
+
 const ROLES = [
   { value: "SUPERADMIN", label: "SuperAdmin" },
   { value: "ADMIN", label: "Admin" },
@@ -177,19 +194,22 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const tab = searchParams?.get("tab");
-    if (tab === "users" || tab === "subscriptions" || tab === "groups" || tab === "songs") return tab;
+    if (tab === "users" || tab === "subscriptions" || tab === "groups" || tab === "songs" || tab === "ministerios") return tab;
     return "groups";
   });
 
   // Sincronizar com mudanças na URL
   useEffect(() => {
     const tab = searchParams?.get("tab");
-    if (tab === "users" || tab === "subscriptions" || tab === "groups" || tab === "songs") setActiveTab(tab);
+    if (tab === "users" || tab === "subscriptions" || tab === "groups" || tab === "songs" || tab === "ministerios") setActiveTab(tab);
   }, [searchParams]);
 
   // Groups state
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
+  const [ministerios, setMisterios] = useState<MinisterioAdmin[]>([]);
+  const [loadingMisterios, setLoadingMisterios] = useState(false);
+  const [ministerioSearch, setMisterioSearch] = useState("");
   const [songs, setSongs] = useState<SongAdmin[]>([]);
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [songSearch, setSongSearch] = useState("");
@@ -270,6 +290,23 @@ export default function AdminPage() {
       console.error("Erro ao buscar grupos:", error);
     } finally {
       setLoadingGroups(false);
+    }
+  };
+
+  const fetchMisterios = async (search?: string) => {
+    try {
+      setLoadingMisterios(true);
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      const res = await fetch(`/api/admin/ministerios?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMisterios(data);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar ministérios:", error);
+    } finally {
+      setLoadingMisterios(false);
     }
   };
 
@@ -594,6 +631,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (activeTab === "songs") fetchSongs(songSearch);
+    if (activeTab === "ministerios") fetchMisterios(ministerioSearch);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -1258,6 +1296,114 @@ export default function AdminPage() {
                 </Card>
               )}
             </>
+          )}
+        </div>
+      )}
+
+
+      {/* Ministérios Tab */}
+      {activeTab === "ministerios" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-muted-foreground">
+              {ministerios.length} ministério{ministerios.length !== 1 ? "s" : ""} cadastrado{ministerios.length !== 1 ? "s" : ""}
+            </p>
+            <Input
+              placeholder="Buscar por nome, responsável ou CPF/CNPJ..."
+              value={ministerioSearch}
+              onChange={(e) => {
+                setMisterioSearch(e.target.value);
+                fetchMisterios(e.target.value);
+              }}
+              className="w-72"
+            />
+          </div>
+
+          {loadingMisterios ? (
+            <Card>
+              <CardContent className="py-10 text-center text-muted-foreground">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+              </CardContent>
+            </Card>
+          ) : ministerios.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                <Building2 className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>Nenhum ministério encontrado</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-xl border border-border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ministério</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Responsável</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden lg:table-cell">CPF / CNPJ</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Telefone</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden xl:table-cell">Localização</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Plano</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Cadastro</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {ministerios.map((m) => {
+                      const admin = m.users.find((u) => u.role === "ADMIN");
+                      const docRaw = m.ownerDocument ?? "";
+                      const docMasked = docRaw.length === 11
+                        ? `***.${docRaw.slice(3,6)}.${docRaw.slice(6,9)}-**`
+                        : docRaw.length === 14
+                        ? `**.${docRaw.slice(2,5)}.${docRaw.slice(5,8)}/****-**`
+                        : docRaw || "—";
+                      const statusColors: Record<string, string> = {
+                        ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+                        TRIALING: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                        PAST_DUE: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+                        CANCELED: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                      };
+                      const statusLabels: Record<string, string> = {
+                        ACTIVE: "Ativo", TRIALING: "Trial", PAST_DUE: "Pendente", CANCELED: "Cancelado",
+                      };
+                      const subStatus = m.subscription?.status ?? "SEM_PLANO";
+                      return (
+                        <tr key={m.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-medium">{m.name}</div>
+                            {m.denomination && <div className="text-xs text-muted-foreground">{m.denomination}</div>}
+                            <div className="text-xs text-muted-foreground">{m._count.users} membro{m._count.users !== 1 ? "s" : ""}</div>
+                          </td>
+                          <td className="py-3 px-4 hidden md:table-cell">
+                            <div>{admin?.name ?? "—"}</div>
+                            <div className="text-xs text-muted-foreground">{admin?.email ?? ""}</div>
+                          </td>
+                          <td className="py-3 px-4 hidden lg:table-cell font-mono text-xs">
+                            {docMasked}
+                          </td>
+                          <td className="py-3 px-4 hidden lg:table-cell text-xs">
+                            {m.ownerPhone ?? "—"}
+                          </td>
+                          <td className="py-3 px-4 hidden xl:table-cell text-xs">
+                            {[m.ownerCity, m.ownerState].filter(Boolean).join(", ") || "—"}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[subStatus] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
+                              {statusLabels[subStatus] ?? "Sem plano"}
+                            </span>
+                            {m.subscription?.plan && (
+                              <div className="text-xs text-muted-foreground mt-0.5">{m.subscription.plan.name}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 hidden md:table-cell text-xs text-muted-foreground">
+                            {new Date(m.createdAt).toLocaleDateString("pt-BR")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       )}
