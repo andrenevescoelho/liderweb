@@ -63,14 +63,22 @@ export default function SessionsAdminPage() {
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const LIMIT = 50;
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (p = 1, q = "") => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/sessions");
+      const params = new URLSearchParams({ page: String(p), limit: "50" });
+      if (q) params.set("search", q);
+      const res = await fetch(`/api/admin/sessions?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setUsers(data);
+        setUsers(data.users ?? data);
+        setTotal(data.total ?? data.length);
+        setPages(data.pages ?? 1);
       }
     } finally {
       setLoading(false);
@@ -87,7 +95,7 @@ export default function SessionsAdminPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchUsers(); fetchGlobalTimeout(); }, [fetchUsers, fetchGlobalTimeout]);
+  useEffect(() => { fetchUsers(page, search); fetchGlobalTimeout(); }, [fetchUsers, fetchGlobalTimeout]);
 
   async function revokeSession(sessionId: string, userName: string) {
     if (!confirm(`Revogar esta sessão de ${userName}?`)) return;
@@ -96,7 +104,7 @@ export default function SessionsAdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId }),
     });
-    if (res.ok) { toast.success("Sessão revogada"); fetchUsers(); }
+    if (res.ok) { toast.success("Sessão revogada"); fetchUsers(page, search); }
     else toast.error("Erro ao revogar sessão");
   }
 
@@ -107,7 +115,7 @@ export default function SessionsAdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, revokeAll: true }),
     });
-    if (res.ok) { const d = await res.json(); toast.success(d.message); fetchUsers(); }
+    if (res.ok) { const d = await res.json(); toast.success(d.message); fetchUsers(page, search); }
     else toast.error("Erro ao revogar sessões");
   }
 
@@ -120,7 +128,7 @@ export default function SessionsAdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: editingMax.userId, maxSessions: editingMax.value }),
       });
-      if (res.ok) { toast.success("Limite atualizado"); setEditingMax(null); fetchUsers(); }
+      if (res.ok) { toast.success("Limite atualizado"); setEditingMax(null); fetchUsers(page, search); }
       else toast.error("Erro ao atualizar");
     } finally { setSaving(false); }
   }
@@ -134,7 +142,7 @@ export default function SessionsAdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: editingTimeout.userId, sessionTimeoutHours: editingTimeout.value || null }),
       });
-      if (res.ok) { toast.success("Timeout atualizado"); setEditingTimeout(null); fetchUsers(); }
+      if (res.ok) { toast.success("Timeout atualizado"); setEditingTimeout(null); fetchUsers(page, search); }
       else toast.error("Erro ao atualizar");
     } finally { setSaving(false); }
   }
@@ -152,10 +160,7 @@ export default function SessionsAdminPage() {
     } finally { setSavingGlobal(false); }
   }
 
-  const filtered = users.filter(u =>
-    u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = users;
 
   const totalActive = users.reduce((acc, u) => acc + u.activeSessions.length, 0);
   const usersWithMultiple = users.filter(u => u.activeSessions.length > 1).length;
@@ -167,7 +172,7 @@ export default function SessionsAdminPage() {
           <h1 className="text-2xl font-bold">Controle de Sessões</h1>
           <p className="text-sm text-muted-foreground mt-1">Sessões ativas, limites e timeout por inatividade</p>
         </div>
-        <button onClick={fetchUsers} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={() => fetchUsers(page, search)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <RefreshCw className="h-4 w-4" />Atualizar
         </button>
       </div>
@@ -226,7 +231,11 @@ export default function SessionsAdminPage() {
         type="text"
         placeholder="Buscar por nome ou email..."
         value={search}
-        onChange={e => setSearch(e.target.value)}
+        onChange={e => {
+          setSearch(e.target.value);
+          setPage(1);
+          fetchUsers(1, e.target.value);
+        }}
         className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
       />
 
@@ -337,6 +346,30 @@ export default function SessionsAdminPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Paginação */}
+      {pages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-sm text-muted-foreground">{total} usuário{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { const p = Math.max(1, page - 1); setPage(p); fetchUsers(p, search); }}
+              disabled={page === 1}
+              className="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ← Anterior
+            </button>
+            <span className="text-sm text-muted-foreground">{page} / {pages}</span>
+            <button
+              onClick={() => { const p = Math.min(pages, page + 1); setPage(p); fetchUsers(p, search); }}
+              disabled={page === pages}
+              className="px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Próxima →
+            </button>
+          </div>
         </div>
       )}
     </div>

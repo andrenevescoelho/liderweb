@@ -46,24 +46,44 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ user, sessions });
   }
 
-  // Todos os usuários com contagem de sessões ativas
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      maxSessions: true,
-      sessionTimeoutHours: true,
-      activeSessions: {
-        select: { id: true, ip: true, userAgent: true, createdAt: true, lastSeenAt: true, sessionId: true },
-        orderBy: { lastSeenAt: "desc" },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
+  // Todos os usuários com contagem de sessões ativas — com paginação e busca
+  const page   = parseInt(req.nextUrl.searchParams.get("page")  ?? "1");
+  const limit  = parseInt(req.nextUrl.searchParams.get("limit") ?? "50");
+  const search = req.nextUrl.searchParams.get("search") ?? "";
+  const skip   = (page - 1) * limit;
 
-  return NextResponse.json(users);
+  const where = search
+    ? {
+        OR: [
+          { name:  { contains: search, mode: "insensitive" as const } },
+          { email: { contains: search, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        maxSessions: true,
+        sessionTimeoutHours: true,
+        activeSessions: {
+          select: { id: true, ip: true, userAgent: true, createdAt: true, lastSeenAt: true, sessionId: true },
+          orderBy: { lastSeenAt: "desc" },
+        },
+      },
+      orderBy: { name: "asc" },
+      skip,
+      take: limit,
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return NextResponse.json({ users, total, page, limit, pages: Math.ceil(total / limit) });
 }
 
 // PATCH /api/admin/sessions
