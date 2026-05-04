@@ -48,6 +48,7 @@ export default function SchedulesPage() {
   const [aiCreating, setAiCreating] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
+  const [respondingRoleId, setRespondingRoleId] = useState<string | null>(null);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
 
   const handleAcceptAiDraft = async (schedules: any[]) => {
@@ -113,13 +114,51 @@ export default function SchedulesPage() {
   };
 
   const handleRespond = async (scheduleId: string, roleId: string, status: string) => {
+    if (respondingRoleId) return; // evita cliques duplos
+    setRespondingRoleId(roleId);
+
+    // Atualização otimista: aplica o novo status localmente imediatamente
+    const previousSchedules = schedules;
+    const updateRoles = (list: any[]) =>
+      (list ?? []).map((r: any) => r.id === roleId ? { ...r, status } : r);
+
+    setSchedules((prev) =>
+      prev.map((s) =>
+        s.id !== scheduleId ? s : {
+          ...s,
+          roles: updateRoles(s.roles),
+          memberRoles: updateRoles(s.memberRoles),
+        }
+      )
+    );
+    setSelectedSchedule((prev: any) =>
+      prev?.id !== scheduleId ? prev : {
+        ...prev,
+        roles: updateRoles(prev.roles),
+        memberRoles: updateRoles(prev.memberRoles),
+      }
+    );
+
     try {
-      await fetch(`/api/schedules/${scheduleId}/respond`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await fetch(`/api/schedules/${scheduleId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roleId, status }),
       });
-      fetchSchedules();
-    } catch (e) { console.error(e); }
+      if (!res.ok) {
+        // Rollback em caso de erro do servidor
+        setSchedules(previousSchedules);
+        setSelectedSchedule(previousSchedules.find((s: any) => s.id === scheduleId) ?? null);
+        console.error("Erro ao responder escala:", await res.text());
+      }
+    } catch (e) {
+      // Rollback em caso de erro de rede
+      setSchedules(previousSchedules);
+      setSelectedSchedule(previousSchedules.find((s: any) => s.id === scheduleId) ?? null);
+      console.error(e);
+    } finally {
+      setRespondingRoleId(null);
+    }
   };
 
   const days = eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) });
@@ -349,8 +388,22 @@ export default function SchedulesPage() {
                           </Badge>
                           {isMe && role?.status === "PENDING" && (
                             <div className="flex gap-1">
-                              <button onClick={() => handleRespond(selectedSchedule?.id ?? "", role?.id ?? "", "ACCEPTED")} className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200"><Check className="w-4 h-4" /></button>
-                              <button onClick={() => handleRespond(selectedSchedule?.id ?? "", role?.id ?? "", "DECLINED")} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200"><X className="w-4 h-4" /></button>
+                              <button
+                                onClick={() => handleRespond(selectedSchedule?.id ?? "", role?.id ?? "", "ACCEPTED")}
+                                disabled={respondingRoleId === role?.id}
+                                className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Confirmar presença"
+                              >
+                                {respondingRoleId === role?.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => handleRespond(selectedSchedule?.id ?? "", role?.id ?? "", "DECLINED")}
+                                disabled={respondingRoleId === role?.id}
+                                className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Recusar presença"
+                              >
+                                {respondingRoleId === role?.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                              </button>
                             </div>
                           )}
                         </div>
