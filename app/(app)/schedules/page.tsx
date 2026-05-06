@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music, Send, Zap, RotateCcw, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,8 @@ export default function SchedulesPage() {
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
   const [respondingRoleId, setRespondingRoleId] = useState<string | null>(null);
+  const [publishingScheduleId, setPublishingScheduleId] = useState<string | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
 
   const handleAcceptAiDraft = async (schedules: any[]) => {
@@ -84,6 +86,13 @@ export default function SchedulesPage() {
     }
   };
 
+  const fetchMembers = async () => {
+    try {
+      const res = await fetch("/api/members");
+      if (res.ok) setMembers(await res.json());
+    } catch {}
+  };
+
   const fetchSchedules = async () => {
     try {
       const month = currentMonth.getMonth() + 1;
@@ -94,7 +103,7 @@ export default function SchedulesPage() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchSchedules(); }, [currentMonth]);
+  useEffect(() => { fetchSchedules(); fetchMembers(); }, [currentMonth]);
   useEffect(() => { setExpandedSongIdx(null); }, [selectedSchedule?.id]);
 
   useEffect(() => {
@@ -258,15 +267,90 @@ export default function SchedulesPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 flex-wrap">
                 <Clock className="w-5 h-5 text-purple-600" />
                 <span>
                   {selectedSchedule?.date ? format(new Date(selectedSchedule.date), "dd 'de' MMMM, yyyy", { locale: ptBR }) : ""}
                   {(() => { const t = formatTime(selectedSchedule.date); return t ? ` — ${t}` : ""; })()}
                   {selectedSchedule?.name && <span className="ml-2 text-base font-normal text-muted-foreground">{selectedSchedule.name}</span>}
                 </span>
+                {/* Badge de status */}
+                {(() => {
+                  const st = selectedSchedule?.status ?? "DRAFT";
+                  const badges: Record<string, { label: string; className: string }> = {
+                    DRAFT:            { label: "Rascunho",            className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
+                    PENDING_APPROVAL: { label: "Aguardando ministro", className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
+                    APPROVED:         { label: "Aprovada",            className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+                    REVIEW_TIMEOUT:   { label: "Prazo vencido",       className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+                    PUBLISHED:        { label: "Publicada",           className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+                  };
+                  const b = badges[st] ?? badges.DRAFT;
+                  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${b.className}`}>{b.label}</span>;
+                })()}
               </CardTitle>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Ações de publicação — só para quem pode editar */}
+                {canEdit && selectedSchedule?.status === "DRAFT" && (
+                  <Button size="sm" variant="secondary"
+                    onClick={() => { setEditSchedule(selectedSchedule); setModalOpen(true); }}
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1" />Publicar
+                  </Button>
+                )}
+                {canEdit && selectedSchedule?.status === "APPROVED" && (
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
+                    disabled={publishingScheduleId === selectedSchedule.id}
+                    onClick={async () => {
+                      if (!confirm("Publicar a escala agora e notificar toda a equipe?")) return;
+                      setPublishingScheduleId(selectedSchedule.id);
+                      try {
+                        const res = await fetch("/api/schedules/status", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ scheduleId: selectedSchedule.id, action: "publish" }),
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (res.ok) {
+                          setSelectedSchedule((prev: any) => prev ? { ...prev, status: "PUBLISHED" } : prev);
+                          fetchSchedules();
+                        } else {
+                          alert(data.error ?? "Erro ao publicar");
+                        }
+                      } finally { setPublishingScheduleId(null); }
+                    }}
+                  >
+                    {publishingScheduleId === selectedSchedule.id
+                      ? <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />Publicando...</>
+                      : <><Zap className="w-3.5 h-3.5 mr-1" />Publicar</>}
+                  </Button>
+                )}
+                {canEdit && selectedSchedule?.status === "REVIEW_TIMEOUT" && (
+                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white"
+                    disabled={publishingScheduleId === selectedSchedule.id}
+                    onClick={async () => {
+                      if (!confirm("Publicar mesmo sem aprovação do ministro?")) return;
+                      setPublishingScheduleId(selectedSchedule.id);
+                      try {
+                        const res = await fetch("/api/schedules/status", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ scheduleId: selectedSchedule.id, action: "publish" }),
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (res.ok) {
+                          setSelectedSchedule((prev: any) => prev ? { ...prev, status: "PUBLISHED" } : prev);
+                          fetchSchedules();
+                        } else {
+                          alert(data.error ?? "Erro ao publicar");
+                        }
+                      } finally { setPublishingScheduleId(null); }
+                    }}
+                  >
+                    {publishingScheduleId === selectedSchedule.id
+                      ? <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />Publicando...</>
+                      : <><AlertTriangle className="w-3.5 h-3.5 mr-1" />Publicar mesmo assim</>}
+                  </Button>
+                )}
                 {canEdit && (
                   <>
                     <Button size="sm" variant="ghost" onClick={() => { setEditSchedule(selectedSchedule); setModalOpen(true); }}><Edit className="w-4 h-4" /></Button>
@@ -428,14 +512,19 @@ export default function SchedulesPage() {
         onClose={() => { setModalOpen(false); setEditSchedule(null); }}
         schedule={editSchedule}
         schedules={schedules}
-        onSave={() => { setModalOpen(false); setEditSchedule(null); fetchSchedules(); }}
+        onSave={(id, name) => {
+          setModalOpen(false);
+          setEditSchedule(null);
+          fetchSchedules();
+        }}
       />
+
     </div>
   );
 }
 
 function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
-  isOpen: boolean; onClose: () => void; schedule: any; schedules: any[]; onSave: () => void;
+  isOpen: boolean; onClose: () => void; schedule: any; schedules: any[]; onSave: (id?: string, name?: string) => void;
 }) {
   const { data: session } = useSession() || {};
   const [date, setDate] = useState("");
@@ -446,10 +535,13 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState("");
   const [members, setMembers] = useState<any[]>([]);
+  const [groupRoleFunctions, setGroupRoleFunctions] = useState<{ id: string; name: string; memberCount: number }[]>([]);
   const [addRole, setAddRole] = useState("");
   const [customRole, setCustomRole] = useState("");
   const [showAddRoleForm, setShowAddRoleForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [publishAction, setPublishAction] = useState<"draft" | "publish_now" | "send_review">("draft");
+  const [reviewApprovalMode, setReviewApprovalMode] = useState<"AUTO_PUBLISH" | "RETURN_TO_LEADER">("AUTO_PUBLISH");
   const [showNewSongModal, setShowNewSongModal] = useState(false);
   const [newSongTitle, setNewSongTitle] = useState("");
   const [newSongArtist, setNewSongArtist] = useState("");
@@ -466,6 +558,10 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
     fetch("/api/members").then((r) => r.json())
       .then((m) => setMembers(Array.isArray(m) ? m : []))
       .catch(console.error);
+
+    fetch("/api/role-functions").then((r) => r.json())
+      .then((f) => setGroupRoleFunctions(Array.isArray(f) ? f : []))
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -479,7 +575,11 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
       setRoles(schedule?.roles?.map?.((r: any) => ({ role: r?.role ?? "", memberId: r?.memberId ?? "", status: r?.status ?? "PENDING" })) ?? []);
     } else {
       setDate(""); setTime(""); setName(""); setSetlistItems([]);
-      setRoles(SCHEDULE_ROLES?.map?.((r) => ({ role: r, memberId: "", status: "PENDING" })) ?? []);
+      // Usar funções do grupo se disponíveis, senão cair para SCHEDULE_ROLES como fallback
+      const roleSource = groupRoleFunctions.length > 0
+        ? groupRoleFunctions.map((f) => f.name)
+        : SCHEDULE_ROLES;
+      setRoles(roleSource.map((r) => ({ role: r, memberId: "", status: "PENDING" })));
     }
     setShowNewSongModal(false); setNewSongTitle(""); setNewSongArtist(""); setNewSongBpm("");
     setNewSongYoutubeUrl(""); setNewSongOriginalKey("C"); setShowAddRoleForm(false); setAddRole(""); setCustomRole("");
@@ -555,6 +655,7 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
           date, time: time || null, name: name.trim() || null,
           setlistItems: setlistItems.map((i) => ({ songId: i.songId, selectedKey: i.selectedKey })),
           roles: roles.filter((r) => r.memberId).map((r) => ({ role: r.role, memberId: r.memberId, status: r.status })),
+          publishAction: schedule ? undefined : publishAction, // só envia na criação
         }),
       });
       if (!res.ok) {
@@ -563,7 +664,43 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
         if (conflicts.length) { alert(`Não foi possível salvar a escala.\n${conflicts.map((c: any) => `• ${c.memberName} (${c.role}) não tem disponibilidade na ${c.weekday}.`).join("\n")}`); return; }
         alert(err?.error ?? "Não foi possível salvar a escala."); return;
       }
-      onSave();
+      const saved = await res.json();
+      const savedId = saved?.id;
+
+      // Executar ação de publicação imediatamente após salvar (só para novas escalas)
+      if (savedId && !schedule) {
+        if (publishAction === "publish_now") {
+          const pubRes = await fetch("/api/schedules/status", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scheduleId: savedId, action: "publish_now" }),
+          });
+          const pubData = await pubRes.json();
+          if (!pubRes.ok) alert(pubData.error ?? "Escala salva, mas erro ao publicar.");
+
+        } else if (publishAction === "send_review") {
+          // Detectar ministro pelos roles
+          const ministerRole = roles.find((r) => r.role?.toLowerCase().includes("ministro") && r.memberId);
+          if (!ministerRole?.memberId) {
+            alert("Escala salva! Mas não foi possível enviar para revisão: nenhum membro com papel 'Ministro' encontrado.");
+          } else {
+            const revRes = await fetch("/api/schedules/status", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                scheduleId: savedId,
+                action: "submit_for_review",
+                reviewMinisterId: ministerRole.memberId,
+                reviewApprovalMode,
+              }),
+            });
+            const revData = await revRes.json();
+            if (!revRes.ok) alert(revData.error ?? "Escala salva, mas erro ao enviar para revisão.");
+          }
+        }
+      }
+
+      onSave(savedId, saved?.name ?? saved?.date ?? "");
     } catch (e) { console.error(e); }
     finally { setSaving(false); }
   };
@@ -644,7 +781,13 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
               </Button>
               {showAddRoleForm && (
                 <div className="mt-2 rounded-lg border p-3 bg-white dark:bg-gray-950 space-y-2">
-                  <Select value={addRole} onChange={(e) => setAddRole(e.target.value)} options={[{ value: "", label: "Selecione um papel" }, ...SCHEDULE_ROLES.filter((r) => !roles.some((x) => (x.role ?? "").toLowerCase() === String(r).toLowerCase())).map((r) => ({ value: r, label: r })), { value: "__custom__", label: "Informar nome do papel" }]} />
+                  <Select value={addRole} onChange={(e) => setAddRole(e.target.value)} options={[
+                    { value: "", label: "Selecione um papel" },
+                    ...(groupRoleFunctions.length > 0 ? groupRoleFunctions : SCHEDULE_ROLES.map((r) => ({ name: r })))
+                      .filter((f) => !roles.some((x) => (x.role ?? "").toLowerCase() === f.name.toLowerCase()))
+                      .map((f) => ({ value: f.name, label: f.name })),
+                    { value: "__custom__", label: "Informar nome do papel" },
+                  ]} />
                   {addRole === "__custom__" && <Input placeholder="Digite o nome do novo papel..." value={customRole} onChange={(e) => setCustomRole(e.target.value)} />}
                   <div className="flex justify-end gap-2">
                     <Button type="button" size="sm" variant="ghost" onClick={() => { setShowAddRoleForm(false); setAddRole(""); setCustomRole(""); }}>Cancelar</Button>
@@ -655,9 +798,108 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
             </div>
           </div>
 
-          <div className="flex gap-2 pt-4">
+          {/* Seção de publicação — só para novas escalas, não edição */}
+          {!schedule && (() => {
+            // Detectar ministro automaticamente pelos roles
+            const ministerRole = roles.find((r) =>
+              r.role?.toLowerCase().includes("ministro") && r.memberId
+            );
+            const ministerMember = ministerRole
+              ? members.find((m) => m.id === ministerRole.memberId)
+              : null;
+
+            return (
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">O que fazer após salvar?</p>
+
+                {/* Opção selecionada */}
+                <div className="space-y-2">
+                  <label className="flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all"
+                    style={{ borderColor: publishAction === "publish_now" ? "#22c55e" : "#e5e7eb" }}
+                  >
+                    <input type="radio" name="publishAction" value="publish_now"
+                      checked={publishAction === "publish_now"}
+                      onChange={() => setPublishAction("publish_now")}
+                      className="mt-0.5" />
+                    <span>
+                      <span className="font-medium text-sm text-green-700 dark:text-green-400">⚡ Publicar agora</span>
+                      <span className="text-xs text-muted-foreground block mt-0.5">Notifica toda a equipe imediatamente.</span>
+                    </span>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all"
+                    style={{ borderColor: publishAction === "send_review" ? "#7c3aed" : "#e5e7eb" }}
+                  >
+                    <input type="radio" name="publishAction" value="send_review"
+                      checked={publishAction === "send_review"}
+                      onChange={() => setPublishAction("send_review")}
+                      className="mt-0.5" />
+                    <span className="flex-1">
+                      <span className="font-medium text-sm text-purple-700 dark:text-purple-400">📩 Enviar para revisão do ministro</span>
+                      {ministerMember ? (
+                        <span className="text-xs text-muted-foreground block mt-0.5">
+                          Ministro detectado: <strong>{ministerMember.name}</strong>. Só ele será notificado agora.
+                        </span>
+                      ) : (
+                        <span className="text-xs text-orange-500 block mt-0.5">
+                          ⚠️ Nenhum membro com papel "Ministro" encontrado na escala.
+                        </span>
+                      )}
+                    </span>
+                  </label>
+
+                  {/* Sub-opção: modo após aprovação */}
+                  {publishAction === "send_review" && ministerMember && (
+                    <div className="ml-6 space-y-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                      <p className="text-xs font-medium text-purple-700 dark:text-purple-300">Após aprovação do ministro:</p>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input type="radio" name="approvalMode" value="AUTO_PUBLISH"
+                          checked={reviewApprovalMode === "AUTO_PUBLISH"}
+                          onChange={() => setReviewApprovalMode("AUTO_PUBLISH")}
+                          className="mt-0.5" />
+                        <span className="text-sm">
+                          <span className="font-medium">Publicar automaticamente</span>
+                          <span className="text-xs text-muted-foreground block">A equipe é notificada assim que ele aprovar.</span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input type="radio" name="approvalMode" value="RETURN_TO_LEADER"
+                          checked={reviewApprovalMode === "RETURN_TO_LEADER"}
+                          onChange={() => setReviewApprovalMode("RETURN_TO_LEADER")}
+                          className="mt-0.5" />
+                        <span className="text-sm">
+                          <span className="font-medium">Devolver para mim antes de publicar</span>
+                          <span className="text-xs text-muted-foreground block">Você revisa e publica após a aprovação.</span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
+                  <label className="flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all"
+                    style={{ borderColor: publishAction === "draft" ? "#94a3b8" : "#e5e7eb" }}
+                  >
+                    <input type="radio" name="publishAction" value="draft"
+                      checked={publishAction === "draft"}
+                      onChange={() => setPublishAction("draft")}
+                      className="mt-0.5" />
+                    <span>
+                      <span className="font-medium text-sm">💾 Salvar como rascunho</span>
+                      <span className="text-xs text-muted-foreground block mt-0.5">Ninguém é notificado. Você decide depois.</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="flex gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
-            <Button type="submit" disabled={saving} className="flex-1">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}</Button>
+            <Button type="submit" disabled={saving} className="flex-1">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                !schedule && publishAction === "publish_now" ? "Salvar e publicar" :
+                !schedule && publishAction === "send_review" ? "Salvar e enviar para revisão" :
+                "Salvar"}
+            </Button>
           </div>
         </form>
       </Modal>

@@ -55,8 +55,18 @@ export async function GET(req: NextRequest) {
       where.groupId = user.groupId;
 
       if (!canViewAllSchedules && user.id) {
+        // Membros comuns só veem escalas PUBLISHED
+        // exceto se forem o ministro designado para revisão (PENDING_APPROVAL)
+        where.OR = [
+          { status: "PUBLISHED" },
+          {
+            status: "PENDING_APPROVAL",
+            reviewMinisterId: user.id,
+          },
+        ];
         where.roles = { some: { memberId: user.id } };
       }
+      // ADMIN/LEADER veem todas independente do status
     }
 
     if (month && year) {
@@ -124,7 +134,7 @@ export async function POST(req: NextRequest) {
 
     // name: nome do culto ex: "Culto da Manhã", "Escola Dominical"
     // time: horário "HH:MM" ex: "09:00", "17:00", "19:00"
-    const { date, time, name, roles, setlistItems } = body ?? {};
+    const { date, time, name, roles, setlistItems, publishAction } = body ?? {};
 
     if (!date) {
       return NextResponse.json({ error: "Data é obrigatória" }, { status: 400 });
@@ -300,7 +310,21 @@ export async function POST(req: NextRequest) {
     });
 
     // ── Enviar email para cada membro escalado ──────────────────────────
+    // Só notifica a equipe se publicar direto.
+    // Se for para revisão do ministro, a equipe só é notificada após publicação.
     try {
+      if (publishAction === "send_review" || publishAction === "draft") {
+        // Não notificar equipe agora — o ministro será notificado pela rota /api/schedules/status
+        // Se send_review: marcar o ministro como ACCEPTED já que ele irá revisar (confirma presença implicitamente)
+        if (publishAction === "send_review" && ministerId) {
+          await prisma.scheduleRole.updateMany({
+            where: { scheduleId: schedule.id, memberId: ministerId, status: "PENDING" },
+            data: { status: "ACCEPTED" },
+          }).catch(() => {});
+        }
+        return NextResponse.json(schedule);
+      }
+
       const emailEnabled = await isEmailEnabled("schedule_created").catch(() => true);
       if (!emailEnabled) {
         return NextResponse.json(schedule);
@@ -321,6 +345,13 @@ export async function POST(req: NextRequest) {
 
       for (const roleEntry of schedule.roles) {
         if (!roleEntry.member?.email) continue;
+
+        // Se o membro é o ministro designado para revisão, não enviar email de confirmação
+        // pois ele recebe o email de revisão separadamente via /api/schedules/status
+        // (só se aplica quando publishAction === "send_review", mas por segurança verificamos pelo role)
+        const isMinisterRole = /ministro/i.test(roleEntry.role ?? "");
+        if (publishAction === "send_review" && isMinisterRole && roleEntry.memberId === ministerId) continue;
+
         const { subject, html } = scheduleCreatedEmail({
           memberName: roleEntry.member.name ?? "Membro",
           groupName,

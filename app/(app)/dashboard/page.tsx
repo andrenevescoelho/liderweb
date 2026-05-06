@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const { data: session } = useSession() || {};
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [responding, setResponding] = useState<string | null>(null);
   const [confirmingNextCommitment, setConfirmingNextCommitment] = useState(false);
   const [nextRehearsal, setNextRehearsal] = useState<any>(null);
@@ -321,6 +322,8 @@ export default function DashboardPage() {
   const songsToRehearse = data?.songsToRehearse ?? [];
   const birthdaysToday = data?.birthdaysToday ?? [];
   const birthdaysMonth = data?.birthdaysMonth ?? [];
+  const schedulesAwaitingMyReview = data?.schedulesAwaitingMyReview ?? [];
+  const schedulesAwaitingPublish  = data?.schedulesAwaitingPublish  ?? [];
   const nextCommitment = myUpcomingSchedules?.[0] ?? null;
   const canManageSchedules = canAny(sessionUser, ["schedule.create", "schedule.edit"]);
   const canSendReminder = canAny(sessionUser, ["communication.schedule.announce", "schedule.edit", "report.group.access"]);
@@ -446,6 +449,175 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Card de revisão de músicas — aparece para o ministro quando há escalas aguardando */}
+
+      {/* Card de escalas aprovadas aguardando publicação — só para ADMIN/LEADER */}
+      {schedulesAwaitingPublish.length > 0 && (
+        <Card className="border-blue-300 bg-blue-50/80 dark:bg-blue-900/20 dark:border-blue-700">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+              </span>
+              {schedulesAwaitingPublish.length === 1
+                ? "Uma escala foi aprovada pelo ministro — aguardando sua publicação"
+                : `${schedulesAwaitingPublish.length} escalas foram aprovadas pelo ministro — aguardando publicação`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {schedulesAwaitingPublish.map((s: any) => {
+              const schedDate = new Date(s.date);
+              const approvedAt = s.ministerApprovedAt ? new Date(s.ministerApprovedAt) : null;
+              const songs = s.setlist?.items ?? [];
+              const isPublishing = publishingId === s.id;
+
+              return (
+                <div key={s.id} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-900/30 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {format(schedDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                      </p>
+                      {s.name && <p className="text-sm text-muted-foreground">{s.name}</p>}
+                      {s.group?.name && <p className="text-xs text-muted-foreground">{s.group.name}</p>}
+                    </div>
+                    {approvedAt && (
+                      <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 px-2 py-1 rounded-full font-medium">
+                        ✅ Aprovada {format(approvedAt, "dd/MM 'às' HH:mm", { locale: ptBR })}
+                      </span>
+                    )}
+                  </div>
+
+                  {songs.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1.5">🎵 Repertório aprovado:</p>
+                      <ul className="space-y-1">
+                        {songs.slice(0, 4).map((item: any, i: number) => (
+                          <li key={i} className="text-sm flex items-center gap-2">
+                            <span className="w-5 h-5 rounded bg-blue-100 dark:bg-blue-800 flex items-center justify-center text-xs font-semibold text-blue-700 dark:text-blue-200 flex-shrink-0">{i + 1}</span>
+                            <span className="truncate">{item.song?.title ?? "—"}</span>
+                            {item.song?.artist && <span className="text-xs text-muted-foreground truncate">— {item.song.artist}</span>}
+                          </li>
+                        ))}
+                        {songs.length > 4 && (
+                          <li className="text-xs text-muted-foreground pl-7">+{songs.length - 4} música{songs.length - 4 !== 1 ? "s" : ""}</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  <button
+                    disabled={isPublishing}
+                    onClick={async () => {
+                      setPublishingId(s.id);
+                      try {
+                        const res = await fetch("/api/schedules/status", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ scheduleId: s.id, action: "publish" }),
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (res.ok) {
+                          fetchData();
+                        } else {
+                          alert(data.error ?? "Erro ao publicar");
+                          setPublishingId(null);
+                        }
+                      } catch {
+                        alert("Erro ao publicar. Tente novamente.");
+                        setPublishingId(null);
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors"
+                  >
+                    {isPublishing
+                      ? <><span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Publicando...</>
+                      : "📢 Publicar escala agora"}
+                  </button>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {schedulesAwaitingMyReview.length > 0 && (
+        <Card className="border-yellow-300 bg-yellow-50/80 dark:bg-yellow-900/20 dark:border-yellow-700">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
+              </span>
+              {schedulesAwaitingMyReview.length === 1
+                ? "Você precisa revisar as músicas de uma escala"
+                : `Você precisa revisar as músicas de ${schedulesAwaitingMyReview.length} escalas`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {schedulesAwaitingMyReview.map((s: any) => {
+              const schedDate = new Date(s.date);
+              const deadlineDate = s.reviewTimeoutAt ? new Date(s.reviewTimeoutAt) : null;
+              const daysLeft = deadlineDate
+                ? Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                : null;
+              const songs = s.setlist?.items ?? [];
+
+              return (
+                <div key={s.id} className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-white dark:bg-yellow-900/30 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {format(schedDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                      </p>
+                      {s.name && <p className="text-sm text-muted-foreground">{s.name}</p>}
+                      {s.group?.name && <p className="text-xs text-muted-foreground">{s.group.name}</p>}
+                    </div>
+                    {daysLeft !== null && (
+                      <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                        daysLeft <= 1
+                          ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+                          : daysLeft <= 3
+                          ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400"
+                          : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400"
+                      }`}>
+                        {daysLeft <= 0 ? "Prazo vencendo hoje!" : `Prazo: ${daysLeft} dia${daysLeft !== 1 ? "s" : ""}`}
+                      </span>
+                    )}
+                  </div>
+
+                  {songs.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1.5">🎵 Músicas selecionadas:</p>
+                      <ul className="space-y-1">
+                        {songs.slice(0, 4).map((item: any, i: number) => (
+                          <li key={i} className="text-sm flex items-center gap-2">
+                            <span className="w-5 h-5 rounded bg-yellow-200 dark:bg-yellow-800 flex items-center justify-center text-xs font-semibold text-yellow-800 dark:text-yellow-200 flex-shrink-0">{i + 1}</span>
+                            <span className="truncate">{item.song?.title ?? "—"}</span>
+                            {item.song?.artist && <span className="text-xs text-muted-foreground truncate">— {item.song.artist}</span>}
+                          </li>
+                        ))}
+                        {songs.length > 4 && (
+                          <li className="text-xs text-muted-foreground pl-7">+{songs.length - 4} música{songs.length - 4 !== 1 ? "s" : ""}</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  <a
+                    href={`/schedules/review?id=${s.id}`}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold text-sm transition-colors"
+                  >
+                    Revisar e aprovar músicas →
+                  </a>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
