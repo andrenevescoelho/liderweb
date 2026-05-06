@@ -352,6 +352,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
   const [preset, setPreset] = useState<"next_1" | "next_2" | "next_4" | "this_month" | "next_month" | "two_months">("next_4");
   const [customDates, setCustomDates] = useState<string[]>([]);
   const [customDateInput, setCustomDateInput] = useState("");
+  const [selectedDaysOfWeek, setSelectedDaysOfWeek] = useState<number[]>([0]); // 0=Dom padrão
 
   // Ministros por data (step 2)
   const [datesMinisters, setDatesMinisters] = useState<DateMinister[]>([]);
@@ -397,17 +398,25 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   const template = templates.find((t) => t.id === selectedTemplate) ?? null;
 
+  // Dias efetivos: sempre usa a seleção do usuário
+  // O template define a estrutura do time, não o dia da semana
+  const effectiveDays: number[] = selectedDaysOfWeek.length > 0 ? selectedDaysOfWeek : [0];
+
   function getDates(): string[] {
     if (periodMode === "custom") return customDates;
-    const dow = template?.dayOfWeek ?? 0;
-    switch (preset) {
-      case "next_1": return getNextOccurrences(dow, 1);
-      case "next_2": return getNextOccurrences(dow, 2);
-      case "next_4": return getNextOccurrences(dow, 4);
-      case "this_month": return getDayOccurrences(dow, 0);
-      case "next_month": return getDayOccurrences(dow, 1);
-      case "two_months": return [...getDayOccurrences(dow, 1), ...getDayOccurrences(dow, 2)];
-    }
+    // Para múltiplos dias, junta e ordena por data
+    const allDates = effectiveDays.flatMap((dow) => {
+      switch (preset) {
+        case "next_1": return getNextOccurrences(dow, 1);
+        case "next_2": return getNextOccurrences(dow, 2);
+        case "next_4": return getNextOccurrences(dow, 4);
+        case "this_month": return getDayOccurrences(dow, 0);
+        case "next_month": return getDayOccurrences(dow, 1);
+        case "two_months": return [...getDayOccurrences(dow, 1), ...getDayOccurrences(dow, 2)];
+        default: return [];
+      }
+    });
+    return [...new Set(allDates)].sort();
   }
 
   const dates = getDates();
@@ -597,7 +606,11 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
                   <div className="text-xs opacity-70">IA decide tudo</div>
                 </button>
                 {templates.map((t) => (
-                  <button key={t.id} onClick={() => setSelectedTemplate(t.id)}
+                  <button key={t.id} onClick={() => {
+                    setSelectedTemplate(t.id);
+                    // Pré-preenche o dia do template como sugestão, mas usuário pode alterar
+                    if (t.dayOfWeek != null) setSelectedDaysOfWeek([t.dayOfWeek]);
+                  }}
                     className={`rounded-lg border px-3 py-2 text-sm text-left transition-colors ${selectedTemplate === t.id ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400" : "border-border bg-background hover:border-purple-400 text-muted-foreground"}`}>
                     <div className="font-medium flex items-center gap-1">
                       {t.name}
@@ -637,12 +650,59 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
             )}
           </div>
 
+          {/* Dias da semana — sempre visível */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Dias de culto
+              <span className="text-xs text-muted-foreground font-normal ml-2">Selecione um ou mais dias</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "Dom", value: 0 },
+                { label: "Seg", value: 1 },
+                { label: "Ter", value: 2 },
+                { label: "Qua", value: 3 },
+                { label: "Qui", value: 4 },
+                { label: "Sex", value: 5 },
+                { label: "Sáb", value: 6 },
+              ].map((day) => {
+                const selected = selectedDaysOfWeek.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDaysOfWeek((prev) =>
+                        selected
+                          ? prev.length > 1 ? prev.filter((d) => d !== day.value) : prev
+                          : [...prev, day.value].sort()
+                      );
+                    }}
+                    className={`w-12 h-10 rounded-lg border text-sm font-medium transition-colors ${
+                      selected
+                        ? "border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                        : "border-border bg-background hover:border-purple-400 text-muted-foreground"
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Período */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Período</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {[
-                { key: "next_1", label: `Próximo ${template?.dayOfWeek !== null && template?.dayOfWeek !== undefined ? DAY_NAMES_FULL[template.dayOfWeek] : "culto"}` },
+                { key: "next_1", label: `Próximo ${
+                  template?.dayOfWeek != null
+                    ? DAY_NAMES_FULL[template.dayOfWeek]
+                    : effectiveDays.length === 1
+                    ? DAY_NAMES_FULL[effectiveDays[0]]
+                    : "culto"
+                }` },
                 { key: "next_2", label: "Próximos 2" },
                 { key: "next_4", label: "Próximos 4" },
                 { key: "this_month", label: "Este mês" },
