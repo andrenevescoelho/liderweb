@@ -6,279 +6,328 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { sendSmtpMail } from "@/lib/smtp";
 
-const APP_URL = process.env.NEXTAUTH_URL ?? "https://liderweb.multitrackgospel.com";
-const FROM_EMAIL = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
+const APP_URL  = process.env.NEXTAUTH_URL ?? "https://liderweb.multitrackgospel.com";
+const FROM_EMAIL = process.env.SMTP_USER  ?? "liderweb@multitrackgospel.com";
 
 function canManageSchedule(role: string) {
   return ["SUPERADMIN", "ADMIN", "LEADER"].includes(role);
 }
 
-// PATCH /api/schedules/status
-// Body: { scheduleId, action: "submit" | "approve" | "reject" | "publish" | "unpublish", songs? }
+function buildDeadline(scheduleDate: Date, deadlineDays: number): Date {
+  const d = new Date(scheduleDate);
+  d.setDate(d.getDate() - deadlineDays);
+  return d;
+}
+
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const user = session?.user as any;
+  if (!user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  if (!user?.id) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  }
-
-  const { scheduleId, action, songs } = await req.json();
-
-  if (!scheduleId || !action) {
+  const { scheduleId, action, songs, reviewMinisterId, reviewApprovalMode } = await req.json();
+  if (!scheduleId || !action)
     return NextResponse.json({ error: "scheduleId e action são obrigatórios" }, { status: 400 });
-  }
 
-  const schedule = await prisma.schedule.findUnique({
+  const schedule = await (prisma.schedule as any).findUnique({
     where: { id: scheduleId },
     include: {
-      group: { select: { name: true } },
-      roles: {
-        include: { member: { select: { id: true, name: true, email: true } } },
-      },
-      memberRoles: {
-        include: { member: { select: { id: true, name: true, email: true } } },
-      },
+      group: { select: { name: true, scheduleApprovalDeadlineDays: true } },
+      setlist: { include: { items: { include: { song: true }, orderBy: { order: "asc" } } } },
+      roles: { include: { member: { select: { id: true, name: true, email: true } } } },
+      memberRoles: { include: { member: { select: { id: true, name: true, email: true } } } },
     },
   });
 
-  if (!schedule) {
-    return NextResponse.json({ error: "Escala não encontrada" }, { status: 404 });
-  }
-
-  // Verificar se usuário pertence ao grupo
-  if (user.role !== "SUPERADMIN" && schedule.groupId !== user.groupId) {
+  if (!schedule) return NextResponse.json({ error: "Escala não encontrada" }, { status: 404 });
+  if (user.role !== "SUPERADMIN" && schedule.groupId !== user.groupId)
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
 
   const scheduleDate = new Date(schedule.date).toLocaleDateString("pt-BR");
+  const deadlineDays = schedule.group?.scheduleApprovalDeadlineDays ?? 1;
+
+  const songsList = () =>
+    (schedule.setlist?.items ?? [])
+      .map((i: any) =>
+        `<li style="padding:4px 0;color:#475569;">${i.song?.title ?? ""}${i.song?.artist ? ` — ${i.song.artist}` : ""}${i.selectedKey ? ` [${i.selectedKey}]` : ""}</li>`
+      ).join("") || "<li style='color:#94a3b8;'>Nenhuma música selecionada ainda</li>";
+
+  const notifyMembers = async () => {
+    const allMembers = new Map<string, { name: string; email: string }>();
+    [...(schedule.roles ?? []), ...(schedule.memberRoles ?? [])].forEach((r: any) => {
+      if (r.member?.email && r.memberId)
+        allMembers.set(r.memberId, { name: r.member.name ?? "", email: r.member.email });
+    });
+    for (const [, member] of allMembers) {
+      await sendSmtpMail({
+        to: member.email,
+        subject: `📅 Escala do dia ${scheduleDate} publicada — ${schedule.group?.name}`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+          <p>Olá, <strong>${member.name}</strong>!</p>
+          <p style="color:#64748b;">A escala de <strong>${scheduleDate}</strong> foi publicada.</p>
+          <div style="text-align:center;margin:20px 0;">
+            <a href="${APP_URL}/schedules" style="background:#4f46e5;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Ver escala</a>
+          </div>
+        </div>`,
+        fromEmail: FROM_EMAIL,
+        fromName: "Líder Web",
+      }).catch(() => {});
+    }
+    return allMembers.size;
+  };
+
+  const notifyLeaders = async (subject: string, html: string) => {
+    if (!schedule.groupId) return;
+    const leaders = await prisma.user.findMany({
+      where: { groupId: schedule.groupId, role: { in: ["ADMIN", "LEADER"] } },
+      select: { name: true, email: true },
+    });
+    for (const l of leaders) {
+      if (!l.email) continue;
+      await sendSmtpMail({
+        to: l.email,
+        subject,
+        html: html.replace(/\{\{name\}\}/g, l.name ?? "Líder"),
+        fromEmail: FROM_EMAIL,
+        fromName: "Líder Web",
+      }).catch(() => {});
+    }
+  };
 
   switch (action) {
 
-    // ── DRAFT → PENDING_APPROVAL (líder envia para ministro revisar) ───────────
-    case "submit": {
-      if (!canManageSchedule(user.role)) {
-        return NextResponse.json({ error: "Sem permissão para enviar para aprovação" }, { status: 403 });
-      }
-      if ((schedule as any).status !== "DRAFT") {
-        return NextResponse.json({ error: "Escala já foi enviada para aprovação" }, { status: 400 });
-      }
+    // ── DRAFT → PUBLISHED (publica direto, sem revisão) ─────────────────────
+    case "publish_now": {
+      if (!canManageSchedule(user.role))
+        return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+      if (schedule.status === "PUBLISHED")
+        return NextResponse.json({ error: "Escala já está publicada" }, { status: 400 });
+      await (prisma.schedule as any).update({
+        where: { id: scheduleId },
+        data: { status: "PUBLISHED", publishedAt: new Date(), publishedBy: user.id },
+      });
+      const count = await notifyMembers();
+      return NextResponse.json({ status: "PUBLISHED", message: `Escala publicada! ${count} membro(s) notificado(s)` });
+    }
+
+    // ── DRAFT → PENDING_APPROVAL (envia para ministro revisar) ────────────
+    case "submit_for_review": {
+      if (!canManageSchedule(user.role))
+        return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+      if (!["DRAFT", "REVIEW_TIMEOUT"].includes(schedule.status))
+        return NextResponse.json({ error: "Escala não pode ser enviada para revisão neste status" }, { status: 400 });
+      if (!reviewMinisterId)
+        return NextResponse.json({ error: "Selecione o ministro responsável pela revisão" }, { status: 400 });
+      if (!["RETURN_TO_LEADER", "AUTO_PUBLISH"].includes(reviewApprovalMode ?? ""))
+        return NextResponse.json({ error: "reviewApprovalMode inválido" }, { status: 400 });
+
+      const minister = await prisma.user.findUnique({
+        where: { id: reviewMinisterId },
+        select: { id: true, name: true, email: true, groupId: true },
+      });
+      if (!minister || minister.groupId !== schedule.groupId)
+        return NextResponse.json({ error: "Ministro não encontrado neste grupo" }, { status: 404 });
+
+      const timeout = buildDeadline(new Date(schedule.date), deadlineDays);
 
       await (prisma.schedule as any).update({
         where: { id: scheduleId },
-        data: { status: "PENDING_APPROVAL" },
-      });
-
-      // Buscar prazo de aprovação do grupo
-      const groupConfig = await prisma.group.findUnique({
-        where: { id: schedule.groupId ?? "" },
-        select: { scheduleApprovalDeadlineDays: true },
-      }).catch(() => null);
-      const deadlineDays = (groupConfig as any)?.scheduleApprovalDeadlineDays ?? 1;
-      const scheduleDay = new Date(schedule.date);
-      const deadlineDate = new Date(scheduleDay);
-      deadlineDate.setDate(deadlineDate.getDate() - deadlineDays);
-      const deadlineDateStr = deadlineDate.toLocaleDateString("pt-BR");
-
-      // Montar lista de músicas para o e-mail
-      const fullSchedule = await prisma.schedule.findUnique({
-        where: { id: scheduleId },
-        include: {
-          setlist: {
-            include: {
-              items: { include: { song: true }, orderBy: { order: "asc" } },
-            },
-          },
+        data: {
+          status: "PENDING_APPROVAL",
+          reviewMinisterId,
+          reviewApprovalMode,
+          sentToReviewAt: new Date(),
+          reviewTimeoutAt: timeout,
+          ministerApprovedAt: null,
+          approvedAt: null,
+          approvedBy: null,
         },
       });
-      const songsList = fullSchedule?.setlist?.items?.map((i: any) =>
-        `<li style="padding:4px 0;color:#475569;">${i.song?.title ?? ""}${i.song?.artist ? ` <span style="color:#94a3b8;">— ${i.song.artist}</span>` : ""}${i.key ? ` <span style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;">${i.key}</span>` : ""}</li>`
-      ).join("") ?? "";
 
-      // Notificar ministro(s) do dia por e-mail
-      const ministers = [
-        ...schedule.roles.filter((r) => r.role?.toLowerCase().includes("ministro") && r.member?.email),
-        ...schedule.memberRoles.filter((r) => r.role?.toLowerCase().includes("ministro") && r.member?.email),
-      ];
+      const deadlineStr = timeout.toLocaleDateString("pt-BR");
+      const modeLabel = reviewApprovalMode === "AUTO_PUBLISH"
+        ? "Após sua aprovação, a escala será <strong>publicada automaticamente</strong> para toda a equipe."
+        : "Após sua aprovação, o líder será notificado para revisar e publicar.";
 
-      for (const m of ministers) {
-        const email = m.member?.email;
-        const name = m.member?.name ?? "Ministro";
-        if (!email) continue;
-
+      if (minister.email) {
         await sendSmtpMail({
-          to: email,
+          to: minister.email,
           subject: `🎵 Revise as músicas do culto de ${scheduleDate} — ${schedule.group?.name}`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-              <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:24px;border-radius:12px 12px 0 0;">
-                <p style="margin:0;color:rgba(255,255,255,0.8);font-size:13px;">Líder Web · ${schedule.group?.name}</p>
-                <p style="margin:8px 0 0;color:#fff;font-size:20px;font-weight:700;">Revise as músicas do culto</p>
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:24px;border-radius:12px 12px 0 0;">
+              <p style="margin:0;color:rgba(255,255,255,0.8);font-size:13px;">Líder Web · ${schedule.group?.name}</p>
+              <p style="margin:8px 0 0;color:#fff;font-size:20px;font-weight:700;">Revise as músicas do culto</p>
+            </div>
+            <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
+              <p style="color:#1e293b;">Olá, <strong>${minister.name}</strong>!</p>
+              <p style="color:#64748b;">Você foi escolhido para revisar o repertório do culto de <strong>${scheduleDate}</strong>.</p>
+              <div style="background:#f8fafc;border-radius:8px;padding:16px;margin:16px 0;">
+                <p style="margin:0 0 8px;font-weight:600;color:#1e293b;">🎵 Músicas selecionadas:</p>
+                <ol style="margin:0;padding-left:20px;">${songsList()}</ol>
               </div>
-              <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
-                <p style="margin:0 0 8px;color:#1e293b;font-size:16px;">Olá, <strong>${name}</strong>!</p>
-                <p style="margin:0 0 16px;color:#64748b;">Você foi escalado como <strong>Ministro</strong> no culto de <strong>${scheduleDate}</strong>. As músicas abaixo foram selecionadas para você revisar:</p>
-                
-                <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:20px;">
-                  <p style="margin:0 0 8px;color:#1e293b;font-weight:600;font-size:14px;">🎵 Músicas selecionadas:</p>
-                  <ol style="margin:0;padding-left:20px;">${songsList || "<li style='color:#94a3b8;'>Nenhuma música selecionada ainda</li>"}</ol>
-                </div>
-
-                <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:14px;margin-bottom:20px;">
-                  <p style="margin:0;color:#92400e;font-size:14px;">⏰ <strong>Prazo para aprovação:</strong> até <strong>${deadlineDateStr}</strong> (${deadlineDays} dia${deadlineDays !== 1 ? "s" : ""} antes do culto).<br>Se não houver resposta até essa data, a escala será publicada automaticamente.</p>
-                </div>
-
-                <p style="margin:0 0 16px;color:#64748b;font-size:14px;">Clique abaixo para revisar, reordenar as músicas, alterar tons e aprovar:</p>
-                
-                <div style="text-align:center;margin:24px 0;">
-                  <a href="${APP_URL}/schedules/review?id=${scheduleId}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:16px;font-weight:700;">Revisar e aprovar músicas →</a>
-                </div>
-                
-                <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;text-align:center;">Líder Web · by multitrackgospel.com</p>
+              <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:14px;margin-bottom:16px;">
+                <p style="margin:0;color:#92400e;font-size:14px;">⏰ <strong>Prazo:</strong> até <strong>${deadlineStr}</strong>.<br>${modeLabel}</p>
               </div>
-            </div>`,
+              <div style="text-align:center;margin:24px 0;">
+                <a href="${APP_URL}/schedules/review?id=${scheduleId}" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700;">Revisar e aprovar músicas →</a>
+              </div>
+            </div>
+          </div>`,
           fromEmail: FROM_EMAIL,
           fromName: "Líder Web",
         }).catch(() => {});
       }
 
-      return NextResponse.json({ status: "PENDING_APPROVAL", message: "Escala enviada para aprovação" });
+      return NextResponse.json({
+        status: "PENDING_APPROVAL",
+        message: `Escala enviada para ${minister.name} revisar. Prazo: ${deadlineStr}`,
+      });
     }
 
-    // ── PENDING_APPROVAL → APPROVED (ministro aprova, opcionalmente edita músicas) ─
+    // ── PENDING_APPROVAL → APPROVED ou PUBLISHED (ministro aprova) ────────
     case "approve": {
-      if ((schedule as any).status !== "PENDING_APPROVAL") {
+      if (schedule.status !== "PENDING_APPROVAL")
         return NextResponse.json({ error: "Escala não está aguardando aprovação" }, { status: 400 });
-      }
 
-      // Verificar se é o ministro do dia ou um admin/leader
-      const isMinister = [
-        ...schedule.roles,
-        ...schedule.memberRoles,
-      ].some((r) => r.role?.toLowerCase().includes("ministro") && r.memberId === user.id);
-
-      if (!isMinister && !canManageSchedule(user.role)) {
+      const isDesignatedMinister = schedule.reviewMinisterId === user.id;
+      const isMinisterByRole = [...(schedule.roles ?? []), ...(schedule.memberRoles ?? [])].some(
+        (r: any) => r.role?.toLowerCase().includes("ministro") && r.memberId === user.id
+      );
+      if (!isDesignatedMinister && !isMinisterByRole && !canManageSchedule(user.role))
         return NextResponse.json({ error: "Sem permissão para aprovar esta escala" }, { status: 403 });
-      }
 
-      const updateData: any = {
-        status: "APPROVED",
-        approvedAt: new Date(),
-        approvedBy: user.id,
-      };
-
-      await (prisma.schedule as any).update({
-        where: { id: scheduleId },
-        data: updateData,
-      });
-
-      // Se enviou músicas atualizadas, atualizar o setlist
+      // Salvar edições de músicas do ministro
       if (songs && Array.isArray(songs) && songs.length > 0 && schedule.setlistId) {
-        // Limpar setlist atual e adicionar novas músicas
-        await (prisma as any).setlistItem?.deleteMany?.({
-          where: { setlistId: schedule.setlistId },
-        }).catch(() => {});
-
+        await (prisma as any).setlistItem?.deleteMany?.({ where: { setlistId: schedule.setlistId } }).catch(() => {});
         for (let i = 0; i < songs.length; i++) {
           await (prisma as any).setlistItem?.create?.({
-            data: {
-              setlistId: schedule.setlistId,
-              songId: songs[i].id,
-              position: i,
-              key: songs[i].key ?? null,
-            },
+            data: { setlistId: schedule.setlistId, songId: songs[i].id, selectedKey: songs[i].key ?? null, order: i },
           }).catch(() => {});
         }
       }
 
-      // Notificar líder/admin
-      if (schedule.groupId) {
-        const admins = await prisma.user.findMany({
-          where: { groupId: schedule.groupId, role: { in: ["ADMIN", "LEADER"] }, email: { not: null } },
-          select: { name: true, email: true },
+      // Marcar ministro como ACCEPTED automaticamente — ele revisou, logo confirmou presença
+      // Atualiza tanto ScheduleRole quanto ScaleMemberRole
+      await prisma.scheduleRole.updateMany({
+        where: {
+          scheduleId,
+          memberId: user.id,
+          status: "PENDING",
+        },
+        data: { status: "ACCEPTED" },
+      }).catch(() => {});
+
+      await (prisma as any).scaleMemberRole?.updateMany?.({
+        where: {
+          scaleId: scheduleId,
+          memberId: user.id,
+          status: "PENDING",
+        },
+        data: { status: "ACCEPTED" },
+      }).catch(() => {});
+
+      const mode = schedule.reviewApprovalMode ?? "RETURN_TO_LEADER";
+
+      if (mode === "AUTO_PUBLISH") {
+        await (prisma.schedule as any).update({
+          where: { id: scheduleId },
+          data: {
+            status: "PUBLISHED",
+            ministerApprovedAt: new Date(),
+            approvedAt: new Date(),
+            approvedBy: user.id,
+            publishedAt: new Date(),
+            publishedBy: "auto_after_minister",
+          },
         });
-
-        for (const admin of admins) {
-          if (!admin.email) continue;
-          await sendSmtpMail({
-            to: admin.email,
-            subject: `✅ Escala de ${scheduleDate} aprovada — ${schedule.group?.name}`,
-            html: `
-              <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-                <p style="color:#1e293b;">Olá, <strong>${admin.name}</strong>!</p>
-                <p style="color:#64748b;">A escala do dia <strong>${scheduleDate}</strong> foi aprovada por <strong>${user.name}</strong>.</p>
-                <p style="color:#64748b;">Agora você pode publicá-la para notificar toda a equipe.</p>
-                <div style="text-align:center;margin:20px 0;">
-                  <a href="${APP_URL}/schedules" style="display:inline-block;background:#22c55e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Publicar escala</a>
-                </div>
-              </div>`,
-            fromEmail: FROM_EMAIL,
-            fromName: "Líder Web",
-          }).catch(() => {});
-        }
+        const count = await notifyMembers();
+        return NextResponse.json({
+          status: "PUBLISHED",
+          message: `Aprovado e publicado automaticamente! ${count} membro(s) notificado(s)`,
+        });
       }
 
-      return NextResponse.json({ status: "APPROVED", message: "Escala aprovada!" });
+      // RETURN_TO_LEADER
+      await (prisma.schedule as any).update({
+        where: { id: scheduleId },
+        data: { status: "APPROVED", ministerApprovedAt: new Date(), approvedAt: new Date(), approvedBy: user.id },
+      });
+
+      await notifyLeaders(
+        `✅ Escala de ${scheduleDate} aprovada pelo ministro — ${schedule.group?.name}`,
+        `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+          <p>Olá, <strong>{{name}}</strong>!</p>
+          <p style="color:#64748b;">O ministro <strong>${user.name}</strong> aprovou as músicas da escala de <strong>${scheduleDate}</strong>.</p>
+          <p style="color:#64748b;">Agora você pode publicá-la para notificar toda a equipe.</p>
+          <div style="text-align:center;margin:20px 0;">
+            <a href="${APP_URL}/schedules" style="background:#22c55e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Publicar escala →</a>
+          </div>
+        </div>`
+      );
+      return NextResponse.json({ status: "APPROVED", message: "Músicas aprovadas! Líderes notificados para publicar." });
     }
 
-    // ── APPROVED → PUBLISHED (líder/admin publica e notifica equipe) ──────────
+    // ── APPROVED / REVIEW_TIMEOUT → PUBLISHED (líder publica) ────────────
     case "publish": {
-      if (!canManageSchedule(user.role)) {
-        return NextResponse.json({ error: "Sem permissão para publicar" }, { status: 403 });
-      }
-      if ((schedule as any).status === "PUBLISHED") {
+      if (!canManageSchedule(user.role))
+        return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+      if (schedule.status === "PUBLISHED")
         return NextResponse.json({ error: "Escala já está publicada" }, { status: 400 });
-      }
+      if (!["APPROVED", "REVIEW_TIMEOUT", "DRAFT"].includes(schedule.status))
+        return NextResponse.json({ error: "Escala não pode ser publicada neste status" }, { status: 400 });
 
       await (prisma.schedule as any).update({
         where: { id: scheduleId },
         data: { status: "PUBLISHED", publishedAt: new Date(), publishedBy: user.id },
       });
-
-      // Notificar toda a equipe
-      const allMembers = new Map<string, { name: string; email: string }>();
-      [...schedule.roles, ...schedule.memberRoles].forEach((r) => {
-        if (r.member?.email && r.memberId) {
-          allMembers.set(r.memberId, { name: r.member.name ?? "", email: r.member.email });
-        }
-      });
-
-      for (const [, member] of allMembers) {
-        await sendSmtpMail({
-          to: member.email,
-          subject: `📅 Escala do dia ${scheduleDate} publicada — ${schedule.group?.name}`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-              <p style="color:#1e293b;">Olá, <strong>${member.name}</strong>!</p>
-              <p style="color:#64748b;">A escala do dia <strong>${scheduleDate}</strong> do ministério <strong>${schedule.group?.name}</strong> foi publicada.</p>
-              <p style="color:#64748b;">Confira sua participação e as músicas do culto.</p>
-              <div style="text-align:center;margin:20px 0;">
-                <a href="${APP_URL}/schedules" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Ver escala</a>
-              </div>
-            </div>`,
-          fromEmail: FROM_EMAIL,
-          fromName: "Líder Web",
-        }).catch(() => {});
-      }
-
-      return NextResponse.json({ status: "PUBLISHED", message: `Escala publicada! ${allMembers.size} membro(s) notificado(s)` });
+      const count = await notifyMembers();
+      return NextResponse.json({ status: "PUBLISHED", message: `Escala publicada! ${count} membro(s) notificado(s)` });
     }
 
-    // ── Voltar para DRAFT (qualquer status → DRAFT) ───────────────────────────
+    // ── qualquer → DRAFT ──────────────────────────────────────────────────
     case "revert": {
-      if (!canManageSchedule(user.role)) {
+      if (!canManageSchedule(user.role))
         return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-      }
-
       await (prisma.schedule as any).update({
         where: { id: scheduleId },
-        data: { status: "DRAFT", approvedAt: null, approvedBy: null },
+        data: {
+          status: "DRAFT",
+          reviewMinisterId: null,
+          reviewApprovalMode: null,
+          sentToReviewAt: null,
+          reviewTimeoutAt: null,
+          ministerApprovedAt: null,
+          approvedAt: null,
+          approvedBy: null,
+        },
       });
-
       return NextResponse.json({ status: "DRAFT", message: "Escala voltou para rascunho" });
     }
 
+    // ── PENDING_APPROVAL → REVIEW_TIMEOUT (chamado pelo n8n) ──────────────
+    case "timeout": {
+      if (schedule.status !== "PENDING_APPROVAL")
+        return NextResponse.json({ error: "Escala não está em revisão" }, { status: 400 });
+      await (prisma.schedule as any).update({
+        where: { id: scheduleId },
+        data: { status: "REVIEW_TIMEOUT" },
+      });
+      await notifyLeaders(
+        `⚠️ Prazo de revisão vencido — escala de ${scheduleDate} — ${schedule.group?.name}`,
+        `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+          <p>Olá, <strong>{{name}}</strong>!</p>
+          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:14px;margin:16px 0;">
+            <p style="margin:0;color:#991b1b;">⚠️ O prazo para o ministro aprovar a escala de <strong>${scheduleDate}</strong> venceu sem resposta.</p>
+          </div>
+          <p style="color:#64748b;">Você pode publicá-la manualmente agora.</p>
+          <div style="text-align:center;margin:20px 0;">
+            <a href="${APP_URL}/schedules" style="background:#f59e0b;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Publicar manualmente →</a>
+          </div>
+        </div>`
+      );
+      return NextResponse.json({ status: "REVIEW_TIMEOUT", message: "Escala marcada como REVIEW_TIMEOUT. Líder notificado." });
+    }
+
     default:
-      return NextResponse.json({ error: "Action inválida" }, { status: 400 });
+      return NextResponse.json({ error: `Action inválida: ${action}` }, { status: 400 });
   }
 }

@@ -359,6 +359,7 @@ model User {
   scheduleMemberRoles  ScaleMemberRole[]     @relation("ScaleMemberRolesByMember")
   rehearsalMemberRoles RehearsalMemberRole[] @relation("RehearsalMemberRolesByMember")
   scheduleSongsMinistered ScheduleSong[]     @relation("ScheduleSongMinister")
+  schedulesAsReviewMinister Schedule[]       @relation("ScheduleReviewMinister")
   createdCoupons       Coupon[]              @relation("CouponCreator")
   redeemedCoupons      CouponRedemption[]    @relation("CouponRedeemer")
   avatarUrl            String?   // foto do perfil (upload ou Google)
@@ -748,6 +749,29 @@ model Schedule {
   roles        ScheduleRole[]
   memberRoles  ScaleMemberRole[] @relation("ScaleMemberRolesBySchedule")
   scheduleSongs ScheduleSong[]
+
+  // ── Fluxo de revisão ─────────────────────────────────────────────────────
+  status              String    @default("DRAFT")
+  // DRAFT | PENDING_APPROVAL | APPROVED | REVIEW_TIMEOUT | PUBLISHED
+
+  reviewApprovalMode  String?
+  // RETURN_TO_LEADER | AUTO_PUBLISH
+  // define o que acontece após o ministro aprovar
+
+  reviewMinisterId    String?   // userId do ministro responsável pela revisão
+  reviewMinister      User?     @relation("ScheduleReviewMinister", fields: [reviewMinisterId], references: [id], onDelete: SetNull)
+
+  sentToReviewAt      DateTime? // quando o líder enviou para revisão
+  reviewTimeoutAt     DateTime? // prazo calculado (data escala - X dias)
+  ministerApprovedAt  DateTime? // quando o ministro aprovou
+  approvedAt          DateTime? // alias legado — mantido para compatibilidade
+  approvedBy          String?   // alias legado — mantido para compatibilidade
+
+  publishedAt         DateTime?
+  publishedBy         String?
+
+  @@index([status, date])
+  @@index([groupId, status])
 }
 
 model ScheduleRole {

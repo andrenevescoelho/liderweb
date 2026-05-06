@@ -293,6 +293,8 @@ export async function GET() {
         schedule: {
           date: { gte: now },
           ...(groupId && { groupId }),
+          // Membros comuns só veem escalas publicadas no dashboard
+          ...(canAccessGroupReports ? {} : { status: "PUBLISHED" }),
         },
       },
       include: {
@@ -403,6 +405,7 @@ export async function GET() {
           status: "PENDING",
           schedule: {
             date: { gte: now },
+            status: "PUBLISHED", // só pede confirmação de escalas publicadas
           },
         },
         include: {
@@ -711,11 +714,68 @@ export async function GET() {
         })()
       : null;
 
+    // Escalas aguardando revisão do ministro (para o usuário logado)
+    const schedulesAwaitingMyReview = await (prisma.schedule as any).findMany({
+      where: {
+        reviewMinisterId: userId,
+        status: "PENDING_APPROVAL",
+        date: { gte: now },
+      },
+      select: {
+        id: true,
+        date: true,
+        name: true,
+        reviewTimeoutAt: true,
+        group: { select: { name: true } },
+        setlist: {
+          select: {
+            items: {
+              include: { song: { select: { title: true, artist: true } } },
+              orderBy: { order: "asc" as const },
+              take: 5,
+            },
+          },
+        },
+      },
+      orderBy: { date: "asc" as const },
+    }).catch(() => []);
+
+    // Escalas aprovadas pelo ministro aguardando publicação pelo líder
+    const schedulesAwaitingPublish = canAccessGroupReports
+      ? await (prisma.schedule as any).findMany({
+          where: {
+            status: "APPROVED",
+            date: { gte: now },
+            reviewApprovalMode: "RETURN_TO_LEADER",
+            ...(groupId && { groupId }),
+          },
+          select: {
+            id: true,
+            date: true,
+            name: true,
+            ministerApprovedAt: true,
+            group: { select: { name: true } },
+            setlist: {
+              select: {
+                items: {
+                  include: { song: { select: { title: true, artist: true } } },
+                  orderBy: { order: "asc" as const },
+                  take: 5,
+                },
+              },
+            },
+          },
+          orderBy: { date: "asc" as const },
+        }).catch(() => [])
+      : [];
+
     return NextResponse.json({
       groupName: group?.name ?? null,
       upcomingSchedules: upcomingSchedules ?? [],
       myUpcomingSchedules: myUpcomingSchedules ?? [],
       pendingConfirmations: pendingConfirmations ?? [],
+      schedulesAwaitingMyReview: schedulesAwaitingMyReview ?? [],
+      schedulesAwaitingPublish: schedulesAwaitingPublish ?? [],
       songsToRehearse: songsToRehearse ?? [],
       birthdaysToday: birthdaysToday.map((member) => ({
         id: member.id,

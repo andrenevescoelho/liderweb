@@ -47,14 +47,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Escala não encontrada" }, { status: 404 });
   }
 
-  // Verificar se usuário tem acesso (ministro do dia ou admin/leader do grupo)
-  const isMinister = schedule.roles.some(
+  // Verificar se usuário tem acesso:
+  // 1. Ministro designado via reviewMinisterId (novo fluxo)
+  // 2. Ministro pelo role na escala (fluxo legado)
+  // 3. Admin/Leader do grupo
+  const isDesignatedMinister = (schedule as any).reviewMinisterId === user.id;
+  const isMinisterByRole = schedule.roles.some(
     (r) => r.role?.toLowerCase().includes("ministro") && r.memberId === user.id
   );
   const isManager = ["SUPERADMIN", "ADMIN", "LEADER"].includes(user.role) &&
     (user.role === "SUPERADMIN" || schedule.groupId === user.groupId);
 
-  if (!isMinister && !isManager) {
+  if (!isDesignatedMinister && !isMinisterByRole && !isManager) {
     return NextResponse.json({ error: "Sem permissão para revisar esta escala" }, { status: 403 });
   }
 
@@ -70,7 +74,7 @@ export async function GET(req: NextRequest) {
     title: item.song?.title ?? "",
     artist: item.song?.artist ?? null,
     bpm: item.song?.bpm ?? null,
-    key: item.key ?? item.song?.originalKey ?? null,
+    key: item.selectedKey ?? item.key ?? item.song?.originalKey ?? null,
     originalKey: item.song?.originalKey ?? null,
   })) ?? [];
 
@@ -89,6 +93,7 @@ export async function GET(req: NextRequest) {
     date: schedule.date,
     name: schedule.name,
     status: (schedule as any).status ?? "DRAFT",
+    reviewApprovalMode: (schedule as any).reviewApprovalMode ?? null,
     group: {
       name: schedule.group?.name ?? "",
       scheduleApprovalDeadlineDays: deadlineDays,
