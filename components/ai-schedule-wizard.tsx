@@ -65,7 +65,7 @@ interface DateMinister {
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onAccept: (schedules: AiSchedule[]) => void;
+  onAccept: (schedules: AiSchedule[], publishAction: string, reviewApprovalMode: string) => Promise<void>;
 }
 
 const DAY_NAMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -338,7 +338,7 @@ function TemplateManager({ onClose }: { onClose: () => void }) {
 // ── Wizard principal ─────────────────────────────────────────────────────────
 
 export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
-  const [step, setStep] = useState<"config" | "ministers" | "loading" | "draft" | "templates">("config");
+  const [step, setStep] = useState<"config" | "ministers" | "loading" | "draft" | "templates" | "publish_action">("config");
 
   // Templates
   const [templates, setTemplates] = useState<ScheduleTemplate[]>([]);
@@ -364,6 +364,10 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
   const [error, setError] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [loadingProgress, setLoadingProgress] = useState("");
+  const [aiPublishAction, setAiPublishAction] = useState<"draft" | "publish_now" | "send_review">("draft");
+  const [aiReviewApprovalMode, setAiReviewApprovalMode] = useState<"AUTO_PUBLISH" | "RETURN_TO_LEADER">("AUTO_PUBLISH");
+  const [publishing, setPublishing] = useState(false);
+
 
   const fetchTemplates = useCallback(async () => {
     const res = await fetch("/api/schedule-templates").catch(() => null);
@@ -490,9 +494,18 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
   }
 
   function handleAccept() {
-    onAccept(draft);
-    onClose();
-    resetWizard();
+    setStep("publish_action");
+  }
+
+  async function handleConfirmPublishAction() {
+    setPublishing(true);
+    try {
+      await onAccept(draft, aiPublishAction, aiReviewApprovalMode);
+      onClose();
+      resetWizard();
+    } finally {
+      setPublishing(false);
+    }
   }
 
   function resetWizard() {
@@ -507,6 +520,9 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
     setLoadingProgress("");
     setSongStrategy("group_top");
     setDatesMinisters([]);
+    setAiPublishAction("draft");
+    setAiReviewApprovalMode("AUTO_PUBLISH");
+    setPublishing(false);
   }
 
   function handleClose() { onClose(); resetWizard(); }
@@ -534,6 +550,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
     step === "templates" ? "Templates de culto" :
     step === "ministers" ? "Quem ministra em cada data?" :
     step === "loading" ? "Gerando escalas..." :
+    step === "publish_action" ? "O que fazer com as escalas?" :
     step === "draft" ? "Rascunho gerado pela IA" :
     "Gerar escala com IA";
 
@@ -868,7 +885,118 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
               <ChevronLeft className="w-4 h-4" />Refazer
             </Button>
             <Button type="button" onClick={handleAccept} className="gap-2">
-              <Check className="w-4 h-4" />Aceitar e criar escalas
+              <ChevronRight className="w-4 h-4" />Continuar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Publish Action ── */}
+      {step === "publish_action" && (
+        <div className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            {draft.length === 1
+              ? "O que deseja fazer com a escala gerada?"
+              : `O que deseja fazer com as ${draft.length} escalas geradas?`}
+          </p>
+
+          <div className="space-y-2">
+            {/* Publicar agora */}
+            <label className="flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all"
+              style={{ borderColor: aiPublishAction === "publish_now" ? "#22c55e" : "var(--border)" }}
+            >
+              <input type="radio" name="aiPublishAction" value="publish_now"
+                checked={aiPublishAction === "publish_now"}
+                onChange={() => setAiPublishAction("publish_now")}
+                className="mt-0.5" />
+              <span>
+                <span className="font-medium text-sm text-green-700 dark:text-green-400">⚡ Publicar agora</span>
+                <span className="text-xs text-muted-foreground block mt-0.5">
+                  Toda a equipe é notificada imediatamente para cada escala.
+                </span>
+              </span>
+            </label>
+
+            {/* Enviar para revisão */}
+            <div className="rounded-xl border-2 transition-all"
+              style={{ borderColor: aiPublishAction === "send_review" ? "#7c3aed" : "var(--border)" }}
+            >
+              <label className="flex items-start gap-3 p-4 cursor-pointer">
+                <input type="radio" name="aiPublishAction" value="send_review"
+                  checked={aiPublishAction === "send_review"}
+                  onChange={() => setAiPublishAction("send_review")}
+                  className="mt-0.5" />
+                <span>
+                  <span className="font-medium text-sm text-purple-700 dark:text-purple-400">📩 Enviar para revisão do ministro</span>
+                  <span className="text-xs text-muted-foreground block mt-0.5">
+                    O ministro de cada escala é notificado para revisar as músicas. A equipe só é avisada após publicação.
+                  </span>
+                </span>
+              </label>
+
+              {/* Sub-opção: modo após aprovação */}
+              {aiPublishAction === "send_review" && (
+                <div className="mx-4 mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-2">
+                  <p className="text-xs font-medium text-purple-700 dark:text-purple-300">Após aprovação do ministro:</p>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="radio" name="aiReviewMode" value="AUTO_PUBLISH"
+                      checked={aiReviewApprovalMode === "AUTO_PUBLISH"}
+                      onChange={() => setAiReviewApprovalMode("AUTO_PUBLISH")}
+                      className="mt-0.5" />
+                    <span className="text-sm">
+                      <span className="font-medium">Publicar automaticamente</span>
+                      <span className="text-xs text-muted-foreground block">A equipe é notificada assim que ele aprovar.</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="radio" name="aiReviewMode" value="RETURN_TO_LEADER"
+                      checked={aiReviewApprovalMode === "RETURN_TO_LEADER"}
+                      onChange={() => setAiReviewApprovalMode("RETURN_TO_LEADER")}
+                      className="mt-0.5" />
+                    <span className="text-sm">
+                      <span className="font-medium">Devolver para mim antes de publicar</span>
+                      <span className="text-xs text-muted-foreground block">Você revisa e publica após a aprovação.</span>
+                    </span>
+                  </label>
+
+                  {/* Aviso: escalas sem ministro */}
+                  {draft.some((s) => !s.roles.some((r) => /ministro/i.test(r.role) && r.memberId)) && (
+                    <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-2 mt-1">
+                      <p className="text-xs text-orange-700 dark:text-orange-400">
+                        ⚠️ {draft.filter((s) => !s.roles.some((r) => /ministro/i.test(r.role) && r.memberId)).length} escala(s) sem ministro atribuído serão salvas como rascunho.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Salvar como rascunho */}
+            <label className="flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all"
+              style={{ borderColor: aiPublishAction === "draft" ? "#94a3b8" : "var(--border)" }}
+            >
+              <input type="radio" name="aiPublishAction" value="draft"
+                checked={aiPublishAction === "draft"}
+                onChange={() => setAiPublishAction("draft")}
+                className="mt-0.5" />
+              <span>
+                <span className="font-medium text-sm">💾 Salvar como rascunho</span>
+                <span className="text-xs text-muted-foreground block mt-0.5">
+                  Ninguém é notificado. Você decide o que fazer com cada escala depois.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div className="flex justify-between gap-2 pt-2 border-t">
+            <Button type="button" variant="secondary" onClick={() => setStep("draft")} className="gap-2">
+              <ChevronLeft className="w-4 h-4" />Voltar
+            </Button>
+            <Button type="button" onClick={handleConfirmPublishAction} disabled={publishing} className="gap-2">
+              {publishing
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Criando escalas...</>
+                : <><Check className="w-4 h-4" />Criar {draft.length} escala{draft.length !== 1 ? "s" : ""}</>
+              }
             </Button>
           </div>
         </div>
