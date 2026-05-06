@@ -18,6 +18,15 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [credentialsLoading, setCredentialsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [isCapacitorApp, setIsCapacitorApp] = useState(false);
+
+  // Detectar se está no app nativo
+  useEffect(() => {
+    const ua = window.navigator.userAgent;
+    // @ts-ignore
+    const native = ua.includes("LiderWebApp") || !!window?.Capacitor?.isNativePlatform?.();
+    setIsCapacitorApp(native);
+  }, []);
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("token");
 
@@ -61,7 +70,18 @@ export default function LoginPage() {
     setError("");
     setGoogleLoading(true);
     try {
-      await signIn("google", { callbackUrl: callbackAfterLogin });
+      if (isCapacitorApp) {
+        // Login nativo via Capacitor — não abre browser externo
+        const { googleSignInNative } = await import("@/lib/capacitor-native");
+        const ok = await googleSignInNative();
+        if (!ok) {
+          setError("Não foi possível fazer login com Google. Tente email e senha.");
+          setGoogleLoading(false);
+        }
+        // Se ok=true, o usuário já foi redirecionado
+      } else {
+        await signIn("google", { callbackUrl: callbackAfterLogin });
+      }
     } catch {
       setError("Erro ao iniciar login com Google");
       setGoogleLoading(false);
