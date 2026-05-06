@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music, Send, Zap, RotateCcw, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,12 +54,24 @@ export default function SchedulesPage() {
   const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
 
-  const handleAcceptAiDraft = async (schedules: any[]) => {
+  const handleAcceptAiDraft = async (schedules: any[], publishAction: string, reviewApprovalMode: string) => {
     setAiCreating(true);
     let created = 0;
+
     for (const s of schedules) {
       try {
-        await fetch("/api/schedules", {
+        // Detectar ministro da escala (role com "ministro" no nome)
+        const ministerRole = (s.roles ?? []).find((r: any) =>
+          /ministro/i.test(r.role ?? "") && r.memberId
+        );
+        const ministerMemberId = ministerRole?.memberId ?? null;
+
+        // Se send_review mas sem ministro, salvar como draft
+        const effectiveAction = (publishAction === "send_review" && !ministerMemberId)
+          ? "draft"
+          : publishAction;
+
+        const res = await fetch("/api/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -72,17 +85,49 @@ export default function SchedulesPage() {
               songId: song.songId,
               selectedKey: song.key ?? "C",
             })),
+            publishAction: effectiveAction,
           }),
         });
+
+        if (!res.ok) { console.error("Erro ao criar escala:", await res.text()); continue; }
+        const saved = await res.json();
         created++;
+
+        // Executar ação após criar
+        if (effectiveAction === "publish_now") {
+          await fetch("/api/schedules/status", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scheduleId: saved.id, action: "publish_now" }),
+          }).catch(() => {});
+
+        } else if (effectiveAction === "send_review" && ministerMemberId) {
+          await fetch("/api/schedules/status", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              scheduleId: saved.id,
+              action: "submit_for_review",
+              reviewMinisterId: ministerMemberId,
+              reviewApprovalMode,
+            }),
+          }).catch(() => {});
+        }
+
       } catch (e) {
         console.error("Erro ao criar escala:", e);
       }
     }
+
     await fetchSchedules();
     setAiCreating(false);
     if (created > 0) {
-      alert(`${created} escala${created > 1 ? "s" : ""} criada${created > 1 ? "s" : ""} com sucesso!`);
+      const actionLabel =
+        publishAction === "publish_now" ? "publicadas" :
+        publishAction === "send_review" ? "enviadas para revisão do ministro" :
+        "salvas como rascunho";
+      toast?.success?.(`${created} escala${created > 1 ? "s" : ""} ${actionLabel}!`) ??
+        alert(`${created} escala${created > 1 ? "s" : ""} ${actionLabel}!`);
     }
   };
 
