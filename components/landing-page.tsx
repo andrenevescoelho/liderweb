@@ -4,7 +4,7 @@ import { ArrowRight, CheckCircle2, Calendar, Users, Music, MessageCircle, Gradua
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-white overflow-x-hidden">
+    <div id="landing-page" className="min-h-screen bg-[#0a0f1e] text-white overflow-x-hidden overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
 
       {/* ── Navbar ────────────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-50 border-b border-white/8 bg-[#0a0f1e]/90 backdrop-blur-md">
