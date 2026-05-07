@@ -189,8 +189,8 @@ export default function LoginPage() {
       </div>
 
       {/* Lado direito — formulário */}
-      <div className="flex w-full lg:w-1/2 items-center justify-center p-6">
-        <Card className="relative w-full max-w-md p-8">
+      <div className="flex w-full lg:w-1/2 items-start lg:items-center justify-center p-6 min-h-screen lg:min-h-0 overflow-y-auto">
+        <Card className="relative w-full max-w-md p-8 my-auto">
           <div className="mb-8 text-center">
             <div className="mb-4 flex justify-center lg:hidden">
               <div className="rounded-xl border border-primary/25 bg-primary/15 p-3">
