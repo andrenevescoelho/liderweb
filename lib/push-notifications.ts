@@ -92,19 +92,17 @@ import { prisma } from "@/lib/db";
 
 export async function getPushTokensForUsers(userIds: string[]): Promise<string[]> {
   if (!userIds.length) return [];
-
-  const sessions = await (prisma as any).userActiveSession.findMany({
-    where: {
-      userId: { in: userIds },
-      pushToken: { not: null },
-    },
-    select: { pushToken: true },
-    distinct: ["pushToken"],
-  });
-
-  return sessions
-    .map((s: any) => s.pushToken)
-    .filter(Boolean) as string[];
+  try {
+    const sessions = await (prisma as any).userActiveSession.findMany({
+      where: { userId: { in: userIds } },
+      select: { pushToken: true },
+    });
+    return sessions
+      .map((s: any) => s.pushToken)
+      .filter(Boolean) as string[];
+  } catch {
+    return [];
+  }
 }
 
 // Buscar tokens de todos os membros de um grupo
