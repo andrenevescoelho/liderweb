@@ -20,12 +20,15 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isCapacitorApp, setIsCapacitorApp] = useState(false);
 
-  // Detectar se está no app nativo
+  // Detectar se está no app nativo e habilitar scroll
   useEffect(() => {
     const ua = window.navigator.userAgent;
     // @ts-ignore
     const native = ua.includes("LiderWebApp") || !!window?.Capacitor?.isNativePlatform?.();
     setIsCapacitorApp(native);
+    // Habilitar scroll na página de login (necessário para mobile/Capacitor)
+    document.documentElement.classList.add("page-scrollable");
+    return () => document.documentElement.classList.remove("page-scrollable");
   }, []);
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("token");
@@ -143,7 +146,9 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-background">
+    <div className="relative flex min-h-screen overflow-x-hidden bg-background"
+      style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+    >
       {/* Lado esquerdo — proposta de valor */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 text-white" style={{ background: "linear-gradient(135deg, #0f1728 0%, #0d1f35 60%, #0a1a2e 100%)" }}>
         <div className="flex items-center gap-3">
