@@ -79,6 +79,13 @@
     overflow: auto;
     height: auto;
   }
+
+  /* Landing page — scroll sempre liberado */
+  html:has(#landing-page),
+  html:has(#landing-page) body {
+    overflow: auto;
+    height: auto;
+  }
 }
 
 /* Hide hydration errors */
