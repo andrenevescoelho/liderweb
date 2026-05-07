@@ -3,40 +3,20 @@
 export async function googleSignInNative(): Promise<boolean> {
   try {
     // @ts-ignore
-    const Capacitor = window.Capacitor;
-    console.log("[LW] Capacitor disponível:", !!Capacitor);
-    console.log("[LW] isNative:", Capacitor?.isNativePlatform?.());
-
-    // @ts-ignore
     const { GoogleAuth } = window.Capacitor?.Plugins ?? {};
-    console.log("[LW] GoogleAuth plugin:", !!GoogleAuth);
+    if (!GoogleAuth) return false;
 
-    if (!GoogleAuth) {
-      console.error("[LW] GoogleAuth plugin não encontrado");
-      return false;
-    }
-
-    console.log("[LW] Inicializando GoogleAuth...");
     await GoogleAuth.initialize({
       clientId: "510384512031-6bsejt1g5ffgg8e34n9kevt7hn4r8spv.apps.googleusercontent.com",
       scopes: ["profile", "email"],
       grantOfflineAccess: true,
     });
 
-    console.log("[LW] Abrindo tela de login Google...");
     const user = await GoogleAuth.signIn();
-    console.log("[LW] user retornado:", JSON.stringify(user));
-
     const idToken = user?.authentication?.idToken;
-    console.log("[LW] idToken existe:", !!idToken);
-    console.log("[LW] idToken início:", idToken?.substring(0, 50));
+    if (!idToken) return false;
 
-    if (!idToken) {
-      console.error("[LW] idToken não encontrado");
-      return false;
-    }
-
-    console.log("[LW] Enviando para /api/auth/google-native...");
+    // Enviar para o servidor que vai criar a sessão via NextAuth
     const res = await fetch("/api/auth/google-native", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -44,28 +24,28 @@ export async function googleSignInNative(): Promise<boolean> {
       body: JSON.stringify({ idToken }),
     });
 
-    console.log("[LW] HTTP status:", res.status);
+    if (!res.ok) return false;
     const data = await res.json();
-    console.log("[LW] Resposta:", JSON.stringify(data));
+    if (!data.ok) return false;
 
-    if (!res.ok) {
-      console.error("[LW] Erro servidor:", data.error);
-      return false;
-    }
+    // Usar signIn do NextAuth com o token já validado
+    // em vez de setar cookie manualmente
+    const { signIn } = await import("next-auth/react");
+    const result = await signIn("credentials", {
+      redirect: false,
+      nativeToken: data.token,
+      nativeEmail: data.user.email,
+    });
 
-    if (data.token) {
-      document.cookie = `next-auth.session-token=${data.token}; path=/; secure; samesite=lax`;
+    if (result?.ok) {
       const dest = data.user?.groupId ? "/dashboard" : "/signup?mode=new-group";
-      console.log("[LW] Redirecionando para:", dest);
       window.location.href = dest;
       return true;
     }
 
-    console.error("[LW] Token não veio na resposta");
     return false;
   } catch (err) {
     console.error("[LW] Erro:", err);
-    console.error("[LW] Mensagem:", (err as any)?.message);
     return false;
   }
 }
