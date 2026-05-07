@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { sendSmtpMail } from "@/lib/smtp";
+import { sendPushToMany, getPushTokensForUsers, getPushTokensForGroup } from "@/lib/push-notifications";
 
 const APP_URL  = process.env.NEXTAUTH_URL ?? "https://liderweb.multitrackgospel.com";
 const FROM_EMAIL = process.env.SMTP_USER  ?? "liderweb@multitrackgospel.com";
@@ -72,14 +73,26 @@ export async function PATCH(req: NextRequest) {
         fromName: "Líder Web",
       }).catch(() => {});
     }
+
+    // Push notification para membros com app instalado
+    const memberIds = [...allMembers.keys()];
+    const tokens = await getPushTokensForUsers(memberIds);
+    if (tokens.length > 0) {
+      await sendPushToMany(tokens, {
+        title: "📅 Escala publicada!",
+        body: `A escala de ${scheduleDate} do ${schedule.group?.name} foi publicada.`,
+        data: { url: "/schedules", type: "schedule_published" },
+      });
+    }
+
     return allMembers.size;
   };
 
-  const notifyLeaders = async (subject: string, html: string) => {
+  const notifyLeaders = async (subject: string, html: string, pushTitle?: string, pushBody?: string) => {
     if (!schedule.groupId) return;
     const leaders = await prisma.user.findMany({
       where: { groupId: schedule.groupId, role: { in: ["ADMIN", "LEADER"] } },
-      select: { name: true, email: true },
+      select: { id: true, name: true, email: true },
     });
     for (const l of leaders) {
       if (!l.email) continue;
@@ -90,6 +103,19 @@ export async function PATCH(req: NextRequest) {
         fromEmail: FROM_EMAIL,
         fromName: "Líder Web",
       }).catch(() => {});
+    }
+
+    // Push para líderes com app
+    if (pushTitle && pushBody) {
+      const leaderIds = leaders.map((l) => l.id);
+      const tokens = await getPushTokensForUsers(leaderIds);
+      if (tokens.length > 0) {
+        await sendPushToMany(tokens, {
+          title: pushTitle,
+          body: pushBody,
+          data: { url: "/schedules", type: "schedule_update" },
+        });
+      }
     }
   };
 
@@ -177,6 +203,16 @@ export async function PATCH(req: NextRequest) {
         }).catch(() => {});
       }
 
+      // Push para o ministro
+      const ministerTokens = await getPushTokensForUsers([minister.id]);
+      if (ministerTokens.length > 0) {
+        await sendPushToMany(ministerTokens, {
+          title: "🎵 Revisão de músicas necessária",
+          body: `Culto de ${scheduleDate} — ${schedule.group?.name}. Toque para revisar.`,
+          data: { url: `/schedules/review?id=${scheduleId}`, type: "schedule_review" },
+        });
+      }
+
       return NextResponse.json({
         status: "PENDING_APPROVAL",
         message: `Escala enviada para ${minister.name} revisar. Prazo: ${deadlineStr}`,
@@ -261,7 +297,9 @@ export async function PATCH(req: NextRequest) {
           <div style="text-align:center;margin:20px 0;">
             <a href="${APP_URL}/schedules" style="background:#22c55e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Publicar escala →</a>
           </div>
-        </div>`
+        </div>`,
+        "✅ Escala aprovada!",
+        `O ministro ${user.name} aprovou o repertório do culto de ${scheduleDate}. Publique agora!`
       );
       return NextResponse.json({ status: "APPROVED", message: "Músicas aprovadas! Líderes notificados para publicar." });
     }
@@ -322,7 +360,9 @@ export async function PATCH(req: NextRequest) {
           <div style="text-align:center;margin:20px 0;">
             <a href="${APP_URL}/schedules" style="background:#f59e0b;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Publicar manualmente →</a>
           </div>
-        </div>`
+        </div>`,
+        "⚠️ Prazo de revisão vencido",
+        `O ministro não aprovou a escala de ${scheduleDate} a tempo. Publique manualmente.`
       );
       return NextResponse.json({ status: "REVIEW_TIMEOUT", message: "Escala marcada como REVIEW_TIMEOUT. Líder notificado." });
     }
