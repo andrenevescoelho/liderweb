@@ -18,7 +18,7 @@ export async function googleSignInNative(): Promise<boolean> {
 
     console.log("[LW] Inicializando GoogleAuth...");
     await GoogleAuth.initialize({
-      clientId: "510384512031-n27ieo0cqa1b5de7eg8jdvtqnk6qss52.apps.googleusercontent.com",
+      clientId: "510384512031-6bsejt1g5ffgg8e34n9kevt7hn4r8spv.apps.googleusercontent.com",
       scopes: ["profile", "email"],
       grantOfflineAccess: true,
     });
