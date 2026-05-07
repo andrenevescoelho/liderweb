@@ -8,6 +8,7 @@ import { X } from "lucide-react";
 import pkg from "../package.json";
 import { PendingAnnouncementModal } from "@/components/pending-announcement-modal";
 import { FloatingChat } from "@/components/floating-chat";
+import { CapacitorSessionRestore } from "@/components/capacitor-session-restore";
 
 const APP_VERSION = `Versão ${pkg.version}`;
 
@@ -61,6 +62,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
+      <CapacitorSessionRestore />
       {!isMobile && <Sidebar collapsed={collapsed} onToggle={toggleSidebar} isMobile={false} />}
 
       {isMobile && mobileMenuOpen && (
