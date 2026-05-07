@@ -88,8 +88,34 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        nativeToken: { label: "Native Token", type: "text" },
+        nativeEmail: { label: "Native Email", type: "text" },
       },
       async authorize(credentials) {
+        // Login nativo via Capacitor (Google Sign-In)
+        if (credentials?.nativeToken && credentials?.nativeEmail) {
+          try {
+            const { decode } = await import("next-auth/jwt");
+            const decoded = await decode({
+              token: credentials.nativeToken,
+              secret: process.env.NEXTAUTH_SECRET!,
+            });
+            if (decoded?.email === credentials.nativeEmail) {
+              const user = await prisma.user.findUnique({
+                where: { email: credentials.nativeEmail },
+                include: {
+                  profile: { select: { permissions: true, avatarUrl: true } },
+                  group: { include: { subscription: { include: { plan: true } } } },
+                },
+              });
+              if (user) return user as any;
+            }
+          } catch (e) {
+            console.error("[auth] nativeToken inválido:", e);
+          }
+          return null;
+        }
+
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
