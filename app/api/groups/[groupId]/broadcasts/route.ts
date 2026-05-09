@@ -11,6 +11,7 @@ import {
   isBroadcastSenderRole,
   validateMessageContent,
 } from "@/lib/messages";
+import { sendPushToMany, getPushTokensForGroup } from "@/lib/push-notifications";
 
 const PAGE_SIZE_DEFAULT = 20;
 
@@ -132,6 +133,25 @@ export async function POST(
         },
       },
     });
+
+    // Push para todos os membros do grupo (exceto o remetente)
+    getPushTokensForGroup(groupId).then(async (allTokens) => {
+      const senderSessions = await (prisma as any).userActiveSession.findMany({
+        where: { userId: user.id },
+        select: { pushToken: true },
+      });
+      const senderTokens = new Set(senderSessions.map((s: any) => s.pushToken).filter(Boolean));
+      const tokens = allTokens.filter(t => !senderTokens.has(t));
+      if (tokens.length > 0) {
+        const senderName = user.name ?? "Líder";
+        const preview = (validation.content ?? "").substring(0, 100);
+        await sendPushToMany(tokens, {
+          title: `📢 Comunicado de ${senderName}`,
+          body: preview,
+          data: { url: "/comunicados", type: "broadcast" },
+        });
+      }
+    }).catch(() => {});
 
     return NextResponse.json(broadcast, { status: 201 });
   } catch (error) {
