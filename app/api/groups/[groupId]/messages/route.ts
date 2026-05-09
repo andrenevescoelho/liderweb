@@ -128,11 +128,8 @@ export async function POST(
       },
     });
 
-    return NextResponse.json(message, { status: 201 });
-
     // Push para membros do grupo exceto o remetente (fire-and-forget)
     getPushTokensForGroup(groupId).then(async (allTokens) => {
-      // Buscar token do remetente para excluir
       const senderSessions = await (prisma as any).userActiveSession.findMany({
         where: { userId: user.id },
         select: { pushToken: true },
@@ -145,10 +142,12 @@ export async function POST(
         await sendPushToMany(tokens, {
           title: `💬 ${senderName}`,
           body: preview,
-          data: { url: `/chat`, type: "chat_message", groupId },
+          data: { url: "/chat-grupo", type: "chat_message", groupId },
         });
       }
     }).catch(() => {});
+
+    return NextResponse.json(message, { status: 201 });
   } catch (error) {
     console.error("Send group message error:", error);
     return NextResponse.json({ error: "Erro ao enviar mensagem" }, { status: 500 });
