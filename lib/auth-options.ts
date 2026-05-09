@@ -248,27 +248,11 @@ export const authOptions: NextAuthOptions = {
       // Verificar limite de sessões para TODOS os providers
       if (user?.id) {
         try {
-          // Limpar sessões expiradas antes de verificar o limite
-          const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-          const expiredBefore = new Date(Date.now() - SESSION_TTL_MS);
+          // Deletar TODAS as sessões antigas ao fazer novo login
+          // Comportamento estilo Netflix — novo login expulsa o anterior
           await (prisma as any).userActiveSession.deleteMany({
-            where: { userId: user.id, lastSeenAt: { lt: expiredBefore } },
-          }).catch(() => {});
-
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { maxSessions: true },
-          });
-          const maxSessions = dbUser?.maxSessions ?? 1;
-          const activeSessions = await (prisma as any).userActiveSession.findMany({
             where: { userId: user.id },
-            orderBy: { createdAt: "asc" },
-          });
-
-          // Se já atingiu o limite, bloquear o login
-          if (activeSessions.length >= maxSessions) {
-            return "/login?error=session_limit_reached";
-          }
+          }).catch(() => {});
         } catch {
           // Fail open — nunca bloquear login por falha na verificação
         }
@@ -408,18 +392,15 @@ export const authOptions: NextAuthOptions = {
           // Antes era fire-and-forget; em produção isso podia gerar JWT com sessionId
           // antes da linha existir em UserActiveSession, causando SESSION_REVOKED no middleware.
           try {
-            const dbUser = await prisma.user.findUnique({
-              where: { id: user.id },
-              select: { maxSessions: true },
+            // Deletar TODAS as sessões anteriores do usuário ao fazer novo login
+            // Isso garante que o novo login sempre funciona, sem SESSION_REVOKED
+            await (prisma as any).userActiveSession.deleteMany({
+              where: { userId: user.id },
             });
-            const maxSessions = dbUser?.maxSessions ?? 1;
 
-            await (prisma as any).userActiveSession.upsert({
-              where: { sessionId },
-              update: {
-                lastSeenAt: new Date(),
-              },
-              create: {
+            // Criar nova sessão
+            await (prisma as any).userActiveSession.create({
+              data: {
                 userId: user.id,
                 sessionId,
                 ip: null,
@@ -428,22 +409,7 @@ export const authOptions: NextAuthOptions = {
               },
             });
 
-            const sessions = await (prisma as any).userActiveSession.findMany({
-              where: { userId: user.id },
-              orderBy: { createdAt: "asc" },
-            });
-
-            if (sessions.length > maxSessions) {
-              const toDelete = sessions
-                .filter((s: any) => s.sessionId !== sessionId)
-                .slice(0, Math.max(0, sessions.length - maxSessions));
-
-              if (toDelete.length > 0) {
-                await (prisma as any).userActiveSession.deleteMany({
-                  where: { id: { in: toDelete.map((s: any) => s.id) } },
-                });
-              }
-            }
+            console.log(`[auth] Sessão criada para ${user.id}: ${sessionId}`);
           } catch (e) {
             console.warn("[auth] Falha ao registrar sessão ativa:", e);
           }

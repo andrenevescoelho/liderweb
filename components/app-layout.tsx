@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { X } from "lucide-react";
@@ -25,7 +26,27 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const isFullscreen = FULLSCREEN_ROUTES.some(r => pathname?.startsWith(r));
+
+  // Polling de sessão — verifica a cada 30s se a sessão ainda é válida
+  // Força logout imediato se outra aba fez login com o mesmo usuário
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const res = await fetch("/api/auth/check-session", { credentials: "include" });
+        if (res.status === 401) {
+          await signOut({ redirect: false });
+          router.replace("/login");
+        }
+      } catch {
+        // Ignorar erros de rede
+      }
+    };
+
+    const interval = setInterval(checkSession, 30_000);
+    return () => clearInterval(interval);
+  }, [router]);
 
   useEffect(() => {
     setMounted(true);
