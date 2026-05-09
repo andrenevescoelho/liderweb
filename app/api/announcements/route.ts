@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { resolveAnnouncementStatus } from "@/lib/announcements";
+import { sendPushToMany, getPushTokensForGroup } from "@/lib/push-notifications";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -104,5 +105,43 @@ export async function POST(req: NextRequest) {
     ...context,
   });
 
+  // Push se o comunicado está ativo imediatamente
+  if (!announcement.startsAt || new Date(announcement.startsAt) <= new Date()) {
+    sendAnnouncementPush(announcement, groupIds, targetScope).catch(() => {});
+  }
+
   return NextResponse.json({ announcement }, { status: 201 });
+}
+
+async function sendAnnouncementPush(announcement: any, groupIds: string[], targetScope: string) {
+  try {
+    let tokens: string[] = [];
+
+    if (targetScope === "ALL_PLATFORM") {
+      // Buscar todos os usuários com token ativo
+      const sessions = await (prisma as any).userActiveSession.findMany({
+        where: { pushToken: { not: null } },
+        select: { pushToken: true },
+        distinct: ["userId"],
+      });
+      tokens = sessions.map((s: any) => s.pushToken).filter(Boolean);
+    } else if (targetScope === "SELECTED_GROUPS" && groupIds.length > 0) {
+      // Buscar tokens dos grupos selecionados
+      for (const gId of groupIds) {
+        const t = await getPushTokensForGroup(gId);
+        tokens.push(...t);
+      }
+      tokens = [...new Set(tokens)];
+    }
+
+    if (tokens.length > 0) {
+      await sendPushToMany(tokens, {
+        title: `📢 ${announcement.title}`,
+        body: announcement.message?.substring(0, 100) ?? "Novo comunicado",
+        data: { url: "/comunicados", type: "announcement" },
+      });
+    }
+  } catch (err) {
+    console.error("[announcement] Erro ao enviar push:", err);
+  }
 }

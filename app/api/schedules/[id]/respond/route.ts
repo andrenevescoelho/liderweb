@@ -9,6 +9,7 @@ import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit
 import { sendSmtpMail } from "@/lib/smtp";
 import { presenceResponseEmail } from "@/lib/email-templates";
 import { AuditEntityType } from "@prisma/client";
+import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
 
 export async function POST(
   req: NextRequest,
@@ -90,7 +91,7 @@ export async function POST(
             include: {
               users: {
                 where: { role: { in: ["ADMIN", "LEADER"] } },
-                select: { name: true, email: true, role: true },
+                select: { id: true, name: true, email: true, role: true },
                 take: 3,
               },
             },
@@ -102,9 +103,13 @@ export async function POST(
         const groupName = schedule.group.name ?? "Ministério";
         const memberName = user.name ?? "Membro";
         const roleLabel = scheduleRole.role ?? "Membro";
+        const statusLabel = status === "ACCEPTED" ? "confirmou" : "recusou";
+        const emoji = status === "ACCEPTED" ? "✅" : "❌";
 
+        const adminIds: string[] = [];
         for (const admin of schedule.group.users) {
           if (!admin.email || admin.email === user.email) continue;
+          adminIds.push((admin as any).id);
           const { subject, html } = presenceResponseEmail({
             adminName: admin.name ?? "Líder",
             adminEmail: admin.email,
@@ -118,6 +123,19 @@ export async function POST(
           });
           await sendSmtpMail({ to: admin.email, subject, html, fromEmail, fromName: "Líder Web" })
             .catch(err => console.warn(`[respond] email para ${admin.email} falhou:`, err));
+        }
+
+        // Push para os líderes
+        if (adminIds.length > 0) {
+          const tokens = await getPushTokensForUsers(adminIds);
+          if (tokens.length > 0) {
+            const scheduleDate = new Date(schedule.date).toLocaleDateString("pt-BR");
+            await sendPushToMany(tokens, {
+              title: `${emoji} ${memberName} ${statusLabel} a escala`,
+              body: `${roleLabel} — culto de ${scheduleDate} (${groupName})`,
+              data: { url: "/schedules", type: "schedule_response" },
+            }).catch(() => {});
+          }
         }
       }
     } catch (emailErr) {

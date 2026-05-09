@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { emailsMatch } from "@/lib/email";
+import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +97,23 @@ export async function POST(
       groupName: invite.group.name,
       groupId: invite.group.id,
     });
+
+    // Push para líderes do grupo notificando novo membro (fire-and-forget)
+    prisma.user.findMany({
+      where: { groupId: invite.groupId, role: { in: ["ADMIN", "LEADER"] }, id: { not: user.id } },
+      select: { id: true },
+    }).then(async (leaders) => {
+      const leaderIds = leaders.map((l) => l.id);
+      const tokens = await getPushTokensForUsers(leaderIds);
+      if (tokens.length > 0) {
+        const userName = (session?.user as any)?.name ?? "Novo membro";
+        await sendPushToMany(tokens, {
+          title: "🎉 Novo membro no ministério!",
+          body: `${userName} aceitou o convite e entrou em ${invite.group.name}`,
+          data: { url: "/members", type: "invite_accepted" },
+        });
+      }
+    }).catch(() => {});
   } catch (error) {
     console.error("Error accepting invite:", error);
     return NextResponse.json({ error: "Erro ao aceitar convite" }, { status: 500 });
