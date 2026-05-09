@@ -1,38 +1,72 @@
-export const dynamic = "force-dynamic";
-
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 
-// POST /api/push/register — salva token FCM
-export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const user = session?.user as any;
-  if (!user?.id) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+export const dynamic = "force-dynamic";
 
-  const { token, platform } = await req.json();
-  if (!token) return NextResponse.json({ error: "Token obrigatório" }, { status: 400 });
+export async function POST(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
 
-  await (prisma as any).userActiveSession.updateMany({
-    where: { userId: user.id },
-    data: { pushToken: token, pushPlatform: platform ?? "android" },
-  }).catch(() => {});
+    const userId = (session?.user as any)?.id;
+    const sessionId = (session?.user as any)?.sessionId;
 
-  console.log(`[push] Token registrado para user ${user.id}`);
-  return NextResponse.json({ ok: true });
-}
+    if (!userId) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
 
-// DELETE /api/push/register — remove token ao fazer logout
-export async function DELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const user = session?.user as any;
-  if (!user?.id) return NextResponse.json({ ok: true });
+    const body = await request.json();
+    const token = String(body?.token || "").trim();
+    const platform = String(body?.platform || "android").trim();
 
-  await (prisma as any).userActiveSession.updateMany({
-    where: { userId: user.id },
-    data: { pushToken: null },
-  }).catch(() => {});
+    if (!token) {
+      return NextResponse.json({ error: "Token não informado" }, { status: 400 });
+    }
 
-  return NextResponse.json({ ok: true });
+    const data: any = {
+      pushToken: token,
+      pushPlatform: platform,
+      lastSeenAt: new Date(),
+    };
+
+    if (sessionId) {
+      const updated = await (prisma as any).userActiveSession.updateMany({
+        where: {
+          userId,
+          sessionId,
+        },
+        data,
+      });
+
+      if (updated.count > 0) {
+        return NextResponse.json({ ok: true });
+      }
+    }
+
+    const latestSession = await (prisma as any).userActiveSession.findFirst({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!latestSession) {
+      return NextResponse.json(
+        { error: "Sessão ativa não encontrada" },
+        { status: 404 }
+      );
+    }
+
+    await (prisma as any).userActiveSession.update({
+      where: { id: latestSession.id },
+      data,
+    });
+
+    return NextResponse.json({ ok: true, fallback: true });
+  } catch (err) {
+    console.error("[push/register] Erro:", err);
+    return NextResponse.json(
+      { error: "Erro ao registrar push" },
+      { status: 500 }
+    );
+  }
 }
