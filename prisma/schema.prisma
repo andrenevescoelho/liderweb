@@ -1684,7 +1684,6 @@ model UserActiveSession {
   lastSeenAt   DateTime?
 
   @@index([userId])
-  @@index([pushToken])
 }
 
 // ─── Templates de Escala ──────────────────────────────────────────────────────
