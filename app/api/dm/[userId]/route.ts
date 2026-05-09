@@ -10,6 +10,7 @@ import {
   checkRateLimit,
   validateMessageContent,
 } from "@/lib/messages";
+import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
 
 const PAGE_SIZE = 30;
 
@@ -141,6 +142,19 @@ export async function POST(
         sender: { select: { id: true, name: true } },
       },
     });
+
+    // Push para o destinatário (fire-and-forget)
+    getPushTokensForUsers([otherId]).then(async (tokens) => {
+      if (tokens.length > 0) {
+        const senderName = me.name ?? "Alguém";
+        const preview = (validation.content ?? "").substring(0, 100);
+        await sendPushToMany(tokens, {
+          title: `💬 ${senderName}`,
+          body: preview,
+          data: { url: `/chat-grupo`, type: "direct_message", senderId: me.id },
+        });
+      }
+    }).catch(() => {});
 
     return NextResponse.json(message, { status: 201 });
   } catch (error) {
