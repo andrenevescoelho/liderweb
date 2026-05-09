@@ -404,42 +404,49 @@ export const authOptions: NextAuthOptions = {
         if (user.id) {
           prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
 
-          // Fire-and-forget: registrar sessão e limpar excedentes
-          (async () => {
-            try {
-              const dbUser = await prisma.user.findUnique({
-                where: { id: user.id },
-                select: { maxSessions: true },
-              });
-              const maxSessions = dbUser?.maxSessions ?? 1;
+          // Registrar sessão ativa de forma aguardada.
+          // Antes era fire-and-forget; em produção isso podia gerar JWT com sessionId
+          // antes da linha existir em UserActiveSession, causando SESSION_REVOKED no middleware.
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { maxSessions: true },
+            });
+            const maxSessions = dbUser?.maxSessions ?? 1;
 
-              // Criar nova sessão ativa
-              await (prisma as any).userActiveSession.create({
-                data: {
-                  userId: user.id,
-                  sessionId,
-                  ip: null,
-                  userAgent: null,
-                },
-              });
+            await (prisma as any).userActiveSession.upsert({
+              where: { sessionId },
+              update: {
+                lastSeenAt: new Date(),
+              },
+              create: {
+                userId: user.id,
+                sessionId,
+                ip: null,
+                userAgent: null,
+                lastSeenAt: new Date(),
+              },
+            });
 
-              // Buscar todas as sessões do usuário ordenadas por criação
-              const sessions = await (prisma as any).userActiveSession.findMany({
-                where: { userId: user.id },
-                orderBy: { createdAt: "asc" },
-              });
+            const sessions = await (prisma as any).userActiveSession.findMany({
+              where: { userId: user.id },
+              orderBy: { createdAt: "asc" },
+            });
 
-              // Remover sessões mais antigas que excedem o limite
-              if (sessions.length > maxSessions) {
-                const toDelete = sessions.slice(0, sessions.length - maxSessions);
+            if (sessions.length > maxSessions) {
+              const toDelete = sessions
+                .filter((s: any) => s.sessionId !== sessionId)
+                .slice(0, Math.max(0, sessions.length - maxSessions));
+
+              if (toDelete.length > 0) {
                 await (prisma as any).userActiveSession.deleteMany({
                   where: { id: { in: toDelete.map((s: any) => s.id) } },
                 });
               }
-            } catch (e) {
-              console.warn("[auth] Falha ao registrar sessão ativa:", e);
             }
-          })();
+          } catch (e) {
+            console.warn("[auth] Falha ao registrar sessão ativa:", e);
+          }
         }
       }
 

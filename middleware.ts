@@ -149,7 +149,29 @@ export async function middleware(req: NextRequest) {
       });
 
       if (!activeSession) {
-        // Sessão foi revogada (limite excedido ou revogação manual)
+        const userId = (token as any).id;
+
+        // Em alguns cenários de produção, o JWT pode existir antes da sessão ativa
+        // ter sido persistida no banco. Se o token é válido e possui usuário,
+        // recriamos a sessão ativa em vez de derrubar o usuário imediatamente.
+        if (userId && sessionId) {
+          await (prisma as any).userActiveSession.upsert({
+            where: { sessionId },
+            update: {
+              lastSeenAt: new Date(),
+            },
+            create: {
+              userId,
+              sessionId,
+              ip: null,
+              userAgent: null,
+              lastSeenAt: new Date(),
+            },
+          });
+
+          return NextResponse.next();
+        }
+
         return NextResponse.json(
           { error: "Sessão expirada. Faça login novamente.", code: "SESSION_REVOKED" },
           { status: 401 }
