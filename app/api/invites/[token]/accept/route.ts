@@ -110,7 +110,7 @@ export async function POST(
         await sendPushToMany(tokens, {
           title: "🎉 Novo membro no ministério!",
           body: `${userName} aceitou o convite e entrou em ${invite.group.name}`,
-          data: { url: "/members", type: "invite_accepted" },
+          data: { url: "/admin", type: "invite_accepted" },
         });
       }
     }).catch(() => {});

@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
         await sendPushToMany(tokens, {
           title: "🎵 Novo ensaio agendado!",
           body: `Ensaio marcado para ${dateStr}. Confirme sua presença!`,
-          data: { url: "/rehearsals", type: "rehearsal_created" },
+          data: { url: "/ensaios", type: "rehearsal_created" },
         }).catch(() => {});
       }
     }

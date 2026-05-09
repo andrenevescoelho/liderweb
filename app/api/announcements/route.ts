@@ -118,10 +118,8 @@ async function sendAnnouncementPush(announcement: any, groupIds: string[], targe
     let tokens: string[] = [];
 
     if (targetScope === "ALL_PLATFORM") {
-      // Buscar todos os usuários com token ativo
       const sessions = await (prisma as any).userActiveSession.findMany({
-        where: { pushToken: { not: null } },
-        select: { pushToken: true },
+        select: { pushToken: true, userId: true },
         distinct: ["userId"],
       });
       tokens = sessions.map((s: any) => s.pushToken).filter(Boolean);
