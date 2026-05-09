@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { CapacitorPushRegister } from "@/components/mobile/CapacitorPushRegister";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,10 @@ export default function RootLayout({
       </head>
 
       <body className={`${geist?.className ?? ""} ${geist?.variable ?? ""} min-h-screen`}>
-        <Providers>{children}</Providers>
+        <Providers>
+        <CapacitorPushRegister />
+        {children}
+      </Providers>
       </body>
     </html>
   );
