@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/authorization";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
+import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
 
 const db = prisma as any;
 
@@ -176,13 +177,23 @@ export async function POST(req: NextRequest) {
       metadata: { status: created.status, songsCount: created.songs.length },
     });
 
-    return NextResponse.json({
-      ...created,
-      notificationStub:
-        created.status === "PUBLISHED"
-          ? "TODO: disparar notificação por email ao publicar ensaio"
-          : null,
-    });
+    // Push para membros do grupo
+    if (members.length > 0 && created.status === "PUBLISHED") {
+      const memberIds = members.map((m: { id: string }) => m.id);
+      const tokens = await getPushTokensForUsers(memberIds).catch(() => []);
+      if (tokens.length > 0) {
+        const dateStr = new Date(created.dateTime).toLocaleDateString("pt-BR", {
+          day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+        });
+        await sendPushToMany(tokens, {
+          title: "🎵 Novo ensaio agendado!",
+          body: `Ensaio marcado para ${dateStr}. Confirme sua presença!`,
+          data: { url: "/rehearsals", type: "rehearsal_created" },
+        }).catch(() => {});
+      }
+    }
+
+    return NextResponse.json({ ...created });
   } catch (error) {
     console.error("Create rehearsal error:", error);
     return NextResponse.json({ error: "Erro ao criar ensaio" }, { status: 500 });
