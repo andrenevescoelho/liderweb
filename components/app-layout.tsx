@@ -89,7 +89,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       {isMobile && mobileMenuOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setMobileMenuOpen(false)} />
-          <div className="fixed inset-y-0 left-0 z-50 w-[280px]">
+          <div className="fixed left-0 z-50 w-[280px]" style={{top: "env(safe-area-inset-top)", bottom: "env(safe-area-inset-bottom)"}}>
             <div className="relative h-full">
               <Sidebar collapsed={false} onToggle={() => {}} onMobileClose={() => setMobileMenuOpen(false)} isMobile />
               <button
