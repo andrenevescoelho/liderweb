@@ -111,7 +111,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             : <div className="mx-auto w-full max-w-[1400px]">{children}</div>
           }
         </main>
-        {!isFullscreen && <footer className="px-4 pb-4 text-center text-xs text-muted-foreground md:px-6">{APP_VERSION}</footer>}
+        {!isFullscreen && <footer className="px-4 text-center text-xs text-muted-foreground md:px-6" style={{paddingBottom: "calc(1rem + env(safe-area-inset-bottom))"}}>{APP_VERSION}</footer>}
         <PendingAnnouncementModal />
         <FloatingChat />
       </div>

@@ -52,7 +52,7 @@ export function AppHeader({ onMenuClick, isMobile }: AppHeaderProps) {
   }, []);
 
   return (
-    <header className="h-16 border-b border-border/80 bg-background/85 px-4 backdrop-blur md:px-6 sticky top-0 z-40">
+    <header className="border-b border-border/80 bg-background/85 px-4 backdrop-blur md:px-6 sticky top-0 z-40" style={{paddingTop: "env(safe-area-inset-top)"}}>
       <div className="flex h-full items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {isMobile && (

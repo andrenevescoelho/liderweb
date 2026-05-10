@@ -65,20 +65,12 @@
     scroll-behavior: smooth;
     height: 100%;
     overflow: hidden;
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     height: 100%;
     overflow: hidden;
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
   }
 
   /* Páginas fora do app (planos, login, etc) precisam de scroll normal */
