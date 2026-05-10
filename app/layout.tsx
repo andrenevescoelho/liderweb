@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 const geist = Inter({ subsets: ["latin"], variable: "--font-geist" });
 
 export const viewport: Viewport = {
+  viewportFit: "cover",
   themeColor: "#7c3aed",
 };
 
