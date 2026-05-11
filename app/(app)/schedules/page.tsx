@@ -728,7 +728,6 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
 
   const addRoleToList = () => {
     const n = addRole === "__custom__" ? customRole.trim() : addRole; if (!n) return;
-    if (roles.some((r) => (r?.role ?? "").toLowerCase() === n.toLowerCase())) { alert("Esse papel já existe na escala."); return; }
     setRoles([...roles, { role: n, memberId: "", status: "PENDING" }]);
     setAddRole(""); setCustomRole(""); setShowAddRoleForm(false);
   };
@@ -912,7 +911,6 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
                   <Select value={addRole} onChange={(e) => setAddRole(e.target.value)} options={[
                     { value: "", label: "Selecione um papel" },
                     ...(groupRoleFunctions.length > 0 ? groupRoleFunctions : SCHEDULE_ROLES.map((r) => ({ name: r })))
-                      .filter((f) => !roles.some((x) => (x.role ?? "").toLowerCase() === f.name.toLowerCase()))
                       .map((f) => ({ value: f.name, label: f.name })),
                     { value: "__custom__", label: "Informar nome do papel" },
                   ]} />
