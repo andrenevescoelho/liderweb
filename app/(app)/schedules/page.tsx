@@ -53,6 +53,14 @@ export default function SchedulesPage() {
   const [publishingScheduleId, setPublishingScheduleId] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [reorderItems, setReorderItems] = useState<any[]>([]);
+
+  // Resetar modo reorder ao trocar de escala
+  useEffect(() => {
+    setReorderMode(false);
+    setReorderItems([]);
+  }, [selectedSchedule?.id]);
+
+  const canReorderSchedule = canEdit && ["DRAFT", "APPROVED", "REVIEW_TIMEOUT"].includes(selectedSchedule?.status ?? "");
   const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
 
@@ -416,8 +424,6 @@ export default function SchedulesPage() {
                   const items = selectedSchedule?.setlist?.items ?? [];
                   if (!items.length) return <p className="font-medium text-gray-900 dark:text-white">Sem músicas definidas</p>;
 
-                  const canReorder = canEdit && ["DRAFT", "APPROVED", "REVIEW_TIMEOUT"].includes(selectedSchedule?.status);
-
                   const moveItem = (index: number, direction: "up" | "down") => {
                     const newItems = [...reorderItems];
                     const targetIndex = direction === "up" ? index - 1 : index + 1;
@@ -449,7 +455,7 @@ export default function SchedulesPage() {
 
                   return (
                     <>
-                      {canReorder && (
+                      {canReorderSchedule && (
                         <div className="flex gap-2 mb-2">
                           {!reorderMode ? (
                             <button
