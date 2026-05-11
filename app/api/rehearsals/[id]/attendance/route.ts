@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (!rehearsal) return NextResponse.json({ error: "Ensaio não encontrado" }, { status: 404 });
 
-    if (user.role !== "SUPERADMIN" && rehearsal.groupId !== user.groupId) {
+    if (user.role !== "SUPERADMIN" && user.role !== "ADMIN" && user.role !== "LEADER" && rehearsal.groupId !== user.groupId) {
       return NextResponse.json({ error: "Sem permissão para confirmar presença" }, { status: 403 });
     }
 

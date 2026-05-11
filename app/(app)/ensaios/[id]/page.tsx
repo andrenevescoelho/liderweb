@@ -80,11 +80,17 @@ export default function EnsaioDetalhePage() {
   );
 
   const respond = async (status: string) => {
-    await fetch(`/api/rehearsals/${params.id}/attendance`, {
+    const res = await fetch(`/api/rehearsals/${params.id}/attendance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status, justification }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Attendance error:", err);
+      toast({ title: "Erro", description: err?.error ?? "Erro ao confirmar presença", variant: "destructive" });
+      return;
+    }
     load();
   };
 
