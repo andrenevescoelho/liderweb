@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music, Send, Zap, RotateCcw, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, Check, X, Clock, Users, CalendarDays, Sparkles, ChevronDown, Youtube, ExternalLink, Music, Send, Zap, RotateCcw, AlertTriangle, ArrowUp, ArrowDown, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,8 @@ export default function SchedulesPage() {
   const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
   const [respondingRoleId, setRespondingRoleId] = useState<string | null>(null);
   const [publishingScheduleId, setPublishingScheduleId] = useState<string | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [reorderItems, setReorderItems] = useState<any[]>([]);
   const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const scheduleIdFromQuery = searchParams?.get("scheduleId") ?? "";
 
@@ -413,25 +415,99 @@ export default function SchedulesPage() {
                 {(() => {
                   const items = selectedSchedule?.setlist?.items ?? [];
                   if (!items.length) return <p className="font-medium text-gray-900 dark:text-white">Sem músicas definidas</p>;
+
+                  const canReorder = canEdit && ["DRAFT", "APPROVED", "REVIEW_TIMEOUT"].includes(selectedSchedule?.status);
+
+                  const moveItem = (index: number, direction: "up" | "down") => {
+                    const newItems = [...reorderItems];
+                    const targetIndex = direction === "up" ? index - 1 : index + 1;
+                    if (targetIndex < 0 || targetIndex >= newItems.length) return;
+                    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+                    setReorderItems(newItems);
+                  };
+
+                  const saveReorder = async () => {
+                    const songIds = reorderItems.map((i: any) => i.songId);
+                    const res = await fetch(`/api/schedules/${selectedSchedule.id}/reorder`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ songIds }),
+                    });
+                    if (res.ok) {
+                      setSelectedSchedule((prev: any) => prev ? {
+                        ...prev,
+                        setlist: { ...prev.setlist, items: reorderItems }
+                      } : prev);
+                      setReorderMode(false);
+                      toast.success("Ordem das músicas salva!");
+                    } else {
+                      toast.error("Erro ao salvar ordem");
+                    }
+                  };
+
+                  const displayItems = reorderMode ? reorderItems : items;
+
                   return (
+                    <>
+                      {canReorder && (
+                        <div className="flex gap-2 mb-2">
+                          {!reorderMode ? (
+                            <button
+                              type="button"
+                              onClick={() => { setReorderItems([...items]); setReorderMode(true); }}
+                              className="inline-flex items-center gap-1.5 text-xs rounded-md bg-purple-500/10 px-2.5 py-1 font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition-colors"
+                            >
+                              <GripVertical className="w-3.5 h-3.5" /> Reordenar músicas
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={saveReorder}
+                                className="inline-flex items-center gap-1.5 text-xs rounded-md bg-green-500/10 px-2.5 py-1 font-medium text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5" /> Salvar ordem
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setReorderMode(false)}
+                                className="inline-flex items-center gap-1.5 text-xs rounded-md bg-gray-500/10 px-2.5 py-1 font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-500/20 transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" /> Cancelar
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     <ul className="space-y-1.5">
-                      {items.map((item: any, i: number) => {
+                      {displayItems.map((item: any, i: number) => {
                         const song = item?.song;
-                        const isExpanded = expandedSongIdx === i;
+                        const isExpanded = !reorderMode && expandedSongIdx === i;
                         const key = item?.selectedKey ?? song?.originalKey ?? null;
                         return (
                           <li key={`${item?.songId}-${i}`}>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedSongIdx(isExpanded ? null : i)}
-                              className="w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+                            <div className={`w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 ${reorderMode ? "bg-gray-50 dark:bg-gray-800/50" : "hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"} transition-colors text-left`}
+                              onClick={() => !reorderMode && setExpandedSongIdx(isExpanded ? null : i)}
                             >
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-bold flex-shrink-0">{i + 1}</span>
                               <span className="flex-1 truncate font-medium">{song?.title ?? "Música sem nome"}</span>
                               {key && <span className="text-xs rounded bg-purple-500/10 px-1.5 py-0.5 text-purple-600 dark:text-purple-400 flex-shrink-0">{key}</span>}
-                              {song?.bpm && <span className="text-xs text-gray-400 flex-shrink-0">{song.bpm} BPM</span>}
-                              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                            </button>
+                              {song?.bpm && !reorderMode && <span className="text-xs text-gray-400 flex-shrink-0">{song.bpm} BPM</span>}
+                              {reorderMode ? (
+                                <div className="flex gap-1 flex-shrink-0">
+                                  <button type="button" onClick={() => moveItem(i, "up")} disabled={i === 0}
+                                    className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30">
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button type="button" onClick={() => moveItem(i, "down")} disabled={i === displayItems.length - 1}
+                                    className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30">
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                              )}
+                            </div>
                             {isExpanded && (
                               <div className="mx-2 mb-1 rounded-lg border border-border bg-muted/30 p-3 space-y-2">
                                 <div className="flex flex-wrap gap-3 text-sm">
@@ -494,6 +570,7 @@ export default function SchedulesPage() {
                         );
                       })}
                     </ul>
+                    </>
                   );
                 })()}
                 <p className="text-xs text-gray-500 mt-2">{formatScheduleSongs(selectedSchedule).countLabel}</p>
