@@ -33,18 +33,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             song: {
               include: {
                 attachments: true,
-                multitracks: {
-                  where: { isActive: true, status: "READY" },
-                  select: {
-                    id: true,
-                    rentals: {
-                      where: { groupId: user.groupId, status: "ACTIVE" },
-                      select: { id: true },
-                      take: 1,
-                    },
-                  },
-                  take: 1,
-                },
                 padBoards: {
                   where: { isActive: true },
                   select: { id: true },
@@ -72,8 +60,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       songs: rehearsal.songs.map((rs: any) => {
         const song = rs.song;
         if (!song) return rs;
-        const hasMultitrack = canViewMultitrack && (song.multitracks?.length ?? 0) > 0;
-        const multitrackRented = hasMultitrack && song.multitracks[0].rentals?.length > 0;
+        const hasMultitrack = false;
+        const multitrackRented = false;
         return {
           ...rs,
           resources: {
@@ -81,7 +69,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             youtube: Boolean(rs.youtubeUrl || song.youtubeUrl),
             audio: Boolean(rs.audioUrl || song.audioUrl),
             multitrack: hasMultitrack,
-            multitrackAlbumId: hasMultitrack ? (song.multitracks?.[0]?.id ?? null) : null,
+            multitrackAlbumId: null,
             multitrackRented,
             pad: (song.padBoards?.length ?? 0) > 0,
             padBoardId: song.padBoards?.[0]?.id ?? null,
