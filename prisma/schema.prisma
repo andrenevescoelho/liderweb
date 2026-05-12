@@ -627,6 +627,7 @@ model MemberProfile {
   repertoirePrefs   String?                @db.Text
   instagram         String?
   youtube           String?
+  notificationPreferences Json?
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
   memberFunctions   MemberFunctionLegacy[] @default([])
   active            Boolean                @default(true)
