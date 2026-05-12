@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { sendSmtpMail } from "@/lib/smtp";
 import { sendPushToMany, getPushTokensForUsers, getPushTokensForGroup } from "@/lib/push-notifications";
+import { userWantsNotification, filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 const APP_URL  = process.env.NEXTAUTH_URL ?? "https://liderweb.multitrackgospel.com";
 const FROM_EMAIL = process.env.SMTP_USER  ?? "liderweb@multitrackgospel.com";
@@ -58,7 +59,13 @@ export async function PATCH(req: NextRequest) {
       if (r.member?.email && r.memberId)
         allMembers.set(r.memberId, { name: r.member.name ?? "", email: r.member.email });
     });
-    for (const [, member] of allMembers) {
+
+    const memberIds = [...allMembers.keys()];
+
+    // Filtrar quem quer email de escala publicada
+    const emailIds = await filterUsersByNotifPref(memberIds, "schedule_published_email");
+    for (const [memberId, member] of allMembers) {
+      if (!emailIds.includes(memberId)) continue;
       await sendSmtpMail({
         to: member.email,
         subject: `📅 Escala do dia ${scheduleDate} publicada — ${schedule.group?.name}`,
@@ -74,9 +81,9 @@ export async function PATCH(req: NextRequest) {
       }).catch(() => {});
     }
 
-    // Push notification para membros com app instalado
-    const memberIds = [...allMembers.keys()];
-    const tokens = await getPushTokensForUsers(memberIds);
+    // Push notification — filtrar quem quer push de escala publicada
+    const pushIds = await filterUsersByNotifPref(memberIds, "schedule_published_push");
+    const tokens = await getPushTokensForUsers(pushIds);
     if (tokens.length > 0) {
       await sendPushToMany(tokens, {
         title: "📅 Escala publicada!",
@@ -88,14 +95,17 @@ export async function PATCH(req: NextRequest) {
     return allMembers.size;
   };
 
-  const notifyLeaders = async (subject: string, html: string, pushTitle?: string, pushBody?: string) => {
+  const notifyLeaders = async (subject: string, html: string, pushTitle?: string, pushBody?: string, emailPrefKey = "schedule_approved_email", pushPrefKey = "schedule_approved_push") => {
     if (!schedule.groupId) return;
     const leaders = await prisma.user.findMany({
       where: { groupId: schedule.groupId, role: { in: ["ADMIN", "LEADER"] } },
       select: { id: true, name: true, email: true },
     });
+
+    const leaderIds = leaders.map((l) => l.id);
+    const emailIds = await filterUsersByNotifPref(leaderIds, emailPrefKey);
     for (const l of leaders) {
-      if (!l.email) continue;
+      if (!l.email || !emailIds.includes(l.id)) continue;
       await sendSmtpMail({
         to: l.email,
         subject,
@@ -107,8 +117,8 @@ export async function PATCH(req: NextRequest) {
 
     // Push para líderes com app
     if (pushTitle && pushBody) {
-      const leaderIds = leaders.map((l) => l.id);
-      const tokens = await getPushTokensForUsers(leaderIds);
+      const pushIds = await filterUsersByNotifPref(leaderIds, pushPrefKey);
+      const tokens = await getPushTokensForUsers(pushIds);
       if (tokens.length > 0) {
         await sendPushToMany(tokens, {
           title: pushTitle,
@@ -175,7 +185,8 @@ export async function PATCH(req: NextRequest) {
         : "Após sua aprovação, o líder será notificado para revisar e publicar.";
 
       if (minister.email) {
-        await sendSmtpMail({
+        const wantsEmail = await userWantsNotification(minister.id, "schedule_approved_email");
+        if (wantsEmail) await sendSmtpMail({
           to: minister.email,
           subject: `🎵 Revise as músicas do culto de ${scheduleDate} — ${schedule.group?.name}`,
           html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -204,7 +215,8 @@ export async function PATCH(req: NextRequest) {
       }
 
       // Push para o ministro
-      const ministerTokens = await getPushTokensForUsers([minister.id]);
+      const wantsPush = await userWantsNotification(minister.id, "schedule_approved_push");
+      const ministerTokens = wantsPush ? await getPushTokensForUsers([minister.id]) : [];
       if (ministerTokens.length > 0) {
         await sendPushToMany(ministerTokens, {
           title: "🎵 Revisão de músicas necessária",

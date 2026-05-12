@@ -78,6 +78,42 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Preferências de notificação
+  const defaultNotifPrefs = {
+    schedule_published_push: true, schedule_published_email: true,
+    schedule_pending_push: true,   schedule_pending_email: false,
+    schedule_approved_push: true,  schedule_approved_email: false,
+    rehearsal_created_push: true,  rehearsal_created_email: true,
+    broadcast_push: true,          broadcast_email: false,
+    chat_push: true,               chat_email: false,
+    dm_push: true,                 dm_email: true,
+    invite_accepted_push: true,    invite_accepted_email: true,
+  };
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>(defaultNotifPrefs);
+  const [savingNotif, setSavingNotif] = useState(false);
+
+  const toggleNotif = (key: string) => setNotifPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const saveNotifPrefs = async () => {
+    setSavingNotif(true);
+    try {
+      const res = await fetch("/api/user/notification-preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(notifPrefs),
+      });
+      if (res.ok) {
+        toast({ title: "Preferências salvas!", description: "Suas configurações de notificação foram atualizadas." });
+      } else {
+        toast({ title: "Erro", description: "Não foi possível salvar as preferências.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro", description: "Erro ao salvar preferências.", variant: "destructive" });
+    } finally {
+      setSavingNotif(false);
+    }
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
@@ -122,6 +158,13 @@ export default function ProfilePage() {
           availability: Array.isArray(data?.availability) ? data.availability : [],
         });
         setIsGoogleUser(Boolean(data.isGoogleUser));
+
+        // Carregar preferências de notificação
+        const notifRes = await fetch("/api/user/notification-preferences", { cache: "no-store" });
+        if (notifRes.ok) {
+          const notifData = await notifRes.json();
+          setNotifPrefs(prev => ({ ...prev, ...notifData }));
+        }
       } catch (error: any) {
         toast({ title: "Erro ao carregar perfil", description: error?.message ?? "Tente novamente." });
       } finally {
@@ -470,6 +513,83 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Preferências de notificação */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Clock className="h-4 w-4" />
+            Notificações
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {[
+            {
+              label: "Escalas",
+              items: [
+                { key: "schedule_published", label: "Escala publicada", desc: "Quando uma escala for publicada para o grupo" },
+                { key: "schedule_pending",   label: "Confirmação pendente", desc: "Lembrete para confirmar presença na escala" },
+                { key: "schedule_approved",  label: "Escala aprovada", desc: "Quando o ministro aprovar a escala" },
+              ],
+            },
+            {
+              label: "Ensaios",
+              items: [
+                { key: "rehearsal_created", label: "Ensaio agendado", desc: "Quando um novo ensaio for criado" },
+              ],
+            },
+            {
+              label: "Comunicação",
+              items: [
+                { key: "broadcast", label: "Comunicados", desc: "Comunicados enviados pelo líder do grupo" },
+                { key: "chat",      label: "Chat do grupo", desc: "Novas mensagens no chat do ministério" },
+                { key: "dm",        label: "Mensagens diretas", desc: "Mensagens privadas de outros membros" },
+              ],
+            },
+            {
+              label: "Outros",
+              items: [
+                { key: "invite_accepted", label: "Convites aceitos", desc: "Quando alguém aceitar seu convite" },
+              ],
+            },
+          ].map((section) => (
+            <div key={section.label}>
+              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">{section.label}</p>
+              <div className="rounded-lg border border-border divide-y divide-border">
+                {section.items.map((item) => (
+                  <div key={item.key} className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.desc}</p>
+                    </div>
+                    <div className="flex gap-4 ml-4 flex-shrink-0">
+                      {[
+                        { channel: "push", label: "Push" },
+                        { channel: "email", label: "Email" },
+                      ].map(({ channel, label }) => (
+                        <label key={channel} className="flex flex-col items-center gap-1 cursor-pointer">
+                          <span className="text-xs text-muted-foreground">{label}</span>
+                          <div
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${notifPrefs[`${item.key}_${channel}`] ? "bg-primary" : "bg-muted"}`}
+                            onClick={() => toggleNotif(`${item.key}_${channel}`)}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${notifPrefs[`${item.key}_${channel}`] ? "translate-x-4" : "translate-x-1"}`} />
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="flex justify-end pt-2">
+            <Button onClick={saveNotifPrefs} disabled={savingNotif} size="sm">
+              {savingNotif ? "Salvando..." : "Salvar preferências"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
