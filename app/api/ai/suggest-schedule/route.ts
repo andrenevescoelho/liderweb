@@ -225,7 +225,8 @@ export async function POST(req: NextRequest) {
       observation,
       songStrategy = "group_top",
       ministerId = null,
-      previousAssignments = [], // membros já escalados em datas anteriores desta sessão
+      useQualification = false,
+      previousAssignments = [],
     } = body ?? {};
 
     const validStrategies: SongStrategy[] = ["minister_history", "group_top", "exploration"];
@@ -283,14 +284,34 @@ export async function POST(req: NextRequest) {
       strategy === "minister_history" ? ministerId : null
     );
 
+    // ── Classificações dos membros (se useQualification) ─────────────────────
+    let evaluationsMap: Record<string, Record<string, number>> = {};
+    if (useQualification) {
+      const evals = await prisma.$queryRaw<any[]>`
+        SELECT "memberId", criteria FROM "MemberEvaluation" WHERE "groupId" = ${user.groupId}
+      `.catch(() => []);
+      for (const e of evals) {
+        if (e.memberId && e.criteria) evaluationsMap[e.memberId] = e.criteria;
+      }
+    }
+
     // ── Montar prompt ─────────────────────────────────────────────────────────
     const membersText = activeMembers.length > 0
-      ? activeMembers.map((m) =>
-          `- ${m.name}: funções=[${m.roles.join(", ") || "sem função definida"}]` +
-          (m.availability?.length ? `, disponível=[${m.availability.join(", ")}]` : "") +
-          (m.voiceType ? `, voz=${m.voiceType}` : "")
-        ).join("\n")
+      ? activeMembers.map((m) => {
+          const eval_ = evaluationsMap[m.id];
+          const avgScore = eval_
+            ? (Object.values(eval_).reduce((a, b) => a + b, 0) / Object.values(eval_).length).toFixed(1)
+            : null;
+          return `- ${m.name}: funções=[${m.roles.join(", ") || "sem função definida"}]` +
+            (m.availability?.length ? `, disponível=[${m.availability.join(", ")}]` : "") +
+            (m.voiceType ? `, voz=${m.voiceType}` : "") +
+            (avgScore ? `, classificação=${avgScore}/5` : "");
+        }).join("\n")
       : "Nenhum membro cadastrado ainda.";
+
+    const qualificationInstruction = useQualification && Object.keys(evaluationsMap).length > 0
+      ? `\n\nIMPORTANTE: Ao atribuir membros às funções, PRIORIZE membros com maior classificação (mais próximos de 5.0). Membros com classificação baixa (abaixo de 3.0) devem ser escalados menos frequentemente.`
+      : "";
 
     const datesText = dates.join(", ");
     const obsText = observation?.trim() ? `\nObservação do líder: ${observation}` : "";
@@ -328,7 +349,7 @@ O líder quer criar uma escala para a data: ${datesText}
 ${templateName ? `Nome do culto: ${templateName}` : ""}
 ${defaultTime ? `Horário: ${defaultTime}` : ""}
 Tipo de banda: ${bandText}
-Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${previousContext}${rolesText}
+Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${previousContext}${rolesText}${qualificationInstruction}
 
 ## Instruções gerais:
 - Cada música no repertório está listada com seu ID no formato [ID:xxxxx]. Use EXATAMENTE esse ID no campo "songId" da resposta — nunca invente ou modifique IDs

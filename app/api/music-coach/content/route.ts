@@ -63,20 +63,63 @@ export async function POST(req: NextRequest) {
     const instruments = memberProfile?.instruments || [];
     const voiceType = memberProfile?.voiceType || null;
     const level = coachProfile.level;
+    // Nível combinado: Professor + avaliação do líder
+    const levelDescription = avgScore
+      ? `${level} (avaliação do líder: ${avgScore}/5)`
+      : level;
+
+    // Buscar avaliação do líder para personalizar o conteúdo
+    const CRITERIA_LABELS: Record<string, string> = {
+      afinacao: "Afinação",
+      tecnicaVocal: "Técnica vocal",
+      dominioInstrumental: "Domínio instrumental",
+      conhecimentoMusical: "Conhecimento musical",
+      pontualidade: "Pontualidade",
+      comprometimento: "Comprometimento",
+    };
+    const evalResult = await prisma.$queryRaw<any[]>`
+      SELECT criteria FROM "MemberEvaluation" WHERE "memberId" = ${user.id} LIMIT 1
+    `.catch(() => []);
+
+    const evalCriteria = evalResult?.[0]?.criteria as Record<string, number> | null ?? null;
+    const weakPoints = evalCriteria
+      ? Object.entries(evalCriteria)
+          .filter(([, v]) => v < 3)
+          .map(([k]) => CRITERIA_LABELS[k] ?? k)
+      : [];
+    const strongPoints = evalCriteria
+      ? Object.entries(evalCriteria)
+          .filter(([, v]) => v >= 4)
+          .map(([k]) => CRITERIA_LABELS[k] ?? k)
+      : [];
+    const avgScore = evalCriteria
+      ? (Object.values(evalCriteria).reduce((a, b) => a + b, 0) / Object.values(evalCriteria).length).toFixed(1)
+      : null;
+
+    const evalDescription = evalCriteria ? [
+      avgScore ? `Avaliação do líder: ${avgScore}/5` : null,
+      weakPoints.length > 0 ? `Pontos a desenvolver (nota baixa): ${weakPoints.join(", ")}` : null,
+      strongPoints.length > 0 ? `Pontos fortes (nota alta): ${strongPoints.join(", ")}` : null,
+    ].filter(Boolean).join(". ") : null;
 
     const profileDescription = [
-      `Nível atual: ${level}`,
+      `Nível atual: ${levelDescription}`,
       roles.length > 0 ? `Funções no ministério: ${roles.join(", ")}` : null,
       instruments.length > 0 ? `Instrumentos: ${instruments.join(", ")}` : null,
       voiceType ? `Tipo vocal: ${voiceType}` : null,
       memberProfile?.memberFunction ? `Função principal: ${memberProfile.memberFunction}` : null,
+      evalDescription ?? null,
     ].filter(Boolean).join(". ");
 
+    const focusInstruction = weakPoints.length > 0
+      ? `\n\nIMPORTANTE: Este aluno tem avaliação do líder indicando que precisa desenvolver especialmente: ${weakPoints.join(", ")}. Priorize conteúdo focado nesses pontos de melhoria.`
+      : "";
+
     const prompts: Record<string, string> = {
-      general: `Você é um professor de música cristã especializado em ministério de louvor. Com base no perfil do aluno (${profileDescription}), gere um conteúdo personalizado com:\n1. Uma saudação motivacional personalizada\n2. Dica do dia relacionada ao instrumento/função do aluno\n3. Um exercício prático simples para fazer hoje\n4. Uma recomendação de estudo (técnica musical ou teoria)\nResponda em português brasileiro, de forma encorajadora e prática.`,
-      exercises: `Você é um professor de música cristã. Com base no perfil do aluno (${profileDescription}), crie 3 exercícios práticos progressivos adequados ao nível ${level}. Cada exercício deve ter: título, descrição detalhada, duração sugerida e dica de execução. Foque em técnicas relevantes para ministério de louvor. Responda em português brasileiro.`,
-      theory: `Você é um professor de teoria musical para ministério de louvor. Com base no perfil do aluno (${profileDescription}), ensine um conceito de teoria musical adequado ao nível ${level}. Inclua: explicação clara, exemplos práticos, como aplicar no contexto de louvor, e um mini-quiz com 2 perguntas. Responda em português brasileiro.`,
-      tips: `Você é um mentor de ministério de louvor. Com base no perfil do aluno (${profileDescription}), compartilhe 5 dicas práticas para melhorar a performance no ministério. Considere o nível ${level} e as funções do aluno. Inclua dicas sobre: técnica, musicalidade, entrosamento com a equipe, e crescimento espiritual através da música. Responda em português brasileiro.`,
+      general: `Você é um professor de música cristã especializado em ministério de louvor. Com base no perfil do aluno (${profileDescription}), gere um conteúdo personalizado com:\n1. Uma saudação motivacional personalizada\n2. Dica do dia relacionada ao instrumento/função do aluno\n3. Um exercício prático simples para fazer hoje\n4. Uma recomendação de estudo (técnica musical ou teoria)\nResponda em português brasileiro, de forma encorajadora e prática.${focusInstruction}`,
+      exercises: `Você é um professor de música cristã. Com base no perfil do aluno (${profileDescription}), crie 3 exercícios práticos progressivos adequados ao nível ${level}. Cada exercício deve ter: título, descrição detalhada, duração sugerida e dica de execução. Foque em técnicas relevantes para ministério de louvor.${focusInstruction} Responda em português brasileiro.`,
+      theory: `Você é um professor de teoria musical para ministério de louvor. Com base no perfil do aluno (${profileDescription}), ensine um conceito de teoria musical adequado ao nível ${level}. Inclua: explicação clara, exemplos práticos, como aplicar no contexto de louvor, e um mini-quiz com 2 perguntas.${focusInstruction} Responda em português brasileiro.`,
+      tips: `Você é um mentor de ministério de louvor. Com base no perfil do aluno (${profileDescription}), compartilhe 5 dicas práticas para melhorar a performance no ministério. Considere o nível ${level} e as funções do aluno.${focusInstruction} Inclua dicas sobre: técnica, musicalidade, entrosamento com a equipe, e crescimento espiritual através da música. Responda em português brasileiro.`,
     };
 
     const systemPrompt = prompts[contentType] || prompts.general;

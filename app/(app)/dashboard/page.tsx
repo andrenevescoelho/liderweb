@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [confirmingNextCommitment, setConfirmingNextCommitment] = useState(false);
   const [nextRehearsal, setNextRehearsal] = useState<any>(null);
   const [confirmingRehearsal, setConfirmingRehearsal] = useState(false);
+  const [myEvaluation, setMyEvaluation] = useState<any>(null);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -94,6 +95,15 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
     fetchNextRehearsal();
+
+    // Carregar avaliação do próprio usuário
+    const userId = (session?.user as any)?.id;
+    if (userId) {
+      fetch(`/api/members/${userId}/evaluation`)
+        .then(r => r.json())
+        .then(d => setMyEvaluation(d))
+        .catch(() => {});
+    }
   }, [canAccessReports]);
 
   const handleConfirmNextRehearsal = async () => {
@@ -371,6 +381,22 @@ export default function DashboardPage() {
     : null;
   const pendingCount = pendingConfirmations?.length ?? 0;
   const firstName = userName?.split(' ')?.[0] ?? 'Líder';
+  // Calcular média e nível baseado na avaliação
+  const evalAvg = myEvaluation?.criteria
+    ? Object.values(myEvaluation.criteria as Record<string, number>).reduce((a, b) => a + b, 0) /
+      Object.values(myEvaluation.criteria as Record<string, number>).length
+    : null;
+
+  const getMemberLevel = (avg: number | null) => {
+    if (avg === null) return null;
+    if (avg >= 4.5) return { level: 5, label: "Especialista", color: "text-purple-600" };
+    if (avg >= 4.0) return { level: 4, label: "Avançado", color: "text-blue-600" };
+    if (avg >= 3.0) return { level: 3, label: "Intermediário", color: "text-green-600" };
+    if (avg >= 2.0) return { level: 2, label: "Em desenvolvimento", color: "text-yellow-600" };
+    return { level: 1, label: "Iniciante", color: "text-orange-600" };
+  };
+  const memberLevel = getMemberLevel(evalAvg);
+
   const greetingHeadline = (() => {
     if (daysToNext === 0) return `${firstName}, hoje tem culto! 🎶`;
     if (daysToNext === 1) return `${firstName}, amanhã tem culto!`;
@@ -380,6 +406,12 @@ export default function DashboardPage() {
   const greetingSubline = (() => {
     if (daysToNext !== null && daysToNext <= 3) return "Certifique-se que todos estão confirmados.";
     if (pendingCount > 0) return `${pendingCount} membro${pendingCount > 1 ? "s" : ""} ainda não confirmou${pendingCount > 1 ? "ram" : ""} presença.`;
+    // Para membros com avaliação, mensagem personalizada
+    if (evalAvg !== null && userRole === "MEMBER") {
+      if (evalAvg < 3) return `Você tem pontos importantes para desenvolver. Confira seu plano abaixo.`;
+      if (evalAvg < 4) return `Você está progredindo! Continue seu desenvolvimento no Professor IA.`;
+      return `Você está indo muito bem! Continue assim.`;
+    }
     return data?.groupName ? `Ministério ${data.groupName} — tudo sob controle.` : "Seu ministério organizado em um só lugar.";
   })();
 
@@ -391,7 +423,18 @@ export default function DashboardPage() {
             <LayoutDashboard className="w-5 h-5 text-purple-600" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{greetingHeadline}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">{greetingHeadline}</h1>
+              {memberLevel && userRole === "MEMBER" && (
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                  memberLevel.level >= 4 ? "border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-700" :
+                  memberLevel.level === 3 ? "border-green-300 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 dark:border-green-700" :
+                  "border-yellow-300 bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-700"
+                }`}>
+                  Nível {memberLevel.level} — {memberLevel.label}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground mt-0.5">{greetingSubline}</p>
             {nextSched && daysToNext !== null && daysToNext > 3 && (
               <p className="text-xs text-muted-foreground mt-1">
@@ -1057,6 +1100,89 @@ export default function DashboardPage() {
             </Card>
           )}
 
+
+
+
+
+
+          {/* Meu Desenvolvimento — visível para todos os membros que tiverem avaliação */}
+          {myEvaluation?.criteria && (
+            <Card className="rounded-xl border border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <span className="text-lg">⭐</span>
+                  Meu Desenvolvimento
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(() => {
+                  const LABELS: Record<string, string> = {
+                    afinacao: "Afinação",
+                    tecnicaVocal: "Técnica vocal",
+                    dominioInstrumental: "Domínio instrumental",
+                    conhecimentoMusical: "Conhecimento musical",
+                    pontualidade: "Pontualidade",
+                    comprometimento: "Comprometimento",
+                  };
+                  const criteria = myEvaluation.criteria as Record<string, number>;
+                  const avg = Object.values(criteria).reduce((a, b) => a + b, 0) / Object.values(criteria).length;
+                  const getBadge = (val: number) => {
+                    if (val >= 5) return { label: "Excelente", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" };
+                    if (val >= 4) return { label: "Bom", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" };
+                    if (val >= 3) return { label: "Regular", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300" };
+                    return { label: "Melhorar", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" };
+                  };
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-muted-foreground">Média geral</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map(n => (
+                              <span key={n} className={`text-base ${n <= Math.round(avg) ? "text-yellow-400" : "text-muted-foreground/20"}`}>★</span>
+                            ))}
+                          </div>
+                          <span className="text-sm font-medium">{avg.toFixed(1)}/5</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {Object.entries(criteria).map(([key, val]) => {
+                          const badge = getBadge(val);
+                          return (
+                            <div key={key} className="flex items-center gap-3">
+                              <span className="text-sm text-muted-foreground w-40 flex-shrink-0">{LABELS[key] ?? key}</span>
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-purple-500 rounded-full transition-all"
+                                  style={{ width: `${(val / 5) * 100}%` }}
+                                />
+                              </div>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {Object.values(criteria).some(v => v < 3) && (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <p className="text-xs text-muted-foreground mb-2">Pontos para desenvolver:</p>
+                          <Link href="/professor">
+                            <Button size="sm" variant="outline" className="w-full gap-2">
+                              <span>🎓</span> Ver plano de desenvolvimento no Professor IA
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
 
 
 

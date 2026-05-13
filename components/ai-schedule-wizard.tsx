@@ -359,6 +359,7 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   // Observação
   const [observation, setObservation] = useState("");
+  const [useQualification, setUseQualification] = useState(false);
 
   // Draft
   const [draft, setDraft] = useState<AiSchedule[]>([]);
@@ -468,7 +469,8 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
             observation,
             songStrategy,
             ministerId: ministerId || null,
-            previousAssignments, // passa histórico das escalas já geradas
+            useQualification,
+            previousAssignments,
           }),
         });
 
@@ -753,6 +755,25 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
               </div>
             </div>
           )}
+
+          {/* Usar classificação de membros */}
+          <div className="flex items-start gap-3 rounded-lg border border-border p-3 bg-muted/30">
+            <input
+              type="checkbox"
+              id="useQualification"
+              checked={useQualification}
+              onChange={(e) => setUseQualification(e.target.checked)}
+              className="mt-0.5 rounded"
+            />
+            <label htmlFor="useQualification" className="cursor-pointer">
+              <div className="text-sm font-medium flex items-center gap-1.5">
+                ⭐ Usar classificação dos membros
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                A IA vai priorizar membros com melhores avaliações do líder para cada papel
+              </div>
+            </label>
+          </div>
 
           {/* Observação */}
           <div className="space-y-2">
