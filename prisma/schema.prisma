@@ -244,6 +244,7 @@ model Group {
   supportTickets      SupportTicket[]
   splitJobs           SplitJob[]
   scheduleTemplates            ScheduleTemplate[]
+  memberEvaluations            MemberEvaluation[]
   orders                       Order[]
   scheduleApprovalDeadlineDays Int?  // dias antes do culto para auto-publicar (default: 1)
   ownerDocument                String?   @unique // CPF ou CNPJ sem máscara
@@ -380,7 +381,6 @@ model User {
   splitJobs            SplitJob[]
   maxSessions          Int                   @default(1)    // máx sessões simultâneas (SUPERADMIN configura)
   sessionTimeoutHours  Int?                                 // timeout por inatividade em horas (null = sem timeout)
-  notificationPreferences Json?
   activeSessions       UserActiveSession[]
 }
 
@@ -628,6 +628,9 @@ model MemberProfile {
   repertoirePrefs   String?                @db.Text
   instagram         String?
   youtube           String?
+  notificationPreferences Json?
+  evaluationsReceived  MemberEvaluation[] @relation("EvaluationMember")
+  evaluationsGiven     MemberEvaluation[] @relation("EvaluationEvaluator")
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
   memberFunctions   MemberFunctionLegacy[] @default([])
   active            Boolean                @default(true)
@@ -1703,5 +1706,24 @@ model ScheduleTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([groupId])
+}
+
+model MemberEvaluation {
+  id          String   @id @default(cuid())
+  memberId    String
+  evaluatorId String
+  groupId     String
+  criteria    Json     // { afinacao: 3, tecnicaVocal: 2, dominioInstrumental: 4, conhecimentoMusical: 4, pontualidade: 5, comprometimento: 3 }
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  member    User  @relation("EvaluationMember", fields: [memberId], references: [id], onDelete: Cascade)
+  evaluator User  @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id], onDelete: Cascade)
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, groupId])
+  @@index([memberId])
   @@index([groupId])
 }
