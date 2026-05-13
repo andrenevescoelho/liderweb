@@ -12,6 +12,7 @@ import {
   validateMessageContent,
 } from "@/lib/messages";
 import { sendPushToMany, getPushTokensForGroup } from "@/lib/push-notifications";
+import { filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 const PAGE_SIZE_DEFAULT = 20;
 
@@ -136,12 +137,26 @@ export async function POST(
 
     // Push para todos os membros do grupo (exceto o remetente)
     getPushTokensForGroup(groupId).then(async (allTokens) => {
+      const groupMembers = await (prisma as any).user.findMany({
+        where: { groupId },
+        select: { id: true },
+      });
+      const memberIds = groupMembers.map((m: any) => m.id).filter((id: string) => id !== user.id);
+      const allowedIds = await filterUsersByNotifPref(memberIds, "broadcast_push");
+
       const senderSessions = await (prisma as any).userActiveSession.findMany({
         where: { userId: user.id },
         select: { pushToken: true },
       });
       const senderTokens = new Set(senderSessions.map((s: any) => s.pushToken).filter(Boolean));
-      const tokens = allTokens.filter(t => !senderTokens.has(t));
+
+      const allowedSessions = await (prisma as any).userActiveSession.findMany({
+        where: { userId: { in: allowedIds }, pushToken: { not: null } },
+        select: { pushToken: true },
+        distinct: ["userId"],
+      });
+      const tokens = allowedSessions.map((s: any) => s.pushToken).filter((t: any) => t && !senderTokens.has(t));
+
       if (tokens.length > 0) {
         const senderName = user.name ?? "Líder";
         const preview = (validation.content ?? "").substring(0, 100);

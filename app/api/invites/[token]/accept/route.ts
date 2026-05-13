@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { emailsMatch } from "@/lib/email";
 import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
+import { filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +105,8 @@ export async function POST(
       select: { id: true },
     }).then(async (leaders) => {
       const leaderIds = leaders.map((l) => l.id);
-      const tokens = await getPushTokensForUsers(leaderIds);
+      const allowedIds = await filterUsersByNotifPref(leaderIds, "invite_accepted_push").catch(() => leaderIds);
+      const tokens = await getPushTokensForUsers(allowedIds);
       if (tokens.length > 0) {
         const userName = (session?.user as any)?.name ?? "Novo membro";
         await sendPushToMany(tokens, {
