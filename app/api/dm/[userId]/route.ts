@@ -11,6 +11,7 @@ import {
   validateMessageContent,
 } from "@/lib/messages";
 import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
+import { filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 const PAGE_SIZE = 30;
 
@@ -145,6 +146,8 @@ export async function POST(
 
     // Push para o destinatário (fire-and-forget)
     getPushTokensForUsers([otherId]).then(async (tokens) => {
+      const allowed = await filterUsersByNotifPref([otherId], "dm_push");
+      if (!allowed.includes(otherId)) return;
       if (tokens.length > 0) {
         const senderName = me.name ?? "Alguém";
         const preview = (validation.content ?? "").substring(0, 100);

@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/authorization";
 import { AUDIT_ACTIONS, extractRequestContext, logUserAction } from "@/lib/audit-log";
 import { AuditEntityType } from "@prisma/client";
 import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
+import { filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 const db = prisma as any;
 
@@ -180,7 +181,8 @@ export async function POST(req: NextRequest) {
     // Push para membros do grupo
     if (members.length > 0 && created.status === "PUBLISHED") {
       const memberIds = members.map((m: { id: string }) => m.id);
-      const tokens = await getPushTokensForUsers(memberIds).catch(() => []);
+      const allowedIds = await filterUsersByNotifPref(memberIds, "rehearsal_created_push").catch(() => memberIds);
+      const tokens = await getPushTokensForUsers(allowedIds).catch(() => []);
       if (tokens.length > 0) {
         const dateStr = new Date(created.dateTime).toLocaleDateString("pt-BR", {
           day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",

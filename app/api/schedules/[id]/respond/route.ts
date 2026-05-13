@@ -10,6 +10,7 @@ import { sendSmtpMail } from "@/lib/smtp";
 import { presenceResponseEmail } from "@/lib/email-templates";
 import { AuditEntityType } from "@prisma/client";
 import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
+import { filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 export async function POST(
   req: NextRequest,
@@ -127,7 +128,8 @@ export async function POST(
 
         // Push para os líderes
         if (adminIds.length > 0) {
-          const tokens = await getPushTokensForUsers(adminIds);
+          const allowedAdminIds = await filterUsersByNotifPref(adminIds, "schedule_pending_push").catch(() => adminIds);
+          const tokens = await getPushTokensForUsers(allowedAdminIds);
           if (tokens.length > 0) {
             const scheduleDate = new Date(schedule.date).toLocaleDateString("pt-BR");
             await sendPushToMany(tokens, {
