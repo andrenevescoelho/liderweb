@@ -1296,6 +1296,10 @@ function DevelopmentPlanSection() {
   const [avgScore, setAvgScore] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [totalXp, setTotalXp] = useState(0);
+  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
+  const [completing, setCompleting] = useState<string | null>(null);
+  const [xpAnimation, setXpAnimation] = useState<{ taskId: string; xp: number } | null>(null);
 
   const CRITERIA_LABELS: Record<string, string> = {
     afinacao: "Afinação",
@@ -1316,8 +1320,18 @@ function DevelopmentPlanSection() {
     if (refresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const res = await fetch(`/api/music-coach/development-plan${refresh ? "?refresh=1" : ""}`);
-      const data = await res.json();
+      const [planRes, xpRes] = await Promise.all([
+        fetch(`/api/music-coach/development-plan${refresh ? "?refresh=1" : ""}`),
+        fetch("/api/music-coach/complete-task"),
+      ]);
+      const data = await planRes.json();
+      const xpData = await xpRes.json();
+
+      if (xpData.totalXp !== undefined) {
+        setTotalXp(xpData.totalXp);
+        setCompletedTaskIds(xpData.completedTaskIds ?? []);
+      }
+
       if (data.plan) {
         try {
           const parsed = typeof data.plan === "string" ? JSON.parse(data.plan) : data.plan;
@@ -1337,6 +1351,33 @@ function DevelopmentPlanSection() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const completeTask = async (taskId: string, criteria: string, xpReward: number) => {
+    setCompleting(taskId);
+    try {
+      const res = await fetch("/api/music-coach/complete-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, criteria, xpReward }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCompletedTaskIds(prev => [...prev, taskId]);
+        setTotalXp(data.totalXp);
+        setXpAnimation({ taskId, xp: data.xpEarned });
+        setTimeout(() => setXpAnimation(null), 2000);
+        if (data.leveledUp && data.newScore) {
+          setCriteria(prev => prev ? { ...prev, [criteria]: data.newScore } : prev);
+          setAvgScore(prev => prev !== null
+            ? (Object.values({ ...criteria, [criteria]: data.newScore } as any).reduce((a: number, b: any) => a + b, 0) /
+               Object.values({ ...criteria, [criteria]: data.newScore } as any).length)
+            : prev
+          );
+        }
+      }
+    } catch {}
+    finally { setCompleting(null); }
   };
 
   useEffect(() => { fetchPlan(); }, []);
@@ -1362,7 +1403,7 @@ function DevelopmentPlanSection() {
 
   return (
     <div className="space-y-4">
-      {/* Header com média */}
+      {/* Header com média e XP total */}
       {criteria && avgScore !== null && (
         <Card>
           <CardContent className="py-4">
@@ -1371,13 +1412,21 @@ function DevelopmentPlanSection() {
                 <p className="text-sm font-medium">Sua avaliação atual</p>
                 <p className="text-xs text-muted-foreground">Avaliação do seu líder</p>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex gap-0.5">
-                  {[1,2,3,4,5].map(n => (
-                    <span key={n} className={`text-lg ${n <= Math.round(avgScore) ? "text-yellow-400" : "text-muted-foreground/20"}`}>★</span>
-                  ))}
+              <div className="flex items-center gap-3">
+                {totalXp > 0 && (
+                  <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                    <Star className="h-4 w-4 fill-current" />
+                    <span className="text-sm font-semibold">{totalXp} XP</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-0.5">
+                    {[1,2,3,4,5].map(n => (
+                      <span key={n} className={`text-lg ${n <= Math.round(avgScore) ? "text-yellow-400" : "text-muted-foreground/20"}`}>★</span>
+                    ))}
+                  </div>
+                  <span className="text-sm font-semibold">{avgScore.toFixed(1)}/5</span>
                 </div>
-                <span className="text-sm font-semibold">{avgScore.toFixed(1)}/5</span>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -1385,7 +1434,7 @@ function DevelopmentPlanSection() {
                 <div key={key} className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground w-36 flex-shrink-0">{CRITERIA_LABELS[key] ?? key}</span>
                   <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${val >= 4 ? "bg-green-500" : val >= 3 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${(val / 5) * 100}%` }} />
+                    <div className={`h-full rounded-full transition-all ${val >= 4 ? "bg-green-500" : val >= 3 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${(val / 5) * 100}%` }} />
                   </div>
                   <span className="text-xs font-medium w-6 text-right">{val}/5</span>
                 </div>
@@ -1406,42 +1455,64 @@ function DevelopmentPlanSection() {
       {plan.tasks?.length > 0 ? (
         <div className="space-y-3">
           <p className="text-sm font-medium">Tarefas do seu plano</p>
-          {plan.tasks.map((task: any, i: number) => (
-            <Card key={task.id ?? i}>
-              <CardContent className="py-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0">{i + 1}</span>
-                    <p className="text-sm font-medium">{task.title}</p>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    {task.difficulty && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DIFFICULTY_LABELS[task.difficulty]?.color ?? ""}`}>
-                        {DIFFICULTY_LABELS[task.difficulty]?.label ?? task.difficulty}
-                      </span>
-                    )}
-                    {task.xpReward && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                        +{task.xpReward} XP
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
-                <div className="flex gap-4 text-xs text-muted-foreground">
-                  {task.duration && <span>⏱ {task.duration}</span>}
-                  {task.frequency && <span>📅 {task.frequency}</span>}
-                </div>
-                {task.resources?.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {task.resources.map((r: string, j: number) => (
-                      <span key={j} className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">{r}</span>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+          {plan.tasks.map((task: any, i: number) => {
+                const isDone = completedTaskIds.includes(task.id);
+                const isCompleting = completing === task.id;
+                const showAnim = xpAnimation?.taskId === task.id;
+                return (
+                  <Card key={task.id ?? i} className={isDone ? "opacity-70 border-green-300/50" : ""}>
+                    <CardContent className="py-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold flex-shrink-0 ${isDone ? "bg-green-100 text-green-700" : "bg-primary/10 text-primary"}`}>
+                            {isDone ? "✓" : i + 1}
+                          </span>
+                          <p className={`text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+                        </div>
+                        {task.difficulty && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${DIFFICULTY_LABELS[task.difficulty]?.color ?? ""}`}>
+                            {DIFFICULTY_LABELS[task.difficulty]?.label ?? task.difficulty}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
+                      <div className="flex gap-4 text-xs text-muted-foreground mb-3">
+                        {task.duration && <span>⏱ {task.duration}</span>}
+                        {task.frequency && <span>📅 {task.frequency}</span>}
+                      </div>
+                      {task.resources?.length > 0 && (
+                        <div className="mb-3 flex flex-wrap gap-1">
+                          {task.resources.map((r: string, j: number) => (
+                            <span key={j} className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">{r}</span>
+                          ))}
+                        </div>
+                      )}
+                      {!isDone ? (
+                        <div className="relative">
+                          <button
+                            onClick={() => completeTask(task.id, task.criteria, task.xpReward ?? 50)}
+                            disabled={isCompleting}
+                            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            {isCompleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                            Concluir tarefa {task.xpReward ? `+${task.xpReward} XP` : "+XP"}
+                          </button>
+                          {showAnim && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="text-lg font-bold text-yellow-500 animate-bounce">+{xpAnimation?.xp} XP ⭐</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 py-2 text-green-600 dark:text-green-400 text-sm font-medium">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Tarefa concluída!
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
         </div>
       ) : (
         <Card>
