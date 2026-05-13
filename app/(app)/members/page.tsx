@@ -651,6 +651,41 @@ function MemberModal({
   const [permissions, setPermissions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"info" | "development">("info");
+
+  // Avaliação
+  const CRITERIA_LABELS: Record<string, string> = {
+    afinacao: "Afinação",
+    tecnicaVocal: "Técnica vocal",
+    dominioInstrumental: "Domínio instrumental",
+    conhecimentoMusical: "Conhecimento musical",
+    pontualidade: "Pontualidade",
+    comprometimento: "Comprometimento",
+  };
+
+  // Determinar critérios relevantes baseado nos papéis do membro
+  const VOCAL_ROLES = ["vocal", "backing vocal", "back vocal", "backing", "ministro", "minister"];
+  const INSTRUMENT_ROLES = ["guitarra", "baixo", "bateria", "teclado", "piano", "violão", "violao", "saxofone", "trompete", "percussão", "percussao", "contrabaixo", "gaita"];
+
+  const memberRoles = (member?.approvedRoles ?? []).map((r: string) => r.toLowerCase());
+  const isVocal = memberRoles.some((r: string) => VOCAL_ROLES.some(v => r.includes(v)));
+  const isInstrumentalist = memberRoles.some((r: string) => INSTRUMENT_ROLES.some(i => r.includes(i)));
+
+  const getCriteriaForMember = (): string[] => {
+    const base = ["conhecimentoMusical", "pontualidade", "comprometimento"];
+    if (isVocal && isInstrumentalist) return Object.keys(CRITERIA_LABELS); // todos
+    if (isVocal) return ["afinacao", "tecnicaVocal", ...base];
+    if (isInstrumentalist) return ["dominioInstrumental", ...base];
+    return base; // outros papéis
+  };
+
+  const activeCriteria = getCriteriaForMember();
+  const DEFAULT_CRITERIA = Object.fromEntries(activeCriteria.map(k => [k, 3]));
+  const [evalCriteria, setEvalCriteria] = useState<Record<string, number>>(DEFAULT_CRITERIA);
+  const [evalNotes, setEvalNotes] = useState("");
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalSaving, setEvalSaving] = useState(false);
+  const [evalSaved, setEvalSaved] = useState(false);
 
   const rehearsalPermissions = [
     { key: "rehearsal.attendance", label: "Confirmar presença" },
@@ -678,6 +713,24 @@ function MemberModal({
       setLeadershipRole(member?.profile?.leadershipRole ?? "");
       setPermissions(member?.profile?.permissions ?? []);
       setPassword("");
+
+      // Carregar avaliação existente
+      if (member?.id) {
+        setEvalLoading(true);
+        fetch(`/api/members/${member.id}/evaluation`)
+          .then(r => r.json())
+          .then(data => {
+            if (data?.criteria) {
+              setEvalCriteria({ ...DEFAULT_CRITERIA, ...data.criteria });
+              setEvalNotes(data.notes ?? "");
+            } else {
+              setEvalCriteria(DEFAULT_CRITERIA);
+              setEvalNotes("");
+            }
+          })
+          .catch(() => {})
+          .finally(() => setEvalLoading(false));
+      }
       setError("");
     } else {
       setName("");
@@ -837,6 +890,99 @@ function MemberModal({
       onClose={onClose} 
       title={isCreateMode ? t("members.newMember") : "Editar Membro"}
     >
+      {!isCreateMode && (
+        <div className="flex gap-1 mb-4 bg-muted/40 rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("info")}
+            className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${activeTab === "info" ? "bg-background text-foreground font-medium shadow-sm border border-border/50" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Informações
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("development")}
+            className={`flex-1 text-sm py-1.5 rounded-md transition-colors ${activeTab === "development" ? "bg-background text-foreground font-medium shadow-sm border border-border/50" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Desenvolvimento
+          </button>
+        </div>
+      )}
+
+      {activeTab === "development" && !isCreateMode && (
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Avalie o desempenho de <strong>{member?.name}</strong>.
+            {member?.approvedRoles?.length > 0 && (
+              <span className="ml-1">Papéis: <span className="text-foreground">{member.approvedRoles.join(", ")}</span>.</span>
+            )}
+            {" "}Apenas líderes visualizam essas notas.
+          </p>
+          {evalLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="space-y-3">
+              {activeCriteria.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum papel definido para este membro.</p>
+              )}
+              {activeCriteria.map((key) => (
+                <div key={key} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                  <span className="text-sm">{CRITERIA_LABELS[key]}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      {[1,2,3,4,5].map(n => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setEvalCriteria(prev => ({ ...prev, [key]: n }))}
+                          className={`text-lg transition-colors ${n <= (evalCriteria[key] ?? 0) ? "text-yellow-400" : "text-muted-foreground/30 hover:text-yellow-300"}`}
+                        >★</button>
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground w-6 text-right">{evalCriteria[key]}/5</span>
+                  </div>
+                </div>
+              ))}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Observações do líder (visível apenas para líderes)</label>
+                <textarea
+                  value={evalNotes}
+                  onChange={e => setEvalNotes(e.target.value)}
+                  placeholder="Ex: Precisa trabalhar afinação em tons mais agudos..."
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none h-20 focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
+                <Button
+                  type="button"
+                  disabled={evalSaving}
+                  className="flex-1"
+                  onClick={async () => {
+                    setEvalSaving(true);
+                    try {
+                      const res = await fetch(`/api/members/${member?.id}/evaluation`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ criteria: evalCriteria, notes: evalNotes }),
+                      });
+                      if (res.ok) {
+                        setEvalSaved(true);
+                        setTimeout(() => setEvalSaved(false), 2000);
+                      }
+                    } catch {}
+                    finally { setEvalSaving(false); }
+                  }}
+                >
+                  {evalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : evalSaved ? "✓ Salvo!" : "Salvar avaliação"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(activeTab === "info" || isCreateMode) && (
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -1062,6 +1208,7 @@ function MemberModal({
           </Button>
         </div>
       </form>
+      )}
     </Modal>
   );
 }
