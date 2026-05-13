@@ -63,10 +63,6 @@ export async function POST(req: NextRequest) {
     const instruments = memberProfile?.instruments || [];
     const voiceType = memberProfile?.voiceType || null;
     const level = coachProfile.level;
-    // Nível combinado: Professor + avaliação do líder
-    const levelDescription = avgScore
-      ? `${level} (avaliação do líder: ${avgScore}/5)`
-      : level;
 
     // Buscar avaliação do líder para personalizar o conteúdo
     const CRITERIA_LABELS: Record<string, string> = {
@@ -95,6 +91,11 @@ export async function POST(req: NextRequest) {
     const avgScore = evalCriteria
       ? (Object.values(evalCriteria).reduce((a, b) => a + b, 0) / Object.values(evalCriteria).length).toFixed(1)
       : null;
+
+    // Nível combinado: Professor + avaliação do líder
+    const levelDescription = avgScore
+      ? `${level} (avaliação do líder: ${avgScore}/5)`
+      : level;
 
     const evalDescription = evalCriteria ? [
       avgScore ? `Avaliação do líder: ${avgScore}/5` : null,

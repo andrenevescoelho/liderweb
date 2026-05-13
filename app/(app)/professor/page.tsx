@@ -52,7 +52,7 @@ interface DashboardData {
 }
 
 type ContentTab = "general" | "exercises" | "theory" | "tips";
-type MainSection = "content" | "record" | "history" | "progress";
+type MainSection = "content" | "record" | "history" | "progress" | "plan";
 
 interface FeedbackData {
   id: string;
@@ -95,6 +95,7 @@ const MAIN_SECTIONS: { key: MainSection; label: string; icon: React.ReactNode }[
   { key: "record", label: "Gravar Prática", icon: <Mic className="h-4 w-4" /> },
   { key: "history", label: "Histórico", icon: <Clock className="h-4 w-4" /> },
   { key: "progress", label: "Progresso", icon: <BarChart3 className="h-4 w-4" /> },
+  { key: "plan", label: "Plano", icon: <Star className="h-4 w-4" /> },
 ];
 
 const PRACTICE_TYPES = [
@@ -1153,6 +1154,7 @@ export default function ProfessorPage() {
       )}
       {/* ═══ PROGRESS SECTION ═══ */}
       {mainSection === "progress" && <ProgressSection />}
+      {mainSection === "plan" && <DevelopmentPlanSection />}
       </div>
     </div>
   );
@@ -1282,6 +1284,193 @@ function ProgressSection() {
           </p>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/* ─── DevelopmentPlanSection ─── */
+function DevelopmentPlanSection() {
+  const [loading, setLoading] = useState(true);
+  const [plan, setPlan] = useState<any>(null);
+  const [criteria, setCriteria] = useState<Record<string, number> | null>(null);
+  const [avgScore, setAvgScore] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const CRITERIA_LABELS: Record<string, string> = {
+    afinacao: "Afinação",
+    tecnicaVocal: "Técnica vocal",
+    dominioInstrumental: "Domínio instrumental",
+    conhecimentoMusical: "Conhecimento musical",
+    pontualidade: "Pontualidade",
+    comprometimento: "Comprometimento",
+  };
+
+  const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
+    facil: { label: "Fácil", color: "text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400" },
+    medio: { label: "Médio", color: "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400" },
+    dificil: { label: "Difícil", color: "text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400" },
+  };
+
+  const fetchPlan = async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const res = await fetch(`/api/music-coach/development-plan${refresh ? "?refresh=1" : ""}`);
+      const data = await res.json();
+      if (data.plan) {
+        try {
+          const parsed = typeof data.plan === "string" ? JSON.parse(data.plan) : data.plan;
+          setPlan(parsed);
+          setCriteria(data.criteria);
+          setAvgScore(data.avgScore);
+        } catch (parseErr) {
+          console.error("Parse error:", parseErr, "Raw plan:", data.plan?.substring(0, 200));
+          setError("Erro ao processar plano. Tente gerar novamente.");
+        }
+      } else {
+        setError(data.message ?? data.error ?? "Nenhuma avaliação encontrada");
+      }
+    } catch {
+      setError("Erro ao carregar plano");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { fetchPlan(); }, []);
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <p className="text-sm text-muted-foreground">Gerando seu plano de desenvolvimento...</p>
+    </div>
+  );
+
+  if (error || !plan) return (
+    <Card>
+      <CardContent className="py-12 text-center">
+        <Star className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+        <p className="text-sm font-medium">Plano não disponível</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {error || "Peça ao seu líder para te avaliar na seção Membros para receber um plano personalizado."}
+        </p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Header com média */}
+      {criteria && avgScore !== null && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-medium">Sua avaliação atual</p>
+                <p className="text-xs text-muted-foreground">Avaliação do seu líder</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-0.5">
+                  {[1,2,3,4,5].map(n => (
+                    <span key={n} className={`text-lg ${n <= Math.round(avgScore) ? "text-yellow-400" : "text-muted-foreground/20"}`}>★</span>
+                  ))}
+                </div>
+                <span className="text-sm font-semibold">{avgScore.toFixed(1)}/5</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {Object.entries(criteria).map(([key, val]) => (
+                <div key={key} className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-36 flex-shrink-0">{CRITERIA_LABELS[key] ?? key}</span>
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${val >= 4 ? "bg-green-500" : val >= 3 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${(val / 5) * 100}%` }} />
+                  </div>
+                  <span className="text-xs font-medium w-6 text-right">{val}/5</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resumo do plano */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="py-4">
+          <p className="text-sm">{plan.summary}</p>
+        </CardContent>
+      </Card>
+
+      {/* Tarefas */}
+      {plan.tasks?.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Tarefas do seu plano</p>
+          {plan.tasks.map((task: any, i: number) => (
+            <Card key={task.id ?? i}>
+              <CardContent className="py-4">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0">{i + 1}</span>
+                    <p className="text-sm font-medium">{task.title}</p>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    {task.difficulty && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DIFFICULTY_LABELS[task.difficulty]?.color ?? ""}`}>
+                        {DIFFICULTY_LABELS[task.difficulty]?.label ?? task.difficulty}
+                      </span>
+                    )}
+                    {task.xpReward && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                        +{task.xpReward} XP
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
+                <div className="flex gap-4 text-xs text-muted-foreground">
+                  {task.duration && <span>⏱ {task.duration}</span>}
+                  {task.frequency && <span>📅 {task.frequency}</span>}
+                </div>
+                {task.resources?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {task.resources.map((r: string, j: number) => (
+                      <span key={j} className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">{r}</span>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">Nenhuma tarefa específica — continue praticando! 🌟</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Mensagem motivacional */}
+      {plan.motivational && (
+        <Card className="border-yellow-300/50 bg-yellow-50/50 dark:bg-yellow-900/10">
+          <CardContent className="py-4 text-center">
+            <p className="text-sm">💪 {plan.motivational}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Botão de regenerar */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => fetchPlan(true)}
+          disabled={refreshing}
+          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {refreshing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          Gerar novo plano
+        </button>
+      </div>
     </div>
   );
 }
