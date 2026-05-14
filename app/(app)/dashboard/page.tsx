@@ -136,21 +136,22 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
     fetchNextRehearsal();
-
-    // Carregar avaliação e check-in do próprio usuário
-    const userId = (session?.user as any)?.id;
-    if (userId) {
-      fetch(`/api/members/${userId}/evaluation`)
-        .then(r => r.json())
-        .then(d => setMyEvaluation(d))
-        .catch(() => {});
-
-      fetch("/api/saude/checkin")
-        .then(r => r.json())
-        .then(d => { setCheckinData(d); setCheckinLoading(false); })
-        .catch(() => setCheckinLoading(false));
-    }
   }, [canAccessReports]);
+
+  useEffect(() => {
+    const userId = (session?.user as any)?.id;
+    if (!userId) return;
+
+    fetch(`/api/members/${userId}/evaluation`)
+      .then(r => r.json())
+      .then(d => setMyEvaluation(d))
+      .catch(() => {});
+
+    fetch("/api/saude/checkin")
+      .then(r => r.json())
+      .then(d => { setCheckinData(d); setCheckinLoading(false); })
+      .catch(() => setCheckinLoading(false));
+  }, [session]);
 
   const handleConfirmNextRehearsal = async () => {
     if (!nextRehearsal?.id || nextRehearsal?.attendanceStatus !== "PENDING") {
