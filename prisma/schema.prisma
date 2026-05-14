@@ -245,6 +245,8 @@ model Group {
   splitJobs           SplitJob[]
   scheduleTemplates            ScheduleTemplate[]
   memberEvaluations            MemberEvaluation[]
+  emotionalCheckins            EmotionalCheckin[] @relation("GroupCheckins")
+  prayerRequests               PrayerRequest[]    @relation("GroupPrayers")
   orders                       Order[]
   scheduleApprovalDeadlineDays Int?  // dias antes do culto para auto-publicar (default: 1)
   ownerDocument                String?   @unique // CPF ou CNPJ sem máscara
@@ -381,9 +383,6 @@ model User {
   splitJobs            SplitJob[]
   maxSessions          Int                   @default(1)    // máx sessões simultâneas (SUPERADMIN configura)
   sessionTimeoutHours  Int?                                 // timeout por inatividade em horas (null = sem timeout)
-  notificationPreferences Json?
-  evaluationsReceived  MemberEvaluation[] @relation("EvaluationMember")
-  evaluationsGiven     MemberEvaluation[] @relation("EvaluationEvaluator")
   activeSessions       UserActiveSession[]
 }
 
@@ -631,6 +630,11 @@ model MemberProfile {
   repertoirePrefs   String?                @db.Text
   instagram         String?
   youtube           String?
+  notificationPreferences Json?
+  evaluationsReceived  MemberEvaluation[] @relation("EvaluationMember")
+  evaluationsGiven     MemberEvaluation[] @relation("EvaluationEvaluator")
+  emotionalCheckins    EmotionalCheckin[] @relation("CheckinMember")
+  prayerRequests       PrayerRequest[]    @relation("PrayerMember")
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
   memberFunctions   MemberFunctionLegacy[] @default([])
   active            Boolean                @default(true)
@@ -1726,4 +1730,59 @@ model MemberEvaluation {
   @@unique([memberId, groupId])
   @@index([memberId])
   @@index([groupId])
+}
+
+// ── Pulso do Ministério ──────────────────────────────────────────────────────
+
+enum MoodLevel {
+  MUITO_MAL
+  DESANIMADO
+  NEUTRO
+  BEM
+  MOTIVADO
+}
+
+enum PrivacyLevel {
+  LEADER_ONLY    // só o líder do grupo
+  PASTOR_ONLY    // só o pastor
+  ANONYMOUS      // anônimo no painel geral
+  PRIVATE        // não compartilhar
+}
+
+model EmotionalCheckin {
+  id             String       @id @default(cuid())
+  memberId       String
+  groupId        String
+  mood           MoodLevel
+  note           String?      @db.Text
+  privacyLevel   PrivacyLevel @default(LEADER_ONLY)
+  requestedPrayer Boolean     @default(false)
+  requestedCare   Boolean     @default(false)
+  scheduleId     String?      // check-in pré-escala (opcional)
+  createdAt      DateTime     @default(now())
+
+  member   User   @relation("CheckinMember", fields: [memberId], references: [id], onDelete: Cascade)
+  group    Group  @relation("GroupCheckins", fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([groupId])
+  @@index([createdAt])
+}
+
+model PrayerRequest {
+  id          String   @id @default(cuid())
+  memberId    String
+  groupId     String
+  content     String   @db.Text
+  isAnonymous Boolean  @default(false)
+  prayerCount Int      @default(0)
+  isResolved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  member User  @relation("PrayerMember", fields: [memberId], references: [id], onDelete: Cascade)
+  group  Group @relation("GroupPrayers", fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([memberId])
 }
