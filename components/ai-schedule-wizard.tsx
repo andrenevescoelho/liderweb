@@ -444,62 +444,66 @@ export function AiScheduleWizard({ isOpen, onClose, onAccept }: Props) {
 
   async function handleGenerate(datesWithMinisters: DateMinister[]) {
     setStep("loading");
-    setLoadingProgress(`Gerando 0/${datesWithMinisters.length} escalas...`);
-    const results: AiSchedule[] = [];
+    setLoadingProgress(`Iniciando geração de ${datesWithMinisters.length} escala(s)...`);
+    const results: AiSchedule[] = new Array(datesWithMinisters.length).fill(null);
+    let completed = 0;
 
     try {
-      const previousAssignments: { date: string; roles: { role: string; memberName: string | null }[] }[] = [];
+      // Processar em lotes de 2 para não sobrecarregar o browser
+      const BATCH_SIZE = 2;
+      for (let batch = 0; batch < datesWithMinisters.length; batch += BATCH_SIZE) {
+        const batchItems = datesWithMinisters.slice(batch, batch + BATCH_SIZE);
 
-      for (let i = 0; i < datesWithMinisters.length; i++) {
-        const { date, ministerId } = datesWithMinisters[i];
-        const ministerName = ministerId
-          ? (members.find((m) => m.id === ministerId)?.name ?? null)
-          : null;
+        await Promise.all(
+          batchItems.map(async ({ date, ministerId }, batchIdx) => {
+            const i = batch + batchIdx;
+            const ministerName = ministerId
+              ? (members.find((m) => m.id === ministerId)?.name ?? null)
+              : null;
 
-        setLoadingProgress(
-          `Gerando escala ${i + 1} de ${datesWithMinisters.length}${ministerName ? ` — ${ministerName}` : ""}...`
+            const res = await fetch("/api/ai/suggest-schedule", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                dates: [date],
+                templateId: selectedTemplate || null,
+                observation,
+                songStrategy,
+                ministerId: ministerId || null,
+                useQualification,
+                previousAssignments: [],
+              }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+              if (data.error === "SEM_REPERTORIO") throw new Error("SEM_REPERTORIO");
+              throw new Error(data.error ?? "Erro ao gerar escala.");
+            }
+
+            results[i] = data.schedules?.[0] ?? null;
+            completed++;
+            setLoadingProgress(`${completed} de ${datesWithMinisters.length} escala(s) gerada(s)...`);
+          })
         );
-
-        const res = await fetch("/api/ai/suggest-schedule", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            dates: [date],
-            templateId: selectedTemplate || null,
-            observation,
-            songStrategy,
-            ministerId: ministerId || null,
-            useQualification,
-            previousAssignments,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          if (data.error === "SEM_REPERTORIO") {
-            setError("⚠️ Seu ministério não tem músicas cadastradas no repertório. Acesse a seção Músicas e cadastre seu repertório antes de usar o wizard de IA.");
-          } else {
-            setError(data.error ?? "Erro ao gerar escala.");
-          }
-          setStep(songStrategy === "minister_history" ? "ministers" : "config");
-          return;
-        }
-        const newSchedules = data.schedules ?? [];
-        results.push(...newSchedules);
-
-        // Acumular histórico de quem foi escalado para informar a próxima chamada
-        for (const sched of newSchedules) {
-          previousAssignments.push({
-            date: sched.date,
-            roles: (sched.roles ?? []).map((r: any) => ({ role: r.role, memberName: r.memberName })),
-          });
-        }
       }
 
-      setDraft(results);
+      const finalResults = results.filter(Boolean) as AiSchedule[];
+      if (finalResults.length === 0) {
+        setError("Nenhuma escala foi gerada. Tente novamente.");
+        setStep(songStrategy === "minister_history" ? "ministers" : "config");
+        return;
+      }
+
+      setDraft(finalResults);
       setStep("draft");
-    } catch {
-      setError("Erro de conexão. Tente novamente.");
+    } catch (err: any) {
+      if (err?.message === "SEM_REPERTORIO") {
+        setError("⚠️ Seu ministério não tem músicas cadastradas no repertório. Acesse a seção Músicas e cadastre seu repertório antes de usar o wizard de IA.");
+      } else {
+        setError(err?.message ?? "Erro de conexão. Tente novamente.");
+      }
       setStep(songStrategy === "minister_history" ? "ministers" : "config");
     }
   }
