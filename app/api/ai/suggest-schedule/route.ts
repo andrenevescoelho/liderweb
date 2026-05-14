@@ -277,6 +277,38 @@ export async function POST(req: NextRequest) {
       ? (activeMembers.find((m) => m.id === ministerId)?.name ?? null)
       : null;
 
+    // ── Histórico real de escalas (últimas 4 semanas) ─────────────────────────
+    const fourWeeksAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
+    const recentSchedules = await prisma.schedule.findMany({
+      where: {
+        groupId: user.groupId,
+        status: { in: ["PUBLISHED", "APPROVED"] },
+        date: { gte: fourWeeksAgo },
+      },
+      include: {
+        roles: {
+          include: { member: { select: { id: true, name: true } } },
+        },
+        memberRoles: {
+          include: { member: { select: { id: true, name: true } } },
+        },
+      },
+      orderBy: { date: "desc" },
+      take: 8,
+    });
+
+    const dbHistoryContext = recentSchedules.length > 0
+      ? "\nHistórico real (últimas escalas salvas): " +
+        recentSchedules.map(s => {
+          const allRoles = [
+            ...(s.roles ?? []).map((r: any) => r.member?.name).filter(Boolean),
+            ...(s.memberRoles ?? []).map((r: any) => r.member?.name).filter(Boolean),
+          ];
+          const dateStr = new Date(s.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+          return `${dateStr}:[${allRoles.slice(0, 5).join(",")}]`;
+        }).join(" | ")
+      : "";
+
     // ── Contexto de músicas pela estratégia ───────────────────────────────────
     const { songsText, strategyNote } = await buildSongContext(
       user.groupId,
@@ -296,94 +328,86 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Montar prompt ─────────────────────────────────────────────────────────
-    const membersText = activeMembers.length > 0
-      ? activeMembers.map((m) => {
+    // Limitar membros para evitar prompt gigante (máx 30 membros)
+    const membersForPrompt = activeMembers.slice(0, 30);
+    const membersText = membersForPrompt.length > 0
+      ? membersForPrompt.map((m) => {
           const eval_ = evaluationsMap[m.id];
           const avgScore = eval_
             ? (Object.values(eval_).reduce((a, b) => a + b, 0) / Object.values(eval_).length).toFixed(1)
             : null;
-          return `- ${m.name}: funções=[${m.roles.join(", ") || "sem função definida"}]` +
-            (m.availability?.length ? `, disponível=[${m.availability.join(", ")}]` : "") +
-            (m.voiceType ? `, voz=${m.voiceType}` : "") +
-            (avgScore ? `, classificação=${avgScore}/5` : "");
+          // Versão compacta: apenas info essencial
+          const parts = [`- ${m.name} [${m.roles.join("/") || "sem função"}]`];
+          if (m.voiceType) parts.push(`voz:${m.voiceType}`);
+          if (avgScore) parts.push(`★${avgScore}`);
+          return parts.join(" ");
         }).join("\n")
       : "Nenhum membro cadastrado ainda.";
 
     const qualificationInstruction = useQualification && Object.keys(evaluationsMap).length > 0
-      ? `\n\nIMPORTANTE: Ao atribuir membros às funções, PRIORIZE membros com maior classificação (mais próximos de 5.0). Membros com classificação baixa (abaixo de 3.0) devem ser escalados menos frequentemente.`
+      ? `\nPRIORIZE membros com ★ maior (mais próximo de 5.0).`
       : "";
 
     const datesText = dates.join(", ");
-    const obsText = observation?.trim() ? `\nObservação do líder: ${observation}` : "";
+    const obsText = observation?.trim() ? `\nObservação: ${observation}` : "";
 
-    // Contexto de quem já foi escalado em datas anteriores desta sessão
-    const previousContext = previousAssignments.length > 0
-      ? `\n## Escalas já geradas nesta sessão (evite repetir os mesmos membros nas funções principais):\n` +
-        previousAssignments.map((p: any) => `- ${p.date}: ${p.roles.map((r: any) => `${r.role} → ${r.memberName ?? "vago"}`).join(", ")}`).join("\n")
+    // Contexto compacto de quem já foi escalado
+    const previousContext = previousAssignments.length > 0 || dbHistoryContext
+      ? `\nEvitar repetição:` +
+        (dbHistoryContext ? dbHistoryContext : "") +
+        (previousAssignments.length > 0
+          ? " | Sessão atual: " + previousAssignments.map((p: any) =>
+              `${p.date}:[${p.roles.map((r: any) => r.memberName).filter(Boolean).join(",")}]`
+            ).join(" | ")
+          : "")
       : "";
+
     const rolesText = templateRoles.length > 0
-      ? "\n## Funções esperadas na escala:\n" + templateRoles.map((r) => `- ${r.role}: ${r.count} pessoa(s)`).join("\n")
+      ? "\nFunções: " + templateRoles.map((r) => `${r.role}(${r.count})`).join(", ")
       : "";
-    const bandText = bandType === "full" ? "banda completa (todos os instrumentos)"
-      : bandType === "reduced" ? "banda reduzida (instrumentos essenciais)"
-      : "somente vozes (sem instrumentos)";
-    const ministerContext = ministerName
-      ? `\nMinistro selecionado para esta escala: ${ministerName} (id: ${ministerId})`
-      : "";
+    const bandText = bandType === "full" ? "banda completa"
+      : bandType === "reduced" ? "banda reduzida"
+      : "somente vozes";
+    const ministerContext = ministerName ? `\nMinistro: ${ministerName}` : "";
 
-    const prompt = `Você é um assistente especializado em gestão de ministérios de louvor evangélicos brasileiros.
+    // Gerar UMA data por vez para evitar truncamento
+    const singleDate = dates[0];
 
-Seu trabalho é sugerir uma escala de culto com base nos membros disponíveis e no repertório da igreja.
+    const prompt = `Assistente de escalas para ministério de louvor evangélico brasileiro.
 
-## Membros do ministério:
+MEMBROS (${membersForPrompt.length}):
 ${membersText}
 
-## Repertório disponível para seleção:
+MÚSICAS DISPONÍVEIS:
 ${songsText}
 
-## Instrução de estratégia para escolha de músicas:
-${strategyNote}
+ESTRATÉGIA DE MÚSICAS: ${strategyNote}
 
-## Pedido:
-O líder quer criar uma escala para a data: ${datesText}
-${templateName ? `Nome do culto: ${templateName}` : ""}
-${defaultTime ? `Horário: ${defaultTime}` : ""}
-Tipo de banda: ${bandText}
-Quantidade de músicas a sugerir: ${songCount}${ministerContext}${obsText}${previousContext}${rolesText}${qualificationInstruction}
+PEDIDO:
+Data: ${singleDate}
+${templateName ? `Culto: ${templateName}` : ""}${defaultTime ? `\nHorário: ${defaultTime}` : ""}
+Banda: ${bandText}
+Músicas: ${songCount}${ministerContext}${obsText}${previousContext}${rolesText}${qualificationInstruction}
 
-## Instruções gerais:
-- Cada música no repertório está listada com seu ID no formato [ID:xxxxx]. Use EXATAMENTE esse ID no campo "songId" da resposta — nunca invente ou modifique IDs
-- Siga rigorosamente a instrução de estratégia acima para escolher as músicas
-- Para cada música sugerida, inclua uma justificativa curta em "songReason" (ex: "João usou 5 vezes", "Não é usada há 6 semanas", "Favorita do ministério")
-- Preencha exatamente as funções listadas acima (se houver), respeitando a quantidade de cada uma
-- Priorize membros com a função correspondente cadastrada
-- Tente equilibrar a participação — evite repetir os mesmos membros nas funções de destaque (Ministro, Vocal principal) em datas consecutivas
-- Se houver "Escalas já geradas nesta sessão", use como referência para variar os membros
+REGRAS:
+- Use os IDs exatos das músicas (formato [ID:xxxxx])
+- Preencha exatamente as funções solicitadas
+- Equilibre participação entre membros
 - Sugira exatamente ${songCount} músicas
-- Se não houver músicas ou membros suficientes, preencha o que for possível e deixe o resto em branco
 
-## Formato de resposta:
-Responda APENAS com JSON válido, sem texto antes ou depois, sem blocos de código markdown.
+IDs membros: ${membersForPrompt.map((m) => `${m.name}:"${m.id}"`).join(", ")}
 
+Responda APENAS JSON válido:
 {
-  "schedules": [
-    {
-      "date": "YYYY-MM-DD",
-      "time": "${defaultTime ?? "HH:MM ou null"}",
-      "name": "${templateName ?? "nome do culto ou null"}",
-      "roles": [
-        { "role": "nome da função", "memberId": "id do membro ou null", "memberName": "nome do membro ou null" }
-      ],
-      "songs": [
-        { "songId": "id da música", "title": "título", "key": "tom sugerido", "songReason": "justificativa curta" }
-      ],
-      "aiNotes": "observações da IA sobre esta escala (opcional)"
-    }
-  ]
-}
-
-IDs dos membros:
-${activeMembers.map((m) => `${m.name}: "${m.id}"`).join(", ")}`;
+  "schedules": [{
+    "date": "${singleDate}",
+    "time": "${defaultTime ?? null}",
+    "name": "${templateName ?? null}",
+    "roles": [{ "role": "função", "memberId": "id", "memberName": "nome" }],
+    "songs": [{ "songId": "id", "title": "título", "key": "tom", "songReason": "motivo curto" }],
+    "aiNotes": "observação opcional"
+  }]
+}`;
 
     // ── Chamar Gemini ─────────────────────────────────────────────────────────
     const geminiRes = await fetch(
@@ -394,9 +418,8 @@ ${activeMembers.map((m) => `${m.name}: "${m.id}"`).join(", ")}`;
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.7,
+            temperature: 0.4,
             maxOutputTokens: 8192,
-            responseMimeType: "application/json",
           },
         }),
       }
@@ -410,10 +433,15 @@ ${activeMembers.map((m) => `${m.name}: "${m.id}"`).join(", ")}`;
 
     const geminiData = await geminiRes.json();
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const finishReason = geminiData?.candidates?.[0]?.finishReason ?? "unknown";
 
     if (!rawText) {
-      console.error("[suggest-schedule] Gemini resposta vazia:", JSON.stringify(geminiData).slice(0, 300));
+      console.error("[suggest-schedule] Gemini resposta vazia. finishReason:", finishReason, JSON.stringify(geminiData).slice(0, 300));
       return NextResponse.json({ error: "IA retornou resposta vazia" }, { status: 500 });
+    }
+
+    if (finishReason === "MAX_TOKENS") {
+      console.warn("[suggest-schedule] Resposta truncada por MAX_TOKENS — tentando reparar JSON");
     }
 
     // ── Parse defensivo ───────────────────────────────────────────────────────
