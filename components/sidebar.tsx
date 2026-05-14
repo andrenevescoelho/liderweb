@@ -9,7 +9,7 @@ import {
   CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
   GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy, Headphones,
-  Bell, Activity, Mail, TrendingUp } from "lucide-react";
+  Bell, Activity, Mail, TrendingUp, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { LanguageSelector } from "@/components/language-selector";
@@ -89,6 +89,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
       label: t("nav.team"),
       items: [
         { label: t("nav.members"), href: "/members", icon: <Users className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"], permissions: ["member.manage"] },
+        { label: "Painel do Ministério", href: "/ministerio", icon: <Heart className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER"] },
         { label: t("nav.schedules"), href: "/schedules", icon: <Calendar className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.escalas > 0 ? String(badges.escalas) : undefined },
         { label: t("nav.rehearsals"), href: "/ensaios", icon: <NotebookPen className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.ensaios > 0 ? "!" : undefined },
         { label: t("nav.groupChat"), href: "/chat-grupo", icon: <MessageCircle className="h-[18px] w-[18px]" />, roles: ["ADMIN", "LEADER", "MEMBER"], badge: badges.chat > 0 ? String(badges.chat) : undefined },
