@@ -383,6 +383,10 @@ model User {
   splitJobs            SplitJob[]
   maxSessions          Int                   @default(1)    // máx sessões simultâneas (SUPERADMIN configura)
   sessionTimeoutHours  Int?                                 // timeout por inatividade em horas (null = sem timeout)
+  evaluationsReceived  MemberEvaluation[] @relation("EvaluationMember")
+  evaluationsGiven     MemberEvaluation[] @relation("EvaluationEvaluator")
+  emotionalCheckins    EmotionalCheckin[] @relation("CheckinMember")
+  prayerRequests       PrayerRequest[]    @relation("PrayerMember")
   activeSessions       UserActiveSession[]
 }
 
@@ -631,10 +635,6 @@ model MemberProfile {
   instagram         String?
   youtube           String?
   notificationPreferences Json?
-  evaluationsReceived  MemberEvaluation[] @relation("EvaluationMember")
-  evaluationsGiven     MemberEvaluation[] @relation("EvaluationEvaluator")
-  emotionalCheckins    EmotionalCheckin[] @relation("CheckinMember")
-  prayerRequests       PrayerRequest[]    @relation("PrayerMember")
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
   memberFunctions   MemberFunctionLegacy[] @default([])
   active            Boolean                @default(true)
