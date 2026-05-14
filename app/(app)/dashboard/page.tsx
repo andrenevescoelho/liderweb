@@ -58,6 +58,15 @@ export default function DashboardPage() {
   const [nextRehearsal, setNextRehearsal] = useState<any>(null);
   const [confirmingRehearsal, setConfirmingRehearsal] = useState(false);
   const [myEvaluation, setMyEvaluation] = useState<any>(null);
+  const [checkinData, setCheckinData] = useState<any>(null);
+  const [checkinLoading, setCheckinLoading] = useState(true);
+  const [checkinMood, setCheckinMood] = useState<string | null>(null);
+  const [checkinNote, setCheckinNote] = useState("");
+  const [checkinPrivacy, setCheckinPrivacy] = useState("LEADER_ONLY");
+  const [checkinPrayer, setCheckinPrayer] = useState(false);
+  const [checkinCare, setCheckinCare] = useState(false);
+  const [submittingCheckin, setSubmittingCheckin] = useState(false);
+  const [checkinResponse, setCheckinResponse] = useState<any>(null);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -72,6 +81,38 @@ export default function DashboardPage() {
   const sessionUser = {
     role: userRole,
     permissions: userPermissions,
+  };
+
+  const MOOD_OPTIONS = [
+    { key: "MUITO_MAL", emoji: "😞", label: "Muito mal", color: "border-red-400 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300" },
+    { key: "DESANIMADO", emoji: "😕", label: "Desanimado", color: "border-orange-400 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300" },
+    { key: "NEUTRO", emoji: "😐", label: "Neutro", color: "border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300" },
+    { key: "BEM", emoji: "🙂", label: "Bem", color: "border-green-400 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300" },
+    { key: "MOTIVADO", emoji: "🔥", label: "Motivado", color: "border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300" },
+  ];
+
+  const submitCheckin = async () => {
+    if (!checkinMood) return;
+    setSubmittingCheckin(true);
+    try {
+      const res = await fetch("/api/saude/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mood: checkinMood,
+          note: checkinNote || null,
+          privacyLevel: checkinPrivacy,
+          requestedPrayer: checkinPrayer,
+          requestedCare: checkinCare,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCheckinResponse(data);
+        setCheckinData((prev: any) => ({ ...prev, hasCheckedInToday: true }));
+      }
+    } catch {}
+    finally { setSubmittingCheckin(false); }
   };
 
   const fetchData = () => {
@@ -96,13 +137,18 @@ export default function DashboardPage() {
     fetchData();
     fetchNextRehearsal();
 
-    // Carregar avaliação do próprio usuário
+    // Carregar avaliação e check-in do próprio usuário
     const userId = (session?.user as any)?.id;
     if (userId) {
       fetch(`/api/members/${userId}/evaluation`)
         .then(r => r.json())
         .then(d => setMyEvaluation(d))
         .catch(() => {});
+
+      fetch("/api/saude/checkin")
+        .then(r => r.json())
+        .then(d => { setCheckinData(d); setCheckinLoading(false); })
+        .catch(() => setCheckinLoading(false));
     }
   }, [canAccessReports]);
 
@@ -455,6 +501,63 @@ export default function DashboardPage() {
           totalSetlists={stats?.totalSetlists ?? 0}
           groupName={data?.groupName ?? null}
         />
+      )}
+
+      {/* Check-in emocional — Saúde do Ministério */}
+      {userRole !== "SUPERADMIN" && !checkinLoading && !checkinData?.hasCheckedInToday && !checkinResponse && (
+        <Card className="rounded-xl border border-border/80">
+          <CardContent className="py-4">
+            <p className="text-sm font-medium mb-1">Como você está hoje?</p>
+            <p className="text-xs text-muted-foreground mb-3">Sua resposta nos ajuda a cuidar melhor de você. É confidencial.</p>
+            <div className="flex gap-2 mb-3">
+              {MOOD_OPTIONS.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setCheckinMood(checkinMood === m.key ? null : m.key)}
+                  className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg border-2 transition-all text-xs font-medium ${checkinMood === m.key ? m.color : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"}`}
+                >
+                  <span className="text-xl">{m.emoji}</span>
+                  <span className="hidden sm:block">{m.label}</span>
+                </button>
+              ))}
+            </div>
+            {checkinMood && (
+              <div className="space-y-2">
+                <textarea
+                  value={checkinNote}
+                  onChange={e => setCheckinNote(e.target.value)}
+                  placeholder="Quer compartilhar mais? (opcional)"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none h-16 focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <div className="flex gap-3 text-xs">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={checkinPrayer} onChange={e => setCheckinPrayer(e.target.checked)} className="rounded" />
+                    Preciso de oração
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={checkinCare} onChange={e => setCheckinCare(e.target.checked)} className="rounded" />
+                    Quero conversar
+                  </label>
+                </div>
+                <Button size="sm" className="w-full" onClick={submitCheckin} disabled={submittingCheckin}>
+                  {submittingCheckin ? "Registrando..." : "Registrar check-in"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resposta pós check-in com encorajamento */}
+      {checkinResponse?.encouragement && (
+        <Card className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10">
+          <CardContent className="py-4 text-center">
+            <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-1">{checkinResponse.encouragement.message}</p>
+            <p className="text-xs text-purple-600 dark:text-purple-400 italic">"{checkinResponse.encouragement.verse}"</p>
+            <p className="text-xs text-muted-foreground mt-1">{checkinResponse.encouragement.reference}</p>
+          </CardContent>
+        </Card>
       )}
 
       {userRole !== "SUPERADMIN" && (birthdaysToday.length > 0 || birthdaysMonth.length > 0) && (
