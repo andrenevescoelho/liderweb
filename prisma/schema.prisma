@@ -383,6 +383,7 @@ model User {
   splitJobs            SplitJob[]
   maxSessions          Int                   @default(1)    // máx sessões simultâneas (SUPERADMIN configura)
   sessionTimeoutHours  Int?                                 // timeout por inatividade em horas (null = sem timeout)
+  notificationPreferences Json?
   evaluationsReceived  MemberEvaluation[] @relation("EvaluationMember")
   evaluationsGiven     MemberEvaluation[] @relation("EvaluationEvaluator")
   emotionalCheckins    EmotionalCheckin[] @relation("CheckinMember")
@@ -634,7 +635,6 @@ model MemberProfile {
   repertoirePrefs   String?                @db.Text
   instagram         String?
   youtube           String?
-  notificationPreferences Json?
   // DEPRECATED: manter durante migração para tabela relacional MemberFunction.
   memberFunctions   MemberFunctionLegacy[] @default([])
   active            Boolean                @default(true)
