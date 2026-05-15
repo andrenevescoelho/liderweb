@@ -72,6 +72,8 @@ export default function MinisterioPage() {
 
   useEffect(() => { if (canAccess) fetchData(); }, [canAccess]);
 
+  const { members = [], groupCriteriaAvg = {}, attentionNeeded = [], moodSummary = {}, stats = {} } = data ?? {};
+
   if (!canAccess) return null;
 
   if (loading) return (
@@ -79,8 +81,6 @@ export default function MinisterioPage() {
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
   );
-
-  const { members = [], groupCriteriaAvg = {}, attentionNeeded = [], moodSummary = {}, stats = {} } = data ?? {};
 
   return (
     <div className="space-y-4 pb-8">
@@ -299,6 +299,30 @@ export default function MinisterioPage() {
               <p className="text-xs text-muted-foreground mt-1">Check-ins hoje</p>
             </div>
           </div>
+
+          {/* Termômetro pré-escala */}
+          {(moodSummary.preScaleResponses ?? 0) > 0 && (
+            <Card className="border-purple-200 dark:border-purple-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <span>🎵</span> Termômetro pré-escala
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {moodSummary.preScalePositive} de {moodSummary.preScaleResponses} membros responderam que estão prontos para ministrar.
+                </p>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-green-500 rounded-full transition-all"
+                    style={{ width: `${Math.round((moodSummary.preScalePositive / moodSummary.preScaleResponses) * 100)}%` }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs text-muted-foreground">Prontos: {moodSummary.preScalePositive}</span>
+                  <span className="text-xs text-muted-foreground">Com reservas: {moodSummary.preScaleResponses - moodSummary.preScalePositive}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {attentionNeeded.length > 0 && (
             <Card className="border-orange-200 dark:border-orange-800">
