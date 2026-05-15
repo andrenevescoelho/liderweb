@@ -67,6 +67,9 @@ export default function DashboardPage() {
   const [checkinCare, setCheckinCare] = useState(false);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinResponse, setCheckinResponse] = useState<any>(null);
+  const [preScaleCheckin, setPreScaleCheckin] = useState<any>(null);
+  const [submittingPreScale, setSubmittingPreScale] = useState(false);
+  const [preScaleMood, setPreScaleMood] = useState<string | null>(null);
 
   const userRole = (session?.user as any)?.role ?? "MEMBER";
   const userPermissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -82,6 +85,35 @@ export default function DashboardPage() {
     role: userRole,
     permissions: userPermissions,
   };
+
+  const submitPreScaleCheckin = async (mood: string) => {
+    if (!nextCommitment?.id) return;
+    setPreScaleMood(mood);
+    setSubmittingPreScale(true);
+    try {
+      const res = await fetch("/api/saude/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mood,
+          privacyLevel: "LEADER_ONLY",
+          scheduleId: nextCommitment.id,
+          requestedCare: mood === "MUITO_MAL",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) setPreScaleCheckin({ mood, encouragement: data.encouragement });
+    } catch {}
+    finally { setSubmittingPreScale(false); }
+  };
+
+  const PRE_SCALE_OPTIONS = [
+    { key: "MUITO_MAL",  emoji: "😞", label: "Não estou bem",   color: "border-red-400 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300" },
+    { key: "DESANIMADO", emoji: "😕", label: "Com reservas",    color: "border-orange-400 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300" },
+    { key: "NEUTRO",     emoji: "😐", label: "Mais ou menos",   color: "border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300" },
+    { key: "BEM",        emoji: "🙂", label: "Estou bem",       color: "border-green-400 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300" },
+    { key: "MOTIVADO",   emoji: "🔥", label: "Pronto!",         color: "border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300" },
+  ];
 
   const MOOD_OPTIONS = [
     { key: "MUITO_MAL", emoji: "😞", label: "Muito mal", color: "border-red-400 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300" },
@@ -502,6 +534,54 @@ export default function DashboardPage() {
           totalSetlists={stats?.totalSetlists ?? 0}
           groupName={data?.groupName ?? null}
         />
+      )}
+
+      {/* Termômetro pré-escala — aparece quando culto em até 3 dias */}
+      {userRole !== "SUPERADMIN" && daysToNext !== null && daysToNext <= 3 && nextCommitment && !preScaleCheckin && (
+        <Card className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-900/10">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">🎵</span>
+              <p className="text-sm font-medium">
+                {daysToNext === 0 ? "Hoje tem culto!" : daysToNext === 1 ? "Amanhã tem culto!" : `Culto em ${daysToNext} dias!`}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">Você está emocionalmente preparado para ministrar?</p>
+            <div className="flex gap-2">
+              {PRE_SCALE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  disabled={submittingPreScale}
+                  onClick={() => submitPreScaleCheckin(opt.key)}
+                  className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg border-2 transition-all text-xs font-medium disabled:opacity-50 ${preScaleMood === opt.key ? opt.color : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"}`}
+                >
+                  <span className="text-xl">{opt.emoji}</span>
+                  <span className="hidden sm:block leading-tight text-center">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resposta pós termômetro */}
+      {preScaleCheckin && (
+        <Card className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10">
+          <CardContent className="py-4 text-center">
+            <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-1">
+              {preScaleCheckin.mood === "MOTIVADO" || preScaleCheckin.mood === "BEM"
+                ? "Que ótimo! O ministério conta com você! 🙌"
+                : "Obrigado por ser honesto. O líder vai cuidar de você. 🙏"}
+            </p>
+            {preScaleCheckin.encouragement?.verse && (
+              <>
+                <p className="text-xs text-purple-600 dark:text-purple-400 italic">"{preScaleCheckin.encouragement.verse}"</p>
+                <p className="text-xs text-muted-foreground mt-1">{preScaleCheckin.encouragement.reference}</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Check-in emocional — Saúde do Ministério */}

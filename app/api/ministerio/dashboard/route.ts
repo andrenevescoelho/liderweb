@@ -79,8 +79,9 @@ export async function GET() {
       checkinHistoryMap[c.memberId].push(c);
     }
 
-    // Check-ins de hoje
+    // Check-ins de hoje — incluindo pré-escala
     const todayCheckins = checkins.filter(c => new Date(c.createdAt) >= today);
+    const preScaleCheckins = checkins.filter(c => c.scheduleId !== null && new Date(c.createdAt) >= today);
     const checkedInToday = new Set(todayCheckins.map(c => c.memberId));
 
     // ── Radar de atenção ────────────────────────────────────────────────────
@@ -183,6 +184,8 @@ export async function GET() {
         positivePercent,
         checkedInToday: checkedInToday.size,
         totalMembers: members.length,
+        preScaleResponses: preScaleCheckins.length,
+        preScalePositive: preScaleCheckins.filter(c => ["BEM", "MOTIVADO"].includes(c.mood)).length,
       },
       stats: {
         totalMembers: members.length,
