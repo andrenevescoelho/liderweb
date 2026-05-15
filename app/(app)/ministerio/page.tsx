@@ -52,6 +52,7 @@ export default function MinisterioPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [healthScore, setHealthScore] = useState<any>(null);
 
   const canAccess = ["SUPERADMIN", "ADMIN", "LEADER"].includes(user?.role ?? "");
 
@@ -63,9 +64,14 @@ export default function MinisterioPage() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const res = await fetch("/api/ministerio/dashboard");
+      const [res, hsRes] = await Promise.all([
+        fetch("/api/ministerio/dashboard"),
+        fetch("/api/ministerio/health-score"),
+      ]);
       const d = await res.json();
+      const hs = await hsRes.json();
       setData(d);
+      setHealthScore(hs);
     } catch {}
     finally { setLoading(false); setRefreshing(false); }
   };
@@ -115,6 +121,49 @@ export default function MinisterioPage() {
       {/* VISÃO GERAL */}
       {tab === "overview" && (
         <>
+          {/* Índice de Saúde Ministerial */}
+          {healthScore?.score !== undefined && healthScore.score !== null && (
+            <Card className={`border-2 ${healthScore.status?.color === "green" ? "border-green-300 dark:border-green-700" : healthScore.status?.color === "yellow" ? "border-yellow-300 dark:border-yellow-700" : "border-red-300 dark:border-red-700"}`}>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Índice de Saúde Ministerial</p>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className={`text-4xl font-bold ${healthScore.status?.color === "green" ? "text-green-600" : healthScore.status?.color === "yellow" ? "text-yellow-600" : "text-red-600"}`}>
+                        {healthScore.score}%
+                      </span>
+                      <span className={`text-sm font-medium ${healthScore.status?.color === "green" ? "text-green-600" : healthScore.status?.color === "yellow" ? "text-yellow-600" : "text-red-600"}`}>
+                        {healthScore.status?.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="relative w-16 h-16">
+                    <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted/30" />
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeWidth="3"
+                        className={healthScore.status?.color === "green" ? "text-green-500" : healthScore.status?.color === "yellow" ? "text-yellow-500" : "text-red-500"}
+                        strokeDasharray={`${healthScore.score} 100`} strokeLinecap="round" />
+                    </svg>
+                    <span className="absolute inset-0 flex items-center justify-center text-xs font-bold">{healthScore.score}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(healthScore.components ?? {}).map(([key, comp]: [string, any]) => (
+                    <div key={key}>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">{comp.label} <span className="text-muted-foreground/50">({comp.weight}%)</span></span>
+                        <span className="text-xs font-medium">{comp.score}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${comp.score >= 70 ? "bg-green-500" : comp.score >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                          style={{ width: `${comp.score}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: "Membros", value: stats.totalMembers ?? 0, color: "" },
