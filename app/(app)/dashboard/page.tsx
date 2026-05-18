@@ -537,7 +537,7 @@ export default function DashboardPage() {
       )}
 
       {/* Termômetro pré-escala — aparece quando culto em até 3 dias */}
-      {userRole !== "SUPERADMIN" && daysToNext !== null && daysToNext <= 3 && nextCommitment && !preScaleCheckin && (
+      {userRole !== "SUPERADMIN" && daysToNext !== null && daysToNext <= 3 && nextCommitment && !preScaleCheckin && !checkinData?.hasCheckedInToday && (
         <Card className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-900/10">
           <CardContent className="py-4">
             <div className="flex items-center gap-2 mb-1">
@@ -585,7 +585,7 @@ export default function DashboardPage() {
       )}
 
       {/* Check-in emocional — Saúde do Ministério */}
-      {userRole !== "SUPERADMIN" && !checkinLoading && !checkinData?.hasCheckedInToday && !checkinResponse && (
+      {userRole !== "SUPERADMIN" && !checkinLoading && !checkinData?.hasCheckedInToday && !checkinResponse && (daysToNext === null || daysToNext > 3) && (
         <Card className="rounded-xl border border-border/80">
           <CardContent className="py-4">
             <p className="text-sm font-medium mb-1">Como você está hoje?</p>
