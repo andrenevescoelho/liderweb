@@ -2,7 +2,7 @@
 
 import { AiScheduleWizard } from "@/components/ai-schedule-wizard";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from "date-fns";
@@ -48,6 +48,7 @@ export default function SchedulesPage() {
   const [aiWizardOpen, setAiWizardOpen] = useState(false);
   const [aiCreating, setAiCreating] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
   const [respondingRoleId, setRespondingRoleId] = useState<string | null>(null);
   const [publishingScheduleId, setPublishingScheduleId] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function SchedulesPage() {
   useEffect(() => {
     setReorderMode(false);
     setReorderItems([]);
+    if (selectedSchedule?.id) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   }, [selectedSchedule?.id]);
 
   const canReorderSchedule = canEdit && ["DRAFT", "APPROVED", "REVIEW_TIMEOUT"].includes(selectedSchedule?.status ?? "");
@@ -318,6 +320,7 @@ export default function SchedulesPage() {
         </CardContent>
       </Card>
 
+      <div ref={detailRef} />
       {selectedSchedule && (
         <Card>
           <CardHeader>
