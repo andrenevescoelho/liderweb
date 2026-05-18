@@ -30,7 +30,24 @@ export default function SaudePage() {
   const [tab, setTab] = useState<"apoio" | "oracao">("apoio");
 
   // Versículo do dia (baseado no dia)
-  const verse = VERSES[new Date().getDate() % VERSES.length];
+  const [verse, setVerse] = useState(VERSES[0]);
+  useEffect(() => { setVerse(VERSES[new Date().getDate() % VERSES.length]); }, []);
+
+  // Encorajamento IA
+  const [encouragement, setEncouragement] = useState<any>(null);
+  const [loadingEncouragement, setLoadingEncouragement] = useState(false);
+  const [encouragementFetched, setEncouragementFetched] = useState(false);
+
+  useEffect(() => {
+    if (encouragementFetched) return;
+    setEncouragementFetched(true);
+    setLoadingEncouragement(true);
+    fetch("/api/saude/encorajamento")
+      .then(r => r.json())
+      .then(d => { if (d.message) setEncouragement(d); })
+      .catch(() => {})
+      .finally(() => setLoadingEncouragement(false));
+  }, []);
 
   // Pedidos de oração
   const [prayers, setPrayers] = useState<any[]>([]);
@@ -124,6 +141,35 @@ export default function SaudePage() {
       {/* ABA APOIO */}
       {tab === "apoio" && (
         <>
+          {/* Encorajamento IA — aparece quando humor está negativo */}
+          {loadingEncouragement && (
+            <Card className="border-orange-200 dark:border-orange-800">
+              <CardContent className="py-4 flex items-center gap-3">
+                <Loader2 className="h-4 w-4 animate-spin text-orange-500 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground">Preparando uma palavra especial para você...</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {encouragement?.message && (
+            <Card className="border-orange-200 dark:border-orange-800 bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20">
+              <CardContent className="py-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">💙</span>
+                  <p className="text-xs font-medium text-orange-700 dark:text-orange-400 uppercase tracking-widest">Palavra para você</p>
+                  {encouragement.negativeStreak >= 3 && (
+                    <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                      Cuidado especial
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-orange-900 dark:text-orange-100 leading-relaxed whitespace-pre-line">
+                  {encouragement.message}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Versículo do dia */}
           <Card className="border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20">
             <CardContent className="py-5 text-center">
@@ -142,11 +188,21 @@ export default function SaudePage() {
                 <p className="text-xs text-muted-foreground mt-1">{prayers.length} ativos</p>
               </CardContent>
             </Card>
-            <Card className="cursor-pointer hover:bg-muted/30 transition-colors">
+            <Card className="cursor-pointer hover:bg-muted/30 transition-colors"
+              onClick={() => {
+                setEncouragementFetched(false);
+                setEncouragement(null);
+                setLoadingEncouragement(true);
+                fetch("/api/saude/encorajamento")
+                  .then(r => r.json())
+                  .then(d => { if (d.message) setEncouragement(d); })
+                  .catch(() => {})
+                  .finally(() => setLoadingEncouragement(false));
+              }}>
               <CardContent className="py-4 text-center">
-                <MessageCircle className="h-7 w-7 text-blue-600 mx-auto mb-2" />
-                <p className="text-sm font-medium">Falar com líder</p>
-                <p className="text-xs text-muted-foreground mt-1">Acompanhamento pastoral</p>
+                <Heart className="h-7 w-7 text-orange-500 mx-auto mb-2" />
+                <p className="text-sm font-medium">Encorajamento IA</p>
+                <p className="text-xs text-muted-foreground mt-1">Palavra personalizada</p>
               </CardContent>
             </Card>
           </div>
