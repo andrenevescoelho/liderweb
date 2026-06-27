@@ -15,8 +15,21 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email || !(session.user as any).id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Faça login para aceitar o convite" }, { status: 401 });
+    }
+
+    // Se id não estiver na sessão (ex: login Google recente), busca pelo email
+    if (!(session.user as any).id) {
+      const userByEmail = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true },
+      });
+      if (userByEmail) {
+        (session.user as any).id = userByEmail.id;
+      } else {
+        return NextResponse.json({ error: "Faça login para aceitar o convite" }, { status: 401 });
+      }
     }
 
     const { token } = await params;
