@@ -66,7 +66,10 @@ export async function PUT(
     const user = session?.user as any;
     const userRole = user?.role;
 
-    if (!session || (userRole !== "SUPERADMIN" && userRole !== "ADMIN" && userRole !== "LEADER")) {
+    const userPermissions = (user?.permissions ?? []) as string[];
+    const canEdit = userRole === "SUPERADMIN" || userRole === "ADMIN" || userRole === "LEADER" || userPermissions.includes("schedule.edit");
+
+    if (!session || !canEdit) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
@@ -232,7 +235,10 @@ export async function DELETE(
     const user = session?.user as any;
     const userRole = user?.role;
 
-    if (!session || (userRole !== "SUPERADMIN" && userRole !== "ADMIN" && userRole !== "LEADER")) {
+    const userPermissions = (user?.permissions ?? []) as string[];
+    const canEditSchedule = userRole === "SUPERADMIN" || userRole === "ADMIN" || userRole === "LEADER" || userPermissions.includes("schedule.edit");
+
+    if (!session || !canEditSchedule) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
