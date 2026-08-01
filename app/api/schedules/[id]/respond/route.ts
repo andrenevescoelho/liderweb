@@ -37,7 +37,7 @@ export async function POST(
 
     const body = await req.json();
     const context = extractRequestContext(req);
-    const { roleId, status } = body ?? {};
+    const { roleId, status, declineReason, declineNote } = body ?? {};
 
     if (!roleId || !status) {
       return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
@@ -45,6 +45,10 @@ export async function POST(
 
     if (status !== "ACCEPTED" && status !== "DECLINED") {
       return NextResponse.json({ error: "Status inválido" }, { status: 400 });
+    }
+
+    if (status === "DECLINED" && !declineReason) {
+      return NextResponse.json({ error: "Informe o motivo da recusa" }, { status: 400 });
     }
 
     const scheduleRole = await prisma.scheduleRole.findFirst({
@@ -62,10 +66,21 @@ export async function POST(
       );
     }
 
-    const updatedRole = await prisma.scheduleRole.update({
-      where: { id: roleId },
-      data: { status },
-    });
+    // Usar SQL raw pois Prisma client pode não reconhecer campos novos
+    if (status === "DECLINED" && declineReason) {
+      await prisma.$executeRaw`
+        UPDATE "ScheduleRole" 
+        SET status = ${status}::"InviteStatus", 
+            "declineReason" = ${declineReason}, 
+            "declineNote" = ${declineNote ?? null}
+        WHERE id = ${roleId}
+      `;
+    } else {
+      await prisma.$executeRaw`
+        UPDATE "ScheduleRole" SET status = ${status}::"InviteStatus" WHERE id = ${roleId}
+      `;
+    }
+    const updatedRole = await prisma.scheduleRole.findUnique({ where: { id: roleId } });
 
     await logUserAction({
       userId: userId,
@@ -106,6 +121,9 @@ export async function POST(
         const roleLabel = scheduleRole.role ?? "Membro";
         const statusLabel = status === "ACCEPTED" ? "confirmou" : "recusou";
         const emoji = status === "ACCEPTED" ? "✅" : "❌";
+        const declineInfo = status === "DECLINED" && declineReason
+          ? `\nMotivo: ${declineReason}${declineNote ? ` — ${declineNote}` : ""}`
+          : "";
 
         const adminIds: string[] = [];
         for (const admin of schedule.group.users) {
@@ -134,7 +152,9 @@ export async function POST(
             const scheduleDate = new Date(schedule.date).toLocaleDateString("pt-BR");
             await sendPushToMany(tokens, {
               title: `${emoji} ${memberName} ${statusLabel} a escala`,
-              body: `${roleLabel} — culto de ${scheduleDate} (${groupName})`,
+              body: status === "DECLINED" && declineReason
+                ? `${roleLabel} — ${declineReason}${declineNote ? ": " + declineNote.substring(0, 50) : ""}`
+                : `${roleLabel} — culto de ${scheduleDate} (${groupName})`,
               data: { url: "/schedules", type: "schedule_response" },
             }).catch(() => {});
           }

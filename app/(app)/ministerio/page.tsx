@@ -48,7 +48,9 @@ export default function MinisterioPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const user = session?.user as any;
-  const [tab, setTab] = useState<"overview" | "development" | "health">("overview");
+  const [tab, setTab] = useState<"overview" | "development" | "health" | "absences">("overview");
+  const [absences, setAbsences] = useState<any[]>([]);
+  const [loadingAbsences, setLoadingAbsences] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,10 +66,15 @@ export default function MinisterioPage() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const [res, hsRes] = await Promise.all([
+      if (!silent) setLoadingAbsences(true);
+      const [res, hsRes, absRes] = await Promise.all([
         fetch("/api/ministerio/dashboard"),
         fetch("/api/ministerio/health-score"),
+        fetch("/api/ministerio/absences"),
       ]);
+      const absData = await absRes.json();
+      setAbsences(Array.isArray(absData) ? absData : []);
+      setLoadingAbsences(false);
       const d = await res.json();
       const hs = await hsRes.json();
       setData(d);
@@ -107,6 +114,7 @@ export default function MinisterioPage() {
           { key: "overview", label: "Visão geral", icon: <Users className="h-3.5 w-3.5" /> },
           { key: "development", label: "Desenvolvimento", icon: <TrendingUp className="h-3.5 w-3.5" /> },
           { key: "health", label: "Saúde emocional", icon: <Heart className="h-3.5 w-3.5" /> },
+          { key: "absences", label: "Ausências", icon: <AlertTriangle className="h-3.5 w-3.5" /> },
         ].map(t => (
           <button
             key={t.key}
@@ -427,6 +435,52 @@ export default function MinisterioPage() {
                   </div>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
+      {/* AUSÊNCIAS */}
+      {tab === "absences" && (
+        <>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                Ausências justificadas — últimos 30 dias
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingAbsences ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : absences.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Nenhuma ausência justificada no período.</p>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {absences.map((a: any) => (
+                    <div key={a.id} className="py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium">{a.memberName}</p>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <p className="text-xs text-muted-foreground">{a.roleName}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {new Date(a.scheduleDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            {a.scheduleName ? ` — ${a.scheduleName}` : ""}
+                          </p>
+                          <p className="text-xs mt-1 text-orange-600 dark:text-orange-400 font-medium">{a.declineReason}</p>
+                          {a.declineNote && (
+                            <p className="text-xs text-muted-foreground mt-0.5 italic">"{a.declineNote}"</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

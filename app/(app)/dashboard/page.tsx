@@ -54,6 +54,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [responding, setResponding] = useState<string | null>(null);
+  const [declineModal, setDeclineModal] = useState<{ scheduleId: string; roleId: string } | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [declineNote, setDeclineNote] = useState("");
+  const [submittingDecline, setSubmittingDecline] = useState(false);
+
+  const DECLINE_REASONS = [
+    "🤒 Saúde — Doença ou indisposição física",
+    "👨‍👩‍👧 Família — Compromisso familiar urgente",
+    "💼 Trabalho — Compromisso profissional",
+    "🚗 Transporte — Problema de locomoção",
+    "😔 Desânimo — Momento difícil pessoal",
+    "✈️ Viagem — Fora da cidade",
+    "📚 Estudo — Compromisso acadêmico",
+    "🔧 Outro — Descreva abaixo",
+  ];
   const [confirmingNextCommitment, setConfirmingNextCommitment] = useState(false);
   const [nextRehearsal, setNextRehearsal] = useState<any>(null);
   const [confirmingRehearsal, setConfirmingRehearsal] = useState(false);
@@ -227,7 +242,41 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeclineSubmit = async () => {
+    if (!declineModal || !declineReason) return;
+    setSubmittingDecline(true);
+    try {
+      const res = await fetch(`/api/schedules/${declineModal.scheduleId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleId: declineModal.roleId,
+          status: "DECLINED",
+          declineReason,
+          declineNote,
+        }),
+      });
+      if (res.ok) {
+        toast({ title: "Presença recusada", description: "O líder foi notificado." });
+        setDeclineModal(null);
+        setDeclineReason("");
+        setDeclineNote("");
+        fetchData();
+      } else {
+        toast({ title: "Erro ao recusar", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao recusar", variant: "destructive" });
+    } finally {
+      setSubmittingDecline(false);
+    }
+  };
+
   const handleRespond = async (scheduleId: string, roleId: string, status: "ACCEPTED" | "DECLINED") => {
+    if (status === "DECLINED") {
+      setDeclineModal({ scheduleId, roleId });
+      return;
+    }
     setResponding(roleId);
     try {
       const res = await fetch(`/api/schedules/${scheduleId}/respond`, {
@@ -1373,6 +1422,58 @@ export default function DashboardPage() {
 
 
         </>
+      )}
+
+      {/* Modal de recusa de presença */}
+      {declineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-background rounded-xl border border-border w-full max-w-md p-5 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">Recusar presença</h2>
+              <p className="text-xs text-muted-foreground mt-1">Informe o motivo para que o líder possa se organizar.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium">Motivo <span className="text-destructive">*</span></label>
+              <select
+                value={declineReason}
+                onChange={e => setDeclineReason(e.target.value)}
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">Selecione um motivo...</option>
+                {DECLINE_REASONS.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium">Observação {declineReason?.includes("Outro") ? <span className="text-destructive">*</span> : "(opcional)"}</label>
+              <textarea
+                value={declineNote}
+                onChange={e => setDeclineNote(e.target.value)}
+                placeholder="Descreva mais detalhes se quiser..."
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none h-20 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { setDeclineModal(null); setDeclineReason(""); setDeclineNote(""); }}
+                className="flex-1 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeclineSubmit}
+                disabled={submittingDecline || !declineReason || (declineReason.includes("Outro") && !declineNote)}
+                className="flex-1 py-2 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                {submittingDecline ? "Enviando..." : "Confirmar recusa"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
