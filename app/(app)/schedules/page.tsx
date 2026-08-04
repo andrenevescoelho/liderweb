@@ -31,6 +31,17 @@ function formatTime(dateStr: string): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+const DECLINE_REASONS = [
+  "Saude - Doenca ou indisposicao fisica",
+  "Familia - Compromisso familiar urgente",
+  "Trabalho - Compromisso profissional",
+  "Transporte - Problema de locomocao",
+  "Desanimo - Momento dificil pessoal",
+  "Viagem - Fora da cidade",
+  "Estudo - Compromisso academico",
+  "Outro - Descreva abaixo",
+];
+
 export default function SchedulesPage() {
   const searchParams = useSearchParams();
   const { data: session } = useSession() || {};
@@ -51,6 +62,11 @@ export default function SchedulesPage() {
   const detailRef = useRef<HTMLDivElement>(null);
   const [expandedSongIdx, setExpandedSongIdx] = useState<number | null>(null);
   const [respondingRoleId, setRespondingRoleId] = useState<string | null>(null);
+  const [declineModal, setDeclineModal] = useState<{ scheduleId: string; roleId: string } | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [declineNote, setDeclineNote] = useState("");
+  const [submittingDecline, setSubmittingDecline] = useState(false);
+
   const [publishingScheduleId, setPublishingScheduleId] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [reorderItems, setReorderItems] = useState<any[]>([]);
@@ -179,8 +195,40 @@ export default function SchedulesPage() {
     fetchSchedules();
   };
 
+  const handleDeclineSubmit = async () => {
+    if (!declineModal || !declineReason) return;
+    setSubmittingDecline(true);
+    const { scheduleId, roleId } = declineModal;
+    try {
+      const res = await fetch(`/api/schedules/${scheduleId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleId, status: "DECLINED", declineReason, declineNote }),
+      });
+      if (res.ok) {
+        setDeclineModal(null);
+        setDeclineReason("");
+        setDeclineNote("");
+        // Atualizar status localmente
+        const updateRoles = (list: any[]) =>
+          (list ?? []).map((r: any) => r.id === roleId ? { ...r, status: "DECLINED" } : r);
+        setSchedules((prev) => prev.map((s) => s.id !== scheduleId ? s : {
+          ...s, roles: updateRoles(s.roles), memberRoles: updateRoles(s.memberRoles),
+        }));
+        setSelectedSchedule((prev: any) => prev?.id !== scheduleId ? prev : {
+          ...prev, roles: updateRoles(prev.roles), memberRoles: updateRoles(prev.memberRoles),
+        });
+      }
+    } catch {}
+    finally { setSubmittingDecline(false); }
+  };
+
   const handleRespond = async (scheduleId: string, roleId: string, status: string) => {
-    if (respondingRoleId) return; // evita cliques duplos
+    if (status === "DECLINED") {
+      setDeclineModal({ scheduleId, roleId });
+      return;
+    }
+    if (respondingRoleId) return;
     setRespondingRoleId(roleId);
 
     // Atualização otimista: aplica o novo status localmente imediatamente
@@ -650,6 +698,56 @@ export default function SchedulesPage() {
         }}
       />
 
+      {/* Modal de recusa de presença */}
+      {declineModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-background rounded-xl border border-border w-full max-w-md p-5 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">Recusar presença</h2>
+              <p className="text-xs text-muted-foreground mt-1">Informe o motivo para que o líder possa se organizar.</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium">Motivo <span className="text-destructive">*</span></label>
+              <select
+                value={declineReason}
+                onChange={e => setDeclineReason(e.target.value)}
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">Selecione um motivo...</option>
+                {DECLINE_REASONS.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium">
+                Observação {declineReason?.includes("Outro") ? <span className="text-destructive">*</span> : "(opcional)"}
+              </label>
+              <textarea
+                value={declineNote}
+                onChange={e => setDeclineNote(e.target.value)}
+                placeholder="Descreva mais detalhes se quiser..."
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none h-20 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { setDeclineModal(null); setDeclineReason(""); setDeclineNote(""); }}
+                className="flex-1 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeclineSubmit}
+                disabled={submittingDecline || !declineReason || (declineReason.includes("Outro") && !declineNote)}
+                className="flex-1 py-2 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                {submittingDecline ? "Enviando..." : "Confirmar recusa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1050,6 +1148,9 @@ function ScheduleModal({ isOpen, onClose, schedule, schedules, onSave }: {
           </div>
         </div>
       </Modal>
+
     </>
   );
 }
+
+
