@@ -10,7 +10,10 @@ const geist = Inter({ subsets: ["latin"], variable: "--font-geist" });
 
 export const viewport: Viewport = {
   viewportFit: "cover",
-  themeColor: "#7c3aed",
+  themeColor: "#0a0f1e",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export const metadata: Metadata = {
@@ -42,7 +45,8 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#7c3aed" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         {/* Google Analytics */}
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-BJG24JE602" />
         <script dangerouslySetInnerHTML={{ __html: `

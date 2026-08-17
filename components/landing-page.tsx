@@ -7,7 +7,7 @@ export default function LandingPage() {
     <div id="landing-page" className="min-h-screen bg-[#0a0f1e] text-white overflow-x-hidden overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
 
       {/* ── Navbar ────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b border-white/8 bg-[#0a0f1e]/90 backdrop-blur-md">
+      <nav className="sticky top-0 z-50 border-b border-white/8 bg-[#0a0f1e]/90 backdrop-blur-md" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2.5">
             <div className="rounded-lg border border-white/10 bg-white/5 p-1.5">
@@ -18,7 +18,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/login"
-              className="text-sm text-white/60 hover:text-white transition-colors"
+              className="rounded-lg border border-white/20 px-4 py-2 text-sm font-semibold text-white/90 hover:bg-white/10 hover:text-white transition-colors"
             >
               Entrar
             </Link>
