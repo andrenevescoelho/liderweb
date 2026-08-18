@@ -10,6 +10,7 @@ import { sendSmtpMail } from "@/lib/smtp";
 import { presenceResponseEmail } from "@/lib/email-templates";
 import { AuditEntityType } from "@prisma/client";
 import { sendPushToMany, getPushTokensForUsers } from "@/lib/push-notifications";
+import { handleScheduleDecline } from "@/lib/schedule-replacement";
 import { filterUsersByNotifPref } from "@/lib/notification-prefs";
 
 export async function POST(
@@ -66,21 +67,77 @@ export async function POST(
       );
     }
 
-    // Usar SQL raw pois Prisma client pode não reconhecer campos novos
-    if (status === "DECLINED" && declineReason) {
-      await prisma.$executeRaw`
-        UPDATE "ScheduleRole" 
-        SET status = ${status}::"InviteStatus", 
-            "declineReason" = ${declineReason}, 
-            "declineNote" = ${declineNote ?? null}
-        WHERE id = ${roleId}
-      `;
+    let updatedRole: any;
+
+    if (status === "DECLINED") {
+      // Ao recusar: remover da escala (mais limpo visualmente)
+      // O audit log garante rastreabilidade completa
+      await prisma.scheduleRole.delete({ where: { id: roleId } });
+      // Manter referência local para uso no restante do fluxo
+      updatedRole = { ...scheduleRole, status: "DECLINED", declineReason, declineNote };
     } else {
       await prisma.$executeRaw`
         UPDATE "ScheduleRole" SET status = ${status}::"InviteStatus" WHERE id = ${roleId}
       `;
+      updatedRole = await prisma.scheduleRole.findUnique({ where: { id: roleId } });
     }
-    const updatedRole = await prisma.scheduleRole.findUnique({ where: { id: roleId } });
+
+    // ── Substituição automática quando membro recusa ────────────────────
+    if (status === "DECLINED" && scheduleRole.memberId && scheduleRole.role) {
+      const _scheduleId = params?.id;
+      const _roleName = scheduleRole.role;
+      const _groupId = user.groupId ?? "";
+      handleScheduleDecline({
+        scheduleId: _scheduleId,
+        scheduleRoleId: roleId,
+        declinedMemberId: scheduleRole.memberId,
+        roleName: _roleName,
+        groupId: _groupId,
+      }).then(async () => {
+        // Após substituição, notificar líderes sobre quem assumiu o papel
+        try {
+          const replacement = await prisma.scheduleRole.findFirst({
+            where: {
+              scheduleId: _scheduleId,
+              role: _roleName,
+              status: "PENDING",
+              memberId: { not: scheduleRole.memberId },
+            },
+            include: { member: { select: { name: true } } },
+          });
+          if (replacement?.member?.name) {
+            const fromEmail = process.env.SMTP_USER ?? "liderweb@multitrackgospel.com";
+            const sched = await prisma.schedule.findUnique({
+              where: { id: _scheduleId },
+              include: { group: { include: { users: { where: { role: { in: ["ADMIN", "LEADER"] } }, select: { email: true, name: true } } } } },
+            });
+            if (sched?.group) {
+              for (const admin of sched.group.users) {
+                if (!admin.email) continue;
+                await sendSmtpMail({
+                  to: admin.email,
+                  subject: `🔄 Substituto automático: ${replacement.member.name} assumiu ${_roleName}`,
+                  html: `<div style="font-family:Arial,sans-serif;padding:20px;max-width:500px">
+                    <p>Olá, <strong>${admin.name ?? "Líder"}</strong>!</p>
+                    <p>Como <strong>${scheduleRole.member?.name ?? "um membro"}</strong> recusou a escala como <strong>${_roleName}</strong>, o sistema encontrou automaticamente um substituto:</p>
+                    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin:16px 0">
+                      <p style="margin:0;font-size:16px">🎵 <strong>${replacement.member.name}</strong> foi adicionado como <strong>${_roleName}</strong></p>
+                      <p style="margin:4px 0 0;font-size:13px;color:#666">Status: Aguardando confirmação</p>
+                    </div>
+                    <p style="font-size:13px;color:#666">Você pode acompanhar a escala no painel do Líder Web.</p>
+                  </div>`,
+                  fromEmail,
+                  fromName: "Líder Web",
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[respond] erro ao notificar substituto:", e);
+        }
+      }).catch(() => {});
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     await logUserAction({
       userId: userId,
@@ -92,7 +149,7 @@ export async function POST(
       description: `Usuário ${user.name} ${status === "ACCEPTED" ? "confirmou" : "recusou"} participação em escala`,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
-      metadata: { roleId, status },
+      metadata: { roleId, status, roleName: scheduleRole.role, declineReason: declineReason ?? null, declineNote: declineNote ?? null },
     });
 
     // ── Notificar admin sobre a resposta ────────────────────────────────

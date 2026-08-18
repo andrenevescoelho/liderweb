@@ -471,9 +471,19 @@ export default function MinisterioPage() {
                             {new Date(a.scheduleDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
                             {a.scheduleName ? ` — ${a.scheduleName}` : ""}
                           </p>
-                          <p className="text-xs mt-1 text-orange-600 dark:text-orange-400 font-medium">{a.declineReason}</p>
+                          {a.declineReason && (
+                            <p className="text-xs mt-1 text-orange-600 dark:text-orange-400 font-medium">{a.declineReason}</p>
+                          )}
                           {a.declineNote && (
                             <p className="text-xs text-muted-foreground mt-0.5 italic">"{a.declineNote}"</p>
+                          )}
+                          {a.replacementName ? (
+                            <p className="text-xs mt-1.5 text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
+                              🔄 Substituído por <span className="font-semibold">{a.replacementName}</span>
+                              {a.replacementRole ? ` (${a.replacementRole})` : ""}
+                            </p>
+                          ) : (
+                            <p className="text-xs mt-1.5 text-muted-foreground italic">Sem substituto automático</p>
                           )}
                         </div>
                       </div>

@@ -16,26 +16,72 @@ export async function GET() {
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const absences = await prisma.$queryRaw<any[]>`
-      SELECT 
-        sr.id,
-        sr."declineReason",
-        sr."declineNote",
-        sr.role as "roleName",
-        u.name as "memberName",
-        u.id as "memberId",
-        s.date as "scheduleDate",
-        s.name as "scheduleName"
-      FROM "ScheduleRole" sr
-      JOIN "User" u ON u.id = sr."memberId"
-      JOIN "Schedule" s ON s.id = sr."scheduleId"
-      WHERE s."groupId" = ${user.groupId}
-      AND sr.status = 'DECLINED'
-      AND sr."declineReason" IS NOT NULL
-      AND s.date >= ${thirtyDaysAgo}
-      ORDER BY s.date DESC
-      LIMIT 50
-    `;
+    // Buscar ausências via audit log (ScheduleRole é deletado ao recusar)
+    const declineLogs = await prisma.auditLog.findMany({
+      where: {
+        groupId: user.groupId,
+        action: "SCALE_DECLINED",
+        userId: { not: null },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        user: { select: { id: true, name: true } },
+      },
+    });
+
+    // Buscar substitutos automáticos via audit log (SCALE_CREATED com metadata)
+    const replacementLogs = await prisma.auditLog.findMany({
+      where: {
+        groupId: user.groupId,
+        action: "SCALE_CREATED",
+        description: { contains: "Substituto automático" },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+    });
+
+    // Indexar substitutos por scheduleId
+    const replacementBySchedule: Record<string, any> = {};
+    for (const log of replacementLogs) {
+      const meta = log.metadata as any;
+      if (meta?.replacementFor && log.entityId) {
+        const key = `${log.entityId}:${meta.replacementFor}`;
+        replacementBySchedule[key] = {
+          replacementName: log.user?.name ?? (log.description?.match(/: (.+?) adicionado/)?.[1] ?? ""),
+          replacementRole: log.description?.match(/como (.+?) após/)?.[1] ?? "",
+          replacementId: log.userId,
+        };
+      }
+    }
+
+    // Buscar dados das escalas referenciadas
+    const scheduleIds = [...new Set(declineLogs.map((l) => l.entityId).filter(Boolean) as string[])];
+    const schedules = scheduleIds.length > 0 ? await prisma.schedule.findMany({
+      where: { id: { in: scheduleIds } },
+      select: { id: true, date: true, name: true },
+    }) : [];
+    const scheduleMap = Object.fromEntries(schedules.map((s) => [s.id, s]));
+
+    const absences = declineLogs.map((log) => {
+      const meta = log.metadata as any;
+      const schedule = scheduleMap[log.entityId ?? ""];
+      const replacementKey = `${log.entityId}:${log.userId}`;
+      const replacement = replacementBySchedule[replacementKey];
+      return {
+        id: log.id,
+        memberId: log.userId,
+        memberName: log.user?.name ?? meta?.memberName ?? "Membro",
+        roleName: meta?.roleName ?? meta?.role ?? "",
+        declineReason: meta?.declineReason ?? null,
+        declineNote: meta?.declineNote ?? null,
+        scheduleDate: schedule?.date ?? log.createdAt,
+        scheduleName: schedule?.name ?? null,
+        // Substituto automático (se houver)
+        replacementName: replacement?.replacementName ?? null,
+        replacementRole: replacement?.replacementRole ?? null,
+      };
+    });
 
     return NextResponse.json(absences);
   } catch (e) {
