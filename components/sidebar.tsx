@@ -9,7 +9,7 @@ import {
   CircleHelp,
   ChevronRight, Settings, TicketPercent, ClipboardList, Upload,
   GraduationCap, GraduationCap as ProfessorIcon, Timer, Disc3, Grid3x3, Scissors, BarChart2, Sliders, LifeBuoy, Headphones,
-  Bell, Activity, Mail, TrendingUp, Heart } from "lucide-react";
+  Bell, Activity, Mail, TrendingUp, Heart, MessageSquareMore } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { LanguageSelector } from "@/components/language-selector";
@@ -146,6 +146,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose, isMobile }: Sideba
         { label: t("nav.emailConfig"), href: "/admin/email-config", icon: <Mail className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "Sessões", href: "/admin/sessions", icon: <Shield className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
         { label: "E-mails Marketing", href: "/admin/campaigns", icon: <Mail className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
+        { label: "Campanhas WhatsApp", href: "/admin/whatsapp", icon: <MessageSquareMore className="h-[18px] w-[18px]" />, roles: ["SUPERADMIN"] },
       ],
     },
   ];
